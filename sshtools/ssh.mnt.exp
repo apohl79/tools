@@ -1,0 +1,27 @@
+#!/usr/bin/expect
+
+set WALLET [lindex $argv 0]
+set USER [lindex $argv 1]
+set MACHINE [lindex $argv 2]
+set PORT [lindex $argv 3]
+set RDIR [lindex $argv 4]
+set LDIR [lindex $argv 5]
+
+# get the secure password from the encrypted wallet
+log_user 0
+set timeout 10
+spawn -noecho oswallet -w $WALLET -g $USER
+expect -re "(.*)\n"
+set PASSWORD $expect_out(1,string)
+
+set timeout 1
+#send -i $user_spawn_id "Mounting $USER@$MACHINE:$RDIR on $LDIR... "
+send -i $user_spawn_id "sshfs -p$PORT $USER@$MACHINE:$RDIR $LDIR\n"
+spawn -noecho sshfs -p$PORT $USER@$MACHINE:$RDIR $LDIR
+#sleep 0.5
+
+set timeout 10
+expect "assword:" { send "$PASSWORD\r" }
+sleep 5
+log_user 1
+interact

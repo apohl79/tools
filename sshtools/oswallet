@@ -1,0 +1,273 @@
+#!/usr/bin/perl
+#
+# OSWallet (c) 2007 Andreas Pohl
+
+use strict;
+use Getopt::Std;
+use IO::Socket::INET;
+use Term::ReadKey;
+use Crypt::Blowfish;
+use Digest::MD5 qw(md5_hex);
+
+my $VERSION = "1.0";
+my $server = "localhost";
+my $port = 30101;
+my $timeout = 900;
+my $store = "$ENV{HOME}/.oswallet";
+
+my $exitcode = 0;
+my %opt;
+getopt( "w:s:g:b", \%opt );
+if( exists $opt{b} ) {
+  server();
+} elsif( exists $opt{w} && exists $opt{s} ) {
+  $exitcode = client( "set",  $opt{w}, $opt{s} );
+} elsif( exists $opt{w} && exists $opt{g} ) {
+  $exitcode = client( "get", $opt{w}, $opt{g} );
+} elsif( exists $opt{v} ) {
+  print "OSWallet $VERSION (c) 2007, Andreas Pohl\n";
+  exit 0;
+} else {
+  usage();
+}
+exit $exitcode;
+
+sub usage {
+  print<<__EOF__
+OSWallet (c) 2007, Andreas Pohl
+
+Usage:
+  $0 -w wallet command [-q]
+  $0 -v
+  $0 -b
+
+Options:
+  -w wallet   The wallet to be accessed.
+  -q          Quiet. Use this to just open a wallet.
+  -v          Show the version number.
+  -b          Run in server mode.
+
+Commands:
+  -s user     Set the password for user.
+  -g user     Get the password for user.
+
+Examples:
+  $0 -w private -s root
+  $0 -w private -g root
+
+__EOF__
+  ;
+}
+
+sub client {
+  my $ret = 0;
+  my $cmd = shift;
+  my $wallet = shift;
+  my $user = shift;
+  my $sock = IO::Socket::INET->new( PeerHost => $server, PeerPort => $port );
+  if( !defined $sock ) {
+    #run_server();
+    #sleep 1;
+    #$sock = IO::Socket::INET->new( PeerHost => $server, PeerPort => $port ) or die "Can't connect: $@";
+    print "no server available (run \`$0 -b \&')\n";
+    return 2;
+  }
+  $sock->autoflush( 1 );
+  debug( "connected" );
+  if( $cmd eq "get" ) {
+    debug( "> get $wallet $user" );
+    print $sock "get $wallet $user\n";
+    my $buf = <$sock> or goto sock_failed;
+    chomp $buf;
+    debug( "< $buf" );
+    if( $buf eq "key" ) {
+      print "password for wallet $wallet: ";
+      ReadMode( "noecho" );
+      my $pass_wallet = ReadLine( 0 );
+      chomp $pass_wallet;
+      $pass_wallet = md5_hex( $pass_wallet );
+      ReadMode( "normal" );
+      print "\n";
+      debug( "> $pass_wallet" );
+      print $sock $pass_wallet."\n" or goto sock_failed;
+      $buf = <$sock> or goto sock_failed;
+      chomp $buf;
+    }
+    print $buf."\n" unless exists $opt{q};
+  } elsif( $cmd eq "set" ) {
+      print "password for wallet $wallet: ";
+      ReadMode( "noecho" );
+      my $pass_wallet = ReadLine( 0 );
+      chomp $pass_wallet;
+      $pass_wallet = md5_hex( $pass_wallet );
+      ReadMode( "normal" );
+      print "\npassword for $user: ";
+      ReadMode( "noecho" );
+      my $pass_user = ReadLine( 0 );
+      chomp $pass_user;
+      ReadMode( "normal" );
+      print "\n";
+      debug( "> $pass_wallet $pass_user" );
+      print $sock "set $wallet $user $pass_wallet $pass_user\n" or goto sock_end;
+      my $buf = <$sock> or goto sock_failed;
+      chomp $buf;
+      debug( "< $buf" );
+      if( $buf eq "ok" ) {
+	print "success\n";
+      } else {
+	print "failed: $buf\n";
+      }
+  }
+  goto sock_end;
+  sock_failed:
+  $ret = 1;
+  print "access to wallet $wallet failed\n";
+  sock_end:
+  close $sock;
+  return $ret;
+}
+
+sub run_server {
+  if( !fork() ) {
+    server();
+    exit 0;
+  }
+}
+
+sub server {
+  my $sock = IO::Socket::INET->new( Listen    => 5,
+				    LocalAddr => $server,
+				    LocalPort => $port,
+				    Proto     => 'tcp',
+				    ReuseAddr => 1 ) or die "Can't bind: $@";
+  debug( "socket created" );
+  my %lastaccess;
+  my %keys;
+  while( 1 ) {
+    my $client = $sock->accept();
+    $client->autoflush( 1 );
+    debug( "incoming connection" );
+    if( defined $client ) {
+      my $buf = <$client> or goto client_end;
+      chomp $buf;
+      debug( "< $buf" );
+      if( $buf eq "exit" ) {
+	close $client;
+	close $sock;
+	exit 0;
+      }
+      if( $buf =~ /get ([^ ]+) ([^ ]+)/ ) {
+	my $wallet = $1;
+	my $user = $2;
+	if( !exists $keys{$wallet} or time - $lastaccess{$wallet} > $timeout ) {
+	  debug( "> key" );
+	  print $client "key\n" or goto client_end;
+	  $buf = <$client> or goto client_end;
+	  chomp $buf;
+	  debug( "< $buf" );
+	  $keys{$wallet} = pack( "H16", $buf );
+	}
+	open F, "<$store/$wallet" or goto client_end;
+	my $ciphertext = "";
+	while( <F> ) {
+	  if( /^$user=/ ) {
+	    $ciphertext = (split /=/, $_, 2)[1];
+	    $ciphertext = $ciphertext;
+	  }
+	}
+	close F;
+	if( !length( $ciphertext ) ) {
+	  goto client_end;
+	}
+	my $plain = decrypt( $keys{$wallet}, $ciphertext );
+	if( substr( $plain, 0, 3 ) eq "OSW" ) {
+	  my( $len, $pass ) = split( /=/, substr( $plain, 3 ), 2 );
+	  $pass = substr( $pass, 0, $len );
+	  debug( "> $pass" );
+	  print $client "$pass\n" or goto client_end;
+	  $lastaccess{$wallet} = time;
+	}
+      } elsif( $buf =~ /set ([^ ]+) ([^ ]+) ([^ ]+) ([^ ]+)/ ) {
+	my $wallet = $1;
+	my $user = $2;
+	my $key = pack( "H16", $3 );
+	my $pass = "OSW".length($4)."=".$4;
+	# blowfish needs 8 byte blocks
+	my $addlen = 8 - ( length( $pass ) % 8 );
+	$pass .= "X"x$addlen;
+	debug( "pass=$pass" );
+	my $ciphertext = encrypt( $key, $pass );
+	if( !-d $store ) {
+	  mkdir $store;
+	}
+	if( !-e "$store/$wallet" ) {
+	  # Store the key, so that we can check that key for every further password stored to the same wallet.
+	  open F, ">$store/$wallet" or goto client_end;
+	  print F encrypt( $key, unpack( "H16", $key ) )."\n";
+	  close F;
+	} else {
+	  # The wallet exists, so we check the key.
+	  open F, "<$store/$wallet" or goto client_end;
+	  my $enc = <F>;
+	  close F;
+	  chomp $enc;
+	  if( unpack( "H16", $key ) ne decrypt( $key, $enc ) ) {
+	    goto client_end;
+	  }
+	}
+	# Now we check, if the user exists. In that case we remove it.
+	open F, "<$store/$wallet" or goto client_end;
+	my @lines = <F>;
+	close F;
+	open F, ">$store/$wallet" or goto client_end;
+	foreach my $l ( @lines ) {
+	  if( $l !~ /^$user=/ ) {
+	    print F $l;
+	  }
+	}
+	close F;
+	if( open F, ">>$store/$wallet" ) {
+	  print F $user."=".$ciphertext."\n";
+	  close F;
+	  $lastaccess{$wallet} = time;
+	  $keys{$wallet} = $key;
+	  print $client "ok\n";
+	} else {
+	  print $client "can't open $store/$user: $!\n";
+	}
+      }
+    }
+    client_end:
+    close $client;
+  }
+}
+
+sub encrypt {
+  my $key = shift;
+  my $plain = shift;
+  my $cipher = new Crypt::Blowfish $key;
+  my $ciphertext;
+  my $enclen = 0;
+  while( $enclen < length( $plain ) ) {
+    $ciphertext .= unpack( "H16", $cipher->encrypt( substr( $plain, $enclen, 8 ) ) );
+    $enclen += 8;
+  }
+  return $ciphertext;
+}
+
+sub decrypt {
+  my $key = shift;
+  my $ciphertext = shift;
+  my $cipher = new Crypt::Blowfish $key;
+  my $plain;
+  my $plainlen = 0;
+  while( $plainlen < length( $ciphertext ) ) {
+    $plain .= $cipher->decrypt( pack( "H16", substr( $ciphertext, $plainlen, 16 ) ) );
+    $plainlen += 16;
+  }
+  return $plain;
+}
+
+sub debug {
+  #print shift()."\n";
+}

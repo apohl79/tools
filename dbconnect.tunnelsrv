@@ -1,0 +1,51 @@
+#!/usr/bin/perl
+
+use strict;
+
+$|++;
+
+if (! -d "/tmp/dbconnect.tunnel/") {
+  mkdir "/tmp/dbconnect.tunnel/";
+}
+open DEBUG, ">/tmp/dbconnect.tunnel/debug.txt";
+print DEBUG "[$$] created\n";
+close DEBUG;
+
+while (1) {
+  #debug("looking for jobs");
+  while (</tmp/dbconnect.tunnel/job*>) {
+    debug("processing job $_");
+    open F, "<$_";
+    my $cmd = <F>;
+    chomp $cmd;
+    close F;
+    unlink "$_";
+    debug("executing: $cmd");
+    execute($cmd);
+  }
+  sleep(1);
+}
+
+sub execute {
+  my $cmd = shift;
+  if ($cmd =~ /close (\d+)/) {
+    my $port = $1;
+    debug("closing port $port");
+    system "/bin/fuser -k $port/tcp >/dev/null 2>/dev/null";
+    eval "close CHLD$port;";
+  } elsif ($cmd =~ /misql_ssh.exp/) {
+    my @parts = split / /, $cmd;
+    my $port = $parts[$#parts-2];
+    debug("opening port $port");
+    eval "open CHLD$port, \"|$cmd\" or die \"pipe failed for $cmd: $!\";";
+  } else {
+    debug("unknown command: $cmd");
+  }
+}
+
+sub debug {
+  my $msg = shift;
+  open DEBUG, ">>/tmp/dbconnect.tunnel/debug.txt";
+  print DEBUG "[$$] $msg\n";
+  close DEBUG;
+}

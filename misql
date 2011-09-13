@@ -1,0 +1,1031 @@
+#!/usr/bin/perl
+#
+# (c) 2009 Andreas Pohl
+#
+# A MySQL/Sybase command line interface to replace isql.
+#
+# NOTE:
+#
+# You need the following packages:
+#
+# aptitude install libdbd-sybase-perl libterm-readline-gnu-perl libterm-readline-perl-perl libcurses-perl
+#
+# The LD_LIBRARY_PATH needs to contain the sybase libs directory.
+
+use Getopt::Std;
+use Term::ReadLine;
+use Term::ANSIColor qw(:constants);
+use Curses;
+use DBI;
+use Time::HiRes qw(gettimeofday);
+use IO::Select;
+
+my $VERSION = "MiSQL v2.2 - MySQL/Sybase Commandline Tool\n\nCopyright (c) 2009 Andreas Pohl <ap\@osar-music.de>";
+my $prompt_format = '$mode:$vhost/$db> ';
+
+$|++;
+$s = IO::Select->new();
+$s->add(\*STDIN);
+
+$Term::ReadLine::termcap_nowarn = 0;
+initscr;
+my $MAX_X = getmaxx;
+endwin;
+
+BEGIN {
+  $ENV{SYBASE} = "/opt/sybase" unless exists $ENV{SYBASE};
+  $ENV{LANG} = "en_US";
+}
+
+my %opt;
+getopt( "h:u:P:p:d:e:m:f:s:n", \%opt );
+if (!exists($opt{h}) || !exists($opt{u}) || !exists($opt{p})) {
+  usage();
+}
+
+my @keywords;
+chop and push @keywords, split while <DATA>;
+my @databases;
+my @tables;
+my @fields;
+my @sqlfuncs = ("count", "sum", "max");
+my $keysref = undef;
+
+# some sybase execute flags
+my $GET_TABLES = 0x100;
+my $GET_DATABASES = 0x101;
+my $GET_COLUMNS = 0x102;
+my $USE_DB = 0x103;
+my $SHOW = 0x104;
+my $RECON = 0x105;
+my $HELP = 0x106;
+my $RAW_COMMAND = 0x107;
+
+my $host = $opt{h};
+my $vhost = $opt{s};
+my $port = $opt{P};
+my $user = $opt{u};
+my $pass = $opt{p};
+my $mode = $opt{m};
+my $format = $opt{f};
+my $nohilight = exists($opt{n});
+my $db_param = $opt{d};
+my $db = "";
+my $exec_param = $opt{e};
+my $directExecMode = 0;
+my $historyfile = "/tmp/misql.$mode.$user.$host.$port.hist";
+
+$vhost ||= $host;
+
+my @stdinCmds;
+if ($s->can_read(.5)) {
+  while (<>) {
+    push @stdinCmds, $_;
+  }
+}
+
+if (length $exec_param || scalar(@stdinCmds) > 0) {
+  $directExecMode = 1;
+}
+
+my $dbh;
+my $sth;
+mconnect();
+
+if (defined $db_param) {
+  changeDatabase("use $db_param");
+} else {
+  getDatabases() if !$directExecMode;
+}
+
+if (length $exec_param) {
+  executeCmd($exec_param);
+  exit;
+}
+
+foreach (@stdinCmds) {
+  executeCmd($_);
+}
+
+if ($directExecMode) {
+  exit;
+}
+
+getDatabases(1) if defined $db_param;
+
+my $term = new Term::ReadLine 'Sybase';
+$term->ornaments(0);
+my $attr = $term->Attribs;
+$attr->{attempted_completion_function} = \&complete;
+if (!$nohilight) {
+  $attr->{getc_function} = \&my_getc_wrapper;
+  $attr->{redisplay_function} = \&my_redisplay_function;
+}
+my $prompt;
+my $doHighLight = 0;
+eval "\$prompt = \"$prompt_format\"";
+my $OUT = $term->OUT || \*STDOUT;
+init();
+while ( defined ($_ = $term->readline($prompt)) ) {
+  chomp;
+  my $cmd = $_;
+  warn $@ if $@;
+  if ($cmd =~ /^quit/) {
+    terminate();
+  }
+  #$term->addhistory($_) if /\S/;
+  my $flags = getExecuteFlagsByCommand($cmd);
+  if ($flags == $USE_DB) {
+    changeDatabase($cmd);
+  } elsif ($flags == $SHOW) {
+    handleShowCommand($cmd);
+  } elsif ($flags == $HELP) {
+    if ($mode eq "mysql") {
+      helpMysql($cmd);
+    } else {
+      print "No help available in $mode mode.\n";
+    }
+  } elsif ($flags == $RAW_COMMAND) {
+    if ($mode eq "mysql") {
+      rawMysql($cmd);
+    } else {
+      print "RAW commands are not available in $mode mode.\n";
+    }
+  } elsif ($flags == $RECON) {
+    mconnect();
+  } else {
+    executeCmd($cmd, 0);
+  }
+  eval "\$prompt = \"$prompt_format\"";
+}
+
+terminate();
+
+sub usage {
+  print <<_EOF
+$VERSION
+
+Usage:
+
+  $0 <options>
+  $0 <options> < inputfile
+
+Options:
+
+  -m mode (sybase/mysql)
+  -n No command hilighting
+  -f format (color/plain/csv) (default: color)
+  -h host
+  -u user
+  -p password
+  -d database
+  -e SQL
+
+_EOF
+  ;
+  exit 1;
+}
+
+sub mconnect {
+  if ($format ne "csv") {
+    print "Connecting to $user\@$host".(defined $db? "/$db_param": "")." ($mode) ...\n";
+  }
+  if ($mode eq "sybase") {
+    $dbh = DBI->connect("dbi:Sybase:$host", $user, $pass) or die $DBI::errstr;
+  } elsif ($mode eq "mysql") {
+    my $str = "DBI:mysql:host=$host";
+    if (defined $port) {
+      $str .= ":port=$port";
+    }
+    $dbh = DBI->connect($str, $user, $pass) or die $DBI::errstr;
+    if (length $db > 0) {
+      changeDatabase("use $db");
+    }
+  } else {
+    die "Mode $mode not supported!";
+  }
+}
+
+sub init {
+  $SIG{INT} = "terminate";
+  # load history
+  if (-e $historyfile) {
+    print "Loading history...\n";
+    $term->ReadHistory($historyfile);
+  }
+}
+
+sub terminate {
+  # save history
+  print "\n";
+  print "Saving history...\n";
+  $term->WriteHistory($historyfile);
+  print "bye\n";
+  exit;
+}
+
+sub getTables {
+  print "Getting tables ... \n" if ($format ne "csv");
+  @tables = ();
+  if ($mode eq "sybase") {
+    executeCmd("sp_tables \@table_type = \"'TABLE'\"", 0, $GET_TABLES);
+  } elsif ($mode eq "mysql") {
+    executeCmd("show tables", 0, $GET_TABLES);
+  }
+}
+
+sub getTableInfo {
+  print "Updating table information " if ($format ne "csv");
+  @fields = ();
+  foreach my $tab (@tables) {
+    if ($mode eq "sybase") {
+      executeCmd("sp_columns $tab", 1, $GET_COLUMNS);
+    } elsif ($mode eq "mysql") {
+      executeCmd("desc $tab", 1, $GET_COLUMNS);
+    }
+    print "." if ($foreach ne "csv");
+  }
+  print "\n\n";
+  @fields = sort keys %{{ map { $_ => 1 } @fields }};
+}
+
+sub getDatabases {
+  my $noOutput = shift;
+  print "Getting databases ... \n" if ($format ne "csv");
+  @databases = ();
+  if ($mode eq "sybase") {
+    executeCmd("sp_databases", $noOutput, $GET_DATABASES);
+  } elsif ($mode eq "mysql") {
+    executeCmd("show databases", $noOutput, $GET_DATABASES);
+  }
+}
+
+sub changeDatabase {
+  my $cmd = shift;
+  chomp $cmd;
+  if ($cmd =~ /^use +([^ ]+) *$/) {
+    my $newdb = $1;
+    print "Changing database to $newdb ... \n" if ($format ne "csv");
+    if (executeCmd($cmd, 0, $USE_DB)) {
+      $db = $newdb;
+      getTables() if !$directExecMode;
+      getTableInfo() if !$directExecMode;
+    }
+  }
+}
+
+sub handleShowCommand {
+  my $cmd = shift;
+  if ($cmd =~ /^show +([^ ]+)/) {
+    my $type = $1;
+    if ($type eq "version") {
+      print "$VERSION\n";
+      return;
+    } elsif ($type eq "all" || $type eq "databases") {
+      print "Databases:\n";
+      foreach my $db (@databases) {
+	print "  $db\n";
+      }
+    } elsif ($type eq "all" || $type eq "tables") {
+      print "Tables:\n";
+      foreach my $t (@tables) {
+	print "  $t\n";
+      }
+    } elsif ($type eq "all" || $type eq "columns") {
+      print "Columns:\n";
+      foreach my $c (@fields) {
+	print "  $c\n";
+      }
+    } else {
+      executeCmd($cmd, 0);
+    }
+  } else {
+    print "Usage: show {version|all|databases|tables|columns}\n";
+  }
+}
+
+sub getExecuteFlagsByCommand {
+  my $cmd = shift;
+  if (index($cmd, "sp_tables ") == 0 || index($cmd, "show tables") == 0) {
+    return $GET_TABLES;
+  } elsif (index($cmd, "sp_databases ") == 0 || index($cmd, "show databases") == 0) {
+    return $GET_DATABASES;
+  } elsif (index($cmd, "sp_columns ") == 0 || index($cmd, "desc ") == 0) {
+    return $GET_COLUMNS;
+  } elsif (index($cmd, "use ") == 0) {
+    return $USE_DB;
+  } elsif (index($cmd, "show") == 0) {
+    return $SHOW;
+  } elsif (index($cmd, "reconnect") == 0) {
+    return $RECON;
+  } elsif (index($cmd, "help") == 0) {
+    return $HELP;
+  } elsif (index($cmd, "raw") == 0) {
+    return $RAW_COMMAND;
+  }
+  return undef;
+}
+
+sub helpMysql {
+  my $cmd = shift;
+  my $helptext = `mysql -h$host -P$port -u$user -p$pass -e "$cmd"`;
+  print $helptext;
+}
+
+sub rawMysql {
+  my $cmd = shift;
+  $cmd = substr($cmd, 3); # removing "raw "
+  system "mysql -h$host -P$port -u$user -p$pass -e \"$cmd\"";
+  #print $helptext;
+}
+
+sub checkForReconnect {
+  my $errstr = shift;
+  if ($errstr =~ /MySQL server has gone away/) {
+    print "Connection lost!\n";
+    mconnect();
+  }
+}
+
+sub executeCmd {
+  my $cmd = shift;
+  my $noOutput = shift;
+  my $flags = shift;
+
+  chomp $cmd;
+  $cmd =~ s/[ ;]+$//;
+  #print "cmd='$cmd'\n";
+  if ($cmd eq " " || length $cmd == 0) {
+    return;
+  }
+
+  my $tstart = gettimeofday;
+  my $sth = $dbh->prepare($cmd);
+  if ($DBI::errstr) {
+    checkForReconnect($DBI::errstr);
+    $sth = $dbh->prepare($cmd);
+    if ($DBI::errstr) {
+      print "executeCmd: prepare failed: ".$DBI::errstr."\n";
+      return 0;
+    }
+  }
+  $sth->execute();
+  if ($DBI::errstr) {
+    checkForReconnect($DBI::errstr);
+    $sth = $dbh->prepare($cmd);
+    $sth->execute();
+    if ($DBI::errstr) {
+      print "executeCmd: execute failed: ".$DBI::errstr."\n";
+      return 0;
+    }
+  }
+  my $telap = sprintf "%.4f", (gettimeofday-$tstart);
+  if ($sth->{NUM_OF_FIELDS} > 0) {
+    #print "NUM_OF_FIELDS = ".$sth->{NUM_OF_FIELDS}."\n";
+    my $numFields = $sth->{NUM_OF_FIELDS};
+    my $names = $sth->{NAME};
+    my $types = $sth->{TYPE};
+    #print join(",", @$types)."\n";
+    my @lens;
+    my $i = 0;
+    # initialize field length
+    foreach my $f (@$names) {
+      $lens[$i++] = length $f;
+    }
+    my @data;
+    push @data, $names; # field names in the first row
+    while (my @row = $sth->fetchrow_array) {
+      push @data, \@row;
+      if ($flags == $GET_DATABASES) {
+	push @databases, $row[0];
+      } elsif ($flags == $GET_TABLES) {
+	if ($mode eq "sybase") {
+	  push @tables, $row[2] if $row[3] eq "TABLE";
+	} elsif ($mode eq "mysql") {
+	  push @tables, $row[0];
+	}
+      } elsif ($flags == $GET_COLUMNS) {
+	if ($mode eq "sybase") {
+	  push @fields, $row[3];
+	} elsif ($mode eq "mysql") {
+	  push @fields, $row[0];
+	}
+      }
+      $i = 0;
+      foreach my $f (@row) {
+	if (defined $f) {
+	  my $len = length $f;
+	  if ($len > $lens[$i]) {
+	    $lens[$i] = $len;
+	  }
+	}
+	$i++;
+      }
+    }
+    if (!$noOutput) {
+      if ($format eq "csv") {
+	my $first = 1;
+	foreach my $row (@data) {
+	  my $i;
+	  for ($i = 0; $i < $numFields; $i++) {
+	    my $isStr = ($first || $types->[$i] == 1 || $types->[$i] == -4 || $types->[$i] == 12 || $types->[$i] == 11);
+	    my $isHex = ($types->[$i] == -4);
+	    if ($i != 0) {
+	      print ",";
+	    }
+	    print "0x" if $isHex;
+	    print (defined $row->[$i]? $row->[$i]: "NULL");
+	  }
+	  print "\n";
+	}
+      } else {
+	my $first = 1;
+	foreach my $row (@data) {
+	  my $i;
+	  if ($first) {
+	    for ($i = 0; $i < $numFields; $i++) {
+	      print BOLD.BLACK if !($format eq "plain");
+	      print "+" if $i == 0;
+	      print "-"x($lens[$i]+2);
+	      print "+".RESET if !($format eq "plain");
+	    }
+	    print "\n";
+	  }
+	  for ($i = 0; $i < $numFields; $i++) {
+	    my $isStr = ($first || $types->[$i] == 1 || $types->[$i] == -4 || $types->[$i] == 12 || $types->[$i] == 11);
+	    my $isHex = ($types->[$i] == -4);
+	    if ($i == 0) {
+	      print BOLD.BLACK if !($format eq "plain");
+	      print "|";
+	      print RESET if !($format eq "plain");
+	    }
+	    print " ".BOLD if !($format eq "plain");
+	    printf "%".($isStr? "-": "").($lens[$i])."s", (!$first && $isHex? "0x": "").(defined $row->[$i]? $row->[$i]: "NULL");
+	    print BOLD.BLACK if !($format eq "plain");
+	    print " |";
+	    print RESET if !($format eq "plain");
+	  }
+	  print "\n";
+	  if ($first) {
+	    for ($i = 0; $i < $numFields; $i++) {
+	      print BOLD.BLACK if !($format eq "plain");
+	      print "+" if $i == 0;
+	      print "-"x($lens[$i]+2);
+	      print "+".RESET if !($format eq "plain");
+	    }
+	    print "\n";
+	    $first = 0;
+	  }
+	}
+	for ($i = 0; $i < $numFields; $i++) {
+	  print BOLD.BLACK if !($format eq "plain");
+	  print "+" if $i == 0;
+	  print "-"x($lens[$i]+2);
+	  print "+".RESET if !($format eq "plain");
+	}
+	print "\n(".(scalar(@data) - 1)." records received in $telap seconds)\n\n";
+      }
+    }
+  }
+  return 1;
+}
+
+sub my_getc_wrapper {
+  my $c = $term->getc($term->IN);
+  #if ($c != 10 && ($c == 32 || $c == 59 || $c == 44 || $c == 93 || $c == 40 || $c == 41 || $c == 43 || $c == 45 || $c == 47 || $c == 9 || $c == 65 || $c == 66 || $c == 37 || $c == 34 || $c == 39)) {
+    # no new line
+  #  $doHighLight = 1;
+    #open F, ">>/tmp/misql.log";
+    #print F "$c\n";
+    #close F;
+  #}
+  #else {
+  #  open F, ">>/tmp/misql.log";
+  #  print F "X: $c\n";
+  #  close F;
+  #}
+  if ($c != 27 && $c != 91 && $c != 67 && $c != 68) { # filter out arrow keys
+    $doHighLight = 1;
+  }
+  return $c;
+}
+
+sub my_redisplay_function {
+  $term->redisplay;
+  if ($doHighLight) {
+    highlight();
+    $doHighLight = 0;
+  }
+}
+
+sub highlight {
+  my $outstr = $prompt;
+  my $len = length($prompt);
+  my $first = 1;
+  my $suffix = "";
+  my @parts;
+  #print "\n";
+  foreach my $w (split / /, $term->{line_buffer}) {
+    if ($first) {
+      $first = 0;
+    } else {
+      #print " ' ' ";
+      push @parts, " ";
+    }
+    while ($w =~ /^(.*?)([+-\/*()=<>"',;])(.*)$/) {
+      #print " '$1' " if length $1;
+      push @parts, $1 if length $1;
+      #print " '$2' " if length $2;
+      push @parts, $2 if length $2;
+      $w = $3;
+    }
+    #print " '$w' ";
+    push @parts, $w if length $w;
+  }
+  #print "\n";
+  my $first = 1;
+  for (my $i = 0; $i < scalar(@parts); $i++) {
+    my $w = $parts[$i];
+    my $done = 0;
+    my $isString = 0;
+    if ($i > 0 && $i + 1 < scalar(@parts)) {
+      if ($parts[$i - 1] eq "'") {
+	my $j;
+	for ($j = $i + 1; $j < scalar(@parts); $j++) {
+	  if ($parts[$j] eq "'") {
+	    $w = join("", @parts[$i..$j-1]);
+	    $i = $j - 1;
+	    $isString = 1;
+	    last;
+	  }
+	}
+      } elsif ($parts[$i - 1] eq '"') {
+	my $j;
+	for ($j = $i + 1; $j < scalar(@parts); $j++) {
+	  if ($parts[$j] eq '"') {
+	    $w = join("", @parts[$i..$j-1]);
+	    $i = $j - 1;
+	    $isString = 1;
+	    last;
+	  }
+	}
+      }
+    }
+    $len += length($w);
+    if (length $suffix) {
+      $outstr .= YELLOW.$suffix.RESET;
+      $suffix = "";
+    }
+    if ($w eq "raw") {
+      $outstr .= RED.$w.RESET;
+      $done = 1;
+    }
+    next if $done;
+    if ($isString) {
+      $outstr .= MAGENTA.$w.RESET;
+      $done = 1;
+    }
+    next if $done;
+    foreach my $k (@keywords) {
+      if ($w eq $k) {
+	$outstr .= BOLD.BLUE.$w.RESET;
+	$done = 1;
+	last;
+      }
+    }
+    next if $done;
+    foreach my $k (@fields) {
+      my $k2 = "$k,";
+      my $k3 = ",$k";
+      my $k4 = ",$k,";
+      if ($w eq $k || $w eq $k2 || $w eq $k3 || $w eq $k4) {
+	$outstr .= GREEN.$w.RESET;
+	$done = 1;
+	last;
+      }
+    }
+    next if $done;
+    foreach my $k (@databases) {
+      if ($w eq $k) {
+	$outstr .= BOLD.$w.RESET;
+	$done = 1;
+	last;
+      }
+    }
+    next if $done;
+    foreach my $k (@tables) {
+      my $k2 = ",$k";
+      if ($w eq $k || $w eq $k2) {
+	$outstr .= BOLD.GREEN.$w.RESET;
+	$done = 1;
+	last;
+      }
+    }
+    next if $done;
+    my $w2 = $w;
+    $w2 =~ s/\(.*/(/;
+    foreach my $k (@sqlfuncs) {
+      if ($w2 eq $k) {
+	$outstr .= YELLOW.$w.RESET;
+	$done = 1;
+	last;
+      }
+    }
+    next if $done;
+    if ($w =~ /^\d+$/) {
+      $outstr .= CYAN.$w.RESET;
+      $done = 1;
+    }
+    next if $done;
+    $outstr .= $w;
+  }
+  if (length $suffix) {
+    $outstr .= YELLOW.$suffix.RESET;
+  }
+  $outstr .= RESET;
+
+  my $rows = int($len / $MAX_X);
+  system "tput sc"; # save cursor position
+  print "\r";
+  for (my $i = 0; $i < $rows; $i++) {
+    system "tput cuu1"; # move the cursor one row up
+  }
+  print $outstr;
+  system "tput rc"; # restore cursor position
+}
+
+sub complete {
+  my ($text, $line, $start, $end) = @_;
+
+  if (length $text == 0) {
+    return "";
+  }
+
+  my $index;
+  my $str = substr($line, $start, $end - $start);
+  my @ret;
+
+  $index = rindex($line, "use ", $start - 1);
+  if ($index > -1) {
+    $keysref = \@databases;
+    return $term->completion_matches($text, \&lookup);
+  }
+
+  $index = rindex($line, "sp_columns ", $start - 1);
+  if ($index > -1) {
+    $keysref = \@tables;
+    return $term->completion_matches($text, \&lookup);
+  }
+
+  $index = rindex($line, "desc ", $start - 1);
+  if ($index > -1) {
+    $keysref = \@tables;
+    return $term->completion_matches($text, \&lookup);
+  }
+
+  $index = rindex($line, "where ", $start - 1);
+  if ($index > -1 && contains($text, @fields)) {
+    $keysref = \@fields;
+    return $term->completion_matches($text, \&lookup);
+  }
+
+  $index = rindex($line, "from ", $start - 1);
+  if ($index > -1) {
+    if ($str =~ /^([^ ,]+( as [^ ,]+)? ?(, ?[^ ,]+)*)?$/) {
+      if (contains($text, @tables)) {
+	$keysref = \@tables;
+	return $term->completion_matches($text, \&lookup);
+      }
+    }
+  }
+
+  $index = rindex($line, "update ", $start - 1);
+  if ($index > -1) {
+    if (length $str == 0) {
+      if (contains($text, @tables)) {
+	$keysref = \@tables;
+	return $term->completion_matches($text, \&lookup);
+      }
+    }
+  }
+
+  $index = rindex($line, "into ", $start - 1);
+  if ($index > -1) {
+    if (length $str == 0) {
+      if (contains($text, @tables)) {
+	$keysref = \@tables;
+	return $term->completion_matches($text, \&lookup);
+      }
+    }
+  }
+
+  $index = rindex($line, "select ", $start - 1);
+  if ($index > -1) {
+    if ($str =~ /^([^ ,]+( as [^ ,]+)? ?( ?, ?[^ ,]+)*)?$/) {
+      if (contains($text, @fields)) {
+	$keysref = \@fields;
+	return $term->completion_matches($text, \&lookup);
+      }
+      if (contains($text, @sqlfuncs)) {
+	$keysref = \@sqlfuncs;
+	return $term->completion_matches($text, \&lookup);
+      }
+    }
+  }
+
+  $keysref = \@keywords;
+  return $term->completion_matches($text, \&lookup);
+}
+
+sub contains {
+  my $val = shift;
+  foreach (@_) {
+    if (index($_, $val) > -1) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+my $g_i;
+sub lookup {
+  my ($text, $state) = @_;
+  return unless $keysref;
+  return unless $text;
+  if($state) {
+    $g_i++;
+  } else { # first call
+    $g_i = 0;
+  }
+  for (; $g_i <= scalar(@$keysref); $g_i++) {
+    return $keysref->[$g_i] if $keysref->[$g_i] =~ /^\Q$text/;
+  }
+  return undef;
+}
+
+__DATA__
+select create drop insert from where into rowcount set update use quit alter table commit
+begin shutdown while group by as is not having case when desc describe explain call
+delete do handler load data infile replace truncate dump tran with
+
+show databases tables columns all reconnect function view index procedure trigger
+duplicate key processlist full help and or distinct limit insert into between in
+
+sp_activeroles
+sp_add_qpgroup
+sp_add_resource_limit
+sp_add_time_range
+sp_addalias
+sp_addauditrecord
+sp_addaudittable
+sp_addengine
+sp_addexeclass
+sp_addextendedproc
+sp_addexternlogin
+sp_addgroup
+sp_addlanguage
+sp_addlogin
+sp_addmessage
+sp_addobjectdef
+sp_addremotelogin
+sp_addsegment
+sp_addserver
+sp_addthreshold
+sp_addtype
+sp_addumpdevice
+sp_adduser
+sp_altermessage
+sp_audit
+sp_autoconnect
+sp_autoformat
+sp_bindcache
+sp_bindefault
+sp_bindexeclass
+sp_bindmsg
+sp_bindrule
+sp_cacheconfig
+sp_cachestrategy
+sp_changedbowner
+sp_changegroup
+sp_checknames
+sp_checkreswords
+sp_checksource
+sp_chgattribute
+sp_clearpsexe
+sp_clearstats
+sp_client_addr
+sp_cmp_all_qplans
+sp_cmp_qplans
+sp_commonkey
+sp_companion
+sp_configure
+sp_copy_all_qplans
+sp_copy_qplan
+sp_countmetadata
+sp_cursorinfo
+sp_dbextend
+sp_dboption
+sp_dbrecovery_order
+sp_dbremap
+sp_defaultloc
+sp_depends
+sp_deviceattr
+sp_diskdefault
+sp_displayaudit
+sp_displaylevel
+sp_displaylogin
+sp_displayroles
+sp_dropalias
+sp_drop_all_qplans
+sp_drop_qpgroup
+sp_drop_qplan
+sp_drop_resource_limit
+sp_drop_time_range
+sp_dropdevice
+sp_dropengine
+sp_dropexeclass
+sp_dropextendedproc
+sp_dropexternlogin
+sp_dropglockpromote
+sp_dropgroup
+sp_dropkey
+sp_droplanguage
+sp_droplogin
+sp_dropmessage
+sp_dropobjectdef
+sp_dropremotelogin
+sp_droprowlockpromote
+sp_dropsegment
+sp_dropserver
+sp_dropthreshold
+sp_droptype
+sp_dropuser
+sp_dumpoptimize
+sp_engine
+sp_estspace
+sp_export_qpgroup
+sp_extendsegment
+sp_extengine
+sp_familylock
+sp_find_qplan
+sp_fixindex
+sp_flushstats
+sp_forceonline_db
+sp_forceonline_object
+sp_forceonline_page
+sp_foreignkey
+sp_freedll
+sp_getmessage
+sp_grantlogin
+sp_ha_admin
+sp_help
+sp_help_resource_limit
+sp_help_qpgroup
+sp_help_qplan
+sp_helpartition
+sp_helpcache
+sp_helpcomputedcolumn
+sp_helpconfig
+sp_helpconstraint
+sp_helpdb
+sp_helpdevice
+sp_helpextendedproc
+sp_helpexternlogin
+sp_helpgroup
+sp_helpindex
+sp_helpjava
+sp_helpjoins
+sp_helpkey
+sp_helplanguage
+sp_helplog
+sp_helpobjectdef
+sp_helpremotelogin
+sp_helprotect
+sp_helpsegment
+sp_helpserver
+sp_helpsort
+sp_helptext
+sp_helpthreshold
+sp_helpuser
+sp_hidetext
+sp_import_qpgroup
+sp_indsuspect
+sp_ldapadmin
+sp_listener
+sp_listsuspect_db
+sp_listsuspect_object
+sp_listsuspect_page
+sp_lmconfig
+sp_lock
+sp_locklogin
+sp_logdevice
+sp_loginconfig
+sp_logininfo
+sp_logiosize
+sp_maplogin
+sp_metrics
+sp_modify_resource_limit
+sp_modify_time_range
+sp_modifylogin
+sp_modifystats
+sp_modifythreshold
+sp_monitor
+sp_monitorconfig
+sp_object_stats
+sp_passthru
+sp_password
+sp_placeobject
+sp_plan_dbccdb
+sp_poolconfig
+sp_post_xpload
+sp_primarykey
+sp_processmail
+sp_procxmode
+sp_recompile
+sp_remap
+sp_remoteoption
+sp_remotesql
+sp_rename
+sp_rename_qpgroup
+sp_renamedb
+sp_reportstats
+sp_revokelogin
+sp_role
+sp_sendmsg
+sp_serveroption
+sp_set_qplan
+sp_setlangalias
+sp_setpglockpromote
+sp_setpsexe
+sp_setrowlockpromote
+sp_setsuspect_granularity
+sp_setsuspect_threshold
+sp_showcontrolinfo
+sp_showexeclass
+sp_showplan
+sp_showpsexe
+sp_spaceused
+sp_ssladmin
+sp_syntax
+sp_sysmon
+sp_tempdb
+sp_thresholdaction
+sp_transactions
+sp_unbindcache
+sp_unbindcache_all
+sp_unbindefault
+sp_unbindexeclass
+sp_unbindmsg
+sp_unbindrule
+sp_version
+sp_volchanged
+sp_who
+sp_column_privileges
+sp_columns
+sp_databases
+sp_datatype_info
+sp_fkeys
+sp_pkeys
+sp_server_info
+sp_special_columns
+sp_sproc_columns
+sp_statistics
+sp_stored_procedures
+sp_table_privileges
+sp_tables
+
+abort switch
+activate subscription
+add partition
+admin config
+admin disk_space
+admin echo
+admin get_generation
+admin health
+admin log_name
+admin logical_status
+admin pid
+admin quiesce_check
+admin quiesce_force_rsi
+admin rssd_name
+admin security_property
+admin security_setting
+admin set_log_name
+admin show_connections
+admin show_function_classes
+admin show_route_versions
+admin show_site_version
+admin sqm_readers
+admin stats
+admin stats, backlog
+admin stats, cancel
+admin stats, {md | mem | mem_in_use}
+admin stats, reset
+admin stats, status
+admin stats, {tps | cps | bps}
+admin time
+admin translate
+admin version
+admin who
+admin who_is_down
+admin who_is_up

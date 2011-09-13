@@ -1,0 +1,21 @@
+#!/usr/bin/perl
+#
+# Run a command in an iteration.
+
+use strict;
+
+if( scalar @ARGV != 3 ) {
+  print "Usage: $0 <start> <end> '<cmd pattern>'\n";
+  print "   eg: $0 2 5 'ad%03d.us-ec.adtech.com -s \"rpm -qa|grep Ads\"'\n";
+  print "       This will execute the commands\n";
+  print "          ad002.us-ec.adtech.com -s \"rpm -qa|grep Ads\"\n";
+  print "          ad003.us-ec.adtech.com -s \"rpm -qa|grep Ads\"\n";
+  print "          ad004.us-ec.adtech.com -s \"rpm -qa|grep Ads\"\n";
+  print "          ad005.us-ec.adtech.com -s \"rpm -qa|grep Ads\"\n";
+  exit 1;
+}
+
+for( my $i=$ARGV[0]; $i<=$ARGV[1]; $i++ ) {
+  my $cmd = sprintf $ARGV[2], $i;
+  system( $cmd ) == 0 or die "$cmd failed: $@";
+}

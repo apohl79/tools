@@ -1,0 +1,166 @@
+#!/usr/bin/perl
+
+use strict;
+use Gtk2;
+
+$|++;
+
+my $umtscardtool = "/home/osar/bin/tools/umtscardtool";
+my $gpscardtool = "/home/osar/bin/tools/gpscardtool";
+my $icons_dir = "/home/osar/bin/tools/icons";
+my %icons = ("NO" => "$icons_dir/notification-gsm-disconnected.png",
+	     "3G" =>
+	     ["$icons_dir/notification-gsm-disconnected.png",
+	      "$icons_dir/notification-gsm-3g-none.png",
+	      "$icons_dir/notification-gsm-3g-low.png",
+	      "$icons_dir/notification-gsm-3g-medium.png",
+	      "$icons_dir/notification-gsm-3g-high.png",
+	      "$icons_dir/notification-gsm-3g-full.png"],
+	     "HSDPA" =>
+	     ["$icons_dir/notification-gsm-disconnected.png",
+	      "$icons_dir/notification-gsm-h-none.png",
+	      "$icons_dir/notification-gsm-h-low.png",
+	      "$icons_dir/notification-gsm-h-medium.png",
+	      "$icons_dir/notification-gsm-h-high.png",
+	      "$icons_dir/notification-gsm-h-full.png"],
+	     "GPRS" =>
+	     ["$icons_dir/notification-gsm-disconnected.png",
+	      "$icons_dir/notification-gsm-none.png",
+	      "$icons_dir/notification-gsm-low.png",
+	      "$icons_dir/notification-gsm-medium.png",
+	      "$icons_dir/notification-gsm-high.png",
+	      "$icons_dir/notification-gsm-full.png"]);
+
+Gtk2->init;
+
+update_status();
+
+my $statusicon = Gtk2::StatusIcon->new_from_file($icons{NO});
+my $id = Glib::Timeout->add (5000, \&timeout_handler);
+my $last_cap = "NO";
+my $last_signal = 0;
+
+# creating the menu
+my $menu = Gtk2::Menu->new();
+my $menuItem;
+
+$menuItem = Gtk2::ImageMenuItem->new("Enable Card");
+$menuItem->set_image(Gtk2::Image->new_from_file('/usr/share/icons/gnome/16x16/stock/net/stock_connect.png'));
+$menuItem->signal_connect('activate', \&enable_cb, $statusicon);
+$menu->append($menuItem);
+
+$menuItem = Gtk2::ImageMenuItem->new("Disable Card");
+$menuItem->set_image(Gtk2::Image->new_from_file('/usr/share/icons/gnome/16x16/stock/net/stock_disconnect.png'));
+$menuItem->signal_connect('activate', \&disable_cb, $statusicon);
+$menu->append($menuItem);
+
+$menuItem = Gtk2::SeparatorMenuItem->new();
+$menu->append($menuItem);
+
+$menuItem = Gtk2::ImageMenuItem->new("Enable GPS");
+$menuItem->set_image(Gtk2::Image->new_from_file('/usr/share/icons/gnome/16x16/stock/net/stock_connect.png'));
+$menuItem->signal_connect('activate', \&enable_gps_cb, $statusicon);
+$menu->append($menuItem);
+
+$menuItem = Gtk2::ImageMenuItem->new("Disable GPS");
+$menuItem->set_image(Gtk2::Image->new_from_file('/usr/share/icons/gnome/16x16/stock/net/stock_disconnect.png'));
+$menuItem->signal_connect('activate', \&disable_gps_cb, $statusicon);
+$menu->append($menuItem);
+
+$menuItem = Gtk2::SeparatorMenuItem->new();
+$menu->append($menuItem);
+
+$menuItem = Gtk2::ImageMenuItem->new_from_stock('gtk-quit');
+$menuItem->signal_connect('activate', \&quit_cb, $statusicon);
+$menu->append($menuItem);
+
+$statusicon->signal_connect('popup-menu', \&popup_menu_cb, $menu);
+$statusicon->set_visible(1);
+
+Gtk2->main;
+
+sub timeout_handler {
+  my $status = update_status();
+  print $status."\n";
+  my %data;
+  foreach my $l (split /\n/, $status) {
+    my ($k, $v) = split /: /, $l;
+    $data{$k} = $v;
+  }
+  if ($data{Capability} eq "NO") {
+    if ($last_cap ne $data{Capability}) {
+      print "Changing icon to ".$icons{NO}."\n";
+    }
+    $statusicon->set_from_file($icons{NO});
+  } elsif ($last_cap ne $data{Capability} || $last_signal != $data{Signal}) {
+    if (length $data{Capability} && length $data{Signal}) {
+      print "Cap: $data{Capability} Sig: $data{Signal}\n";
+      print "Changing icon to ".$icons{$data{Capability}}->[$data{Signal}]."\n";
+      $statusicon->set_from_file($icons{$data{Capability}}->[$data{Signal}]);
+    }
+  }
+
+  my $ttip = "$data{Network} - ".($data{Signal}*100/5)."% - ";
+  $ttip .= ($data{Connected} eq "YES"? "Online": "Offline");
+  $ttip .= "\n";
+  $ttip .= "$data{Capability} (Roaming: $data{Roaming})";
+  $statusicon->set_tooltip($ttip);
+
+  $last_cap = $data{Capability};
+  $last_signal = $data{Signal};
+
+  return 1;
+}
+
+sub update_status { # don't block on the udpate call
+  if (!fork) {
+    system "$umtscardtool status > /tmp/umts_status";
+    exit;
+  } else {
+    open F, "</tmp/umts_status";
+    my $ret;
+    while (<F>) {
+      $ret .= $_;
+    }
+    close F;
+    return $ret;
+  }
+}
+
+sub quit_cb {
+  my ($widget, $statusicon) = @_;
+
+  print "exit\n";
+
+  $statusicon->set_visible(0) if $statusicon;
+  Gtk2->main_quit();
+}
+
+sub enable_cb {
+  my ($widget, $statusicon) = @_;
+  system "$umtscardtool enable card";
+}
+
+sub disable_cb {
+  my ($widget, $statusicon) = @_;
+  system "$umtscardtool disable card";
+}
+
+sub enable_gps_cb {
+  my ($widget, $statusicon) = @_;
+  system "$gpscardtool gpson";
+}
+
+sub disable_gps_cb {
+  my ($widget, $statusicon) = @_;
+  system "$gpscardtool gpsoff";
+}
+
+sub popup_menu_cb {
+  my ($widget, $button, $time, $menu) = @_;
+
+  if ($button == 3) {
+    $menu->show_all();
+    $menu->popup(undef, undef, undef, undef, 3, $time);
+  }
+}

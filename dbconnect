@@ -1,0 +1,338 @@
+#!/usr/bin/perl
+
+use strict;
+use IO::Socket::INET;
+use Term::ReadKey;
+use Crypt::Blowfish;
+use Digest::MD5 qw(md5_hex);
+
+my $settingsfile = "$ENV{HOME}/.dbconnect";
+my @hosts;
+
+# oswallet stuff
+my $usewallet = 1;
+my $server = "localhost";
+my $port = 30101;
+my $timeout = 900;
+
+loadSettings();
+
+$|++;
+
+my $uimode = "misql";
+if ($0 =~ /dbadmin/) {
+  $uimode = "admin";
+} elsif ($0 =~ /dbgui/) {
+  $uimode = "gui";
+}
+
+if ($ARGV[0] eq "-h") {
+  usage();
+} elsif ($ARGV[0] eq "-a") {
+  if ($ARGV[1] =~ /(sybase|mysql):[a-zA-Z0-9_\-\.]+\@[a-zA-Z0-9_\-\.]+/) {
+    open F, ">>$settingsfile" or die "can't open $settingsfile: $!";
+    print F $ARGV[1]."\n";
+    close F;
+  } else {
+    print "wrong format: $ARGV[1]\n";
+    usage();
+  }
+} elsif ($ARGV[0] eq "-c") {
+  if ($ARGV[1] =~ /(sybase|mysql):[a-zA-Z0-9_\-\.]+\@[a-zA-Z0-9_\-\.]+/) {
+    # connect
+    connectServer($ARGV[1]);
+  } else {
+    print "wrong format: $ARGV[1]\n";
+    usage();
+  }
+} elsif ($ARGV[0] eq "-d") {
+  shift @ARGV;
+  deleteHost($hosts[getHostNumber()]);
+} elsif ($ARGV[0] eq "-p") {
+  shift @ARGV;
+  $usewallet = 0;
+  connectServer($hosts[getHostNumber()]);
+} else {
+  my $paramstr = "";
+  if ($ARGV[0] eq "-x") {
+    $paramstr = $ARGV[1];
+    shift @ARGV;
+    shift @ARGV;
+  }
+  if ($ARGV[0] eq "nocol") {
+    $paramstr .= " -n 1 ";
+    shift @ARGV;
+  }
+  my $show = 0;
+  if ($ARGV[0] eq "-s") {
+    $show = 1;
+    shift @ARGV;
+  }
+  if (defined $ARGV[0]) {
+    filterHosts(@ARGV);
+    while (defined $ARGV[0]) {
+      shift @ARGV;
+    }
+  }
+  connectServer($hosts[getHostNumber()], $paramstr, $show);
+}
+
+
+sub usage {
+  print <<_EOF
+Usage: $0 [<options>|<host substr>]
+
+  -a db:user\@host[:port][/DB][=password]    Add new host
+                                            (eg: mysql:root\@guinan:3306/Delivery
+                                                 sybase:sa\@ASEDB001/AdServDC1=testtest)
+  -c db:user\@host[:port][/DB][=password]    Connect to host using port and user
+  -d                                        Delete a connection
+  -p                                        Ask for the password instead of getting it from the wallet
+  -s                                        Show misql command that is executed
+  -x "misql parameters"                     Add additional misql parameter
+  nocol                                     Disable syntax hilighting
+
+_EOF
+    ;
+  exit 1;
+}
+
+sub connectServer {
+  my $host = shift;
+  my $paramstr = shift;
+  my $show = shift;
+  if ($host =~ /(sybase|mysql|mysql_ssh)(\((.*)\))?:([^\@]+)@([^:=\/]+)(:(\d+))?(\/([^=]+))?(=(.*))?$/) {
+    my ($type, $sshuser, $user, $host, $port, $db, $pass) = ($1, $3, $4, $5, $7, $9, $11);
+    #print "$type, $user, $host, $port, $db, $pass\n";
+    my $shorthost = getShortHostName($host);
+    if (!$pass) {
+      if ($type eq "mysql_ssh") {
+	$pass = getPassword("mysql", $user);
+      } else {
+	$pass = getPassword($type, $user);
+      }
+    }
+    print "\033]0;db:$shorthost\007";
+    if (!$usewallet) {
+      print "Enter password: ";
+      $pass = <>;
+    }
+    my $cmd;
+    my $skip = 0;
+    if ($type eq "mysql" && $uimode eq "admin") {
+      $cmd = "mysql-admin -h$host -u$user -p$pass";
+      if ($port) {
+	$cmd .= " -P$port";
+      }
+    } elsif ($type eq "mysql" && $uimode eq "gui") {
+      $cmd = "mysql-query-browser -h$host -u$user -p$pass";
+      if ($port) {
+	$cmd .= " -P$port";
+      }
+      #if ($db) {
+      #	$cmd .= " $db";
+      #}
+    } elsif ($type eq "mysql_ssh") {
+      $port ||= 3306;
+      # try to find a free port for the SSH tunnel
+      my $baseport = 33000;
+      my $tunnelport = 0;
+      my $i = 0;
+      while (!$tunnelport && $i < 100) {
+	my $tryport = $baseport + $i++;
+	my $ret = `/bin/fuser $tryport/tcp`;
+	if (length($ret) == 0) {
+	  $tunnelport = $tryport;
+	}
+      }
+      if (!$tunnelport) {
+	print "No free tunnel port found!\n";
+	exit 1;
+      } else {
+	print "Using tunnel port $tunnelport.\n";
+      }
+      my ($realsshuser, $realsshport) = split /:/, $sshuser;
+      $realsshport = 22 unless defined $realsshport;
+      #print "'$sshuser' -> '$realsshuser', '$realsshport'\n";
+      # get SSH password
+      my $sshpass = getPassword("sshtools", $realsshuser);
+      # executing ssh
+      my $errfile = "/tmp/dbconnect.tunnel/$tunnelport.err";
+      my $logfile = "/tmp/dbconnect.tunnel/$tunnelport.log";
+      createTunnelJob("misql_ssh.exp $realsshuser $host $realsshport $port $tunnelport 2>$errfile >$logfile");
+      print "Establishing SSH tunnel... ";
+      #my $pid = open(CHLD, "|$cmd") or die "could not open '$cmd': $!";
+      # waiting for the port to be available
+      my $portavail = 0;
+      my $logfilecheck = 0;
+      while (!$portavail) {
+	my $ret = `/bin/fuser $tunnelport/tcp 2>&1`;
+	if (length($ret) > 0) {
+	  $portavail = 1;
+	} else {
+	  sleep 1;
+	  if ((stat($errfile))[7] > 0) {
+	    print "error\n---\n";
+	    system "cat $errfile";
+	    print "\n---\n";
+	    exit 1;
+	  }
+	  if ((stat($logfile))[7] > 0) {
+	    $logfilecheck++;
+	  }
+	  if ($logfilecheck > 5) {
+	    print "failed\n---\n";
+	    system "cat $logfile";
+	    print "\n---\n";
+	    exit 1;
+	  }
+	}
+      }
+      print "done\n";
+      # running db shell
+      $cmd = "misql $paramstr -mmysql -s$host -h127.0.0.1 -P$tunnelport -u$user -p$pass";
+      if ($show) {
+	print "CMD: $cmd\n";
+      }
+      system "$cmd";
+      # killing ssh tunnel
+      #close CHLD;
+      #kill $pid;
+      createTunnelJob("close $tunnelport");
+      # don't execute the command, as we are done already
+      $skip = 1;
+    } else {
+      $cmd = "misql $paramstr -m$type -h$host -u$user -p$pass";
+      if ($port) {
+	$cmd .= " -P$port";
+      }
+      if ($db) {
+	$cmd .= " -d$db";
+      }
+    }
+    if ($show) {
+      print "CMD: $cmd\n";
+    }
+    system "$cmd" unless $skip;
+  }
+}
+
+sub createTunnelJob {
+  my $job = shift;
+  open F, ">/tmp/dbconnect.tunnel/job.".time().".sh";
+  print F $job."\n";
+  close F;
+}
+
+sub getShortHostName {
+  my $host = shift;
+  if (length $host > 17) {
+    # try to find the dc
+    if ($host =~ /\.(dc1|dc2|us-ec|us-wc)\./) {
+      return substr($host, 0, 13).".".$1;
+    } else {
+      return substr($host, 0, 17);
+    }
+  }
+  return $host;
+}
+
+sub getHostNumber {
+  my $num = 0;
+  if (scalar(@hosts) > 0) {
+    print "The following hosts are available:\n\n";
+    my $i = 1;
+    foreach my $h (@hosts) {
+      printf "[%3i] %s\n", $i++, $h;
+    }
+    print "\nPlease select a number: ";
+    $num = <>;
+    if ($num > 0 && $num <= scalar(@hosts)) {
+      return $num - 1;
+    } else {
+      print "Invalid number!\n";
+      exit 1;
+    }
+  } else {
+    print "Please add a host first!\n";
+    usage();
+  }
+}
+
+sub deleteHost {
+  my $del = shift;
+  open F, ">$settingsfile" or die "can't open $settingsfile: $!";
+  foreach my $h (@hosts) {
+    if ($del ne $h) {
+      print F $h."\n";
+    }
+  }
+  close F;
+  print "$del deleted.\n";
+}
+
+sub loadSettings {
+  if (-e $settingsfile) {
+    open F, "<$settingsfile" or die "can't open $settingsfile: $!";
+    while (<F>) {
+      chomp;
+      push @hosts, $_;
+    }
+    close F;
+    @hosts = sort @hosts;
+  }
+}
+
+sub filterHosts {
+  my @filters = @_;
+  my @newhosts;
+  foreach my $h (@hosts) {
+    my $allmatch = 1;
+    foreach my $filter (@filters) {
+      if ($h !~ /$filter/i) {
+	$allmatch = 0;
+	last;
+      }
+    }
+    push @newhosts, $h if $allmatch;
+  }
+  @hosts = @newhosts;
+}
+
+sub getPassword {
+  my $wallet = shift;
+  my $user = shift;
+
+  if (!$usewallet) {
+    return "";
+  }
+
+  my $sock = IO::Socket::INET->new( PeerHost => $server, PeerPort => $port );
+  if( !defined $sock ) {
+    print "no oswallet server available\n";
+    exit 2;
+  }
+  $sock->autoflush( 1 );
+
+  print $sock "get $wallet $user\n";
+  my $buf = <$sock> or goto sock_failed;
+  chomp $buf;
+  if( $buf eq "key" ) {
+    print "password for wallet $wallet: ";
+    ReadMode( "noecho" );
+    my $pass_wallet = ReadLine( 0 );
+    chomp $pass_wallet;
+    $pass_wallet = md5_hex( $pass_wallet );
+    ReadMode( "normal" );
+    print "\n";
+    print $sock $pass_wallet."\n" or goto sock_failed;
+    $buf = <$sock> or goto sock_failed;
+    chomp $buf;
+  }
+  goto sock_end;
+  sock_failed:
+  print "access to wallet $wallet failed\n";
+  sock_end:
+  close $sock;
+  return $buf;
+}

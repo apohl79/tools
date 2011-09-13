@@ -1,0 +1,16 @@
+stringstream *s =  new stringstream;
+s->str("abcdefgah");
+
+istringstream *is = (istringstream *)s;
+
+//cout << "avail: " << is->rdbuf()->in_avail() << endl;
+
+char buf[13] = "0123456789XX";
+is->get(buf, 10, ' ');
+
+cout << "buf=" << buf << endl;
+
+is->get(buf, 10);
+cout << "buf=" << buf << endl;
+
+delete s;

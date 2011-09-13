@@ -1,0 +1,14 @@
+#!/bin/sh
+
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "usage: $0 rev1 rev2 [-code|-ccode]"
+    exit 1
+fi
+
+if [ "$3" = "-code" ]; then
+    cvs diff -b -w -B -r $1 -r $2 2>/dev/null | egrep -v "^\?"
+elif [ "$3" = "-ccode" ]; then
+    cvs diff -b -w -B -p -r $1 -r $2 2>/dev/null | egrep -v "^\?"
+else
+    cvs diff -r $1 -r $2 2>/dev/null|grep "Index: "|awk '{print $2}'
+fi

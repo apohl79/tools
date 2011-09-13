@@ -1,0 +1,27 @@
+#!/usr/bin/expect
+
+set USER [lindex $argv 0]
+set MACHINE [lindex $argv 1]
+set PORT [lindex $argv 2]
+set MYSQLPORT [lindex $argv 3]
+set TUNNELPORT [lindex $argv 4]
+
+# get the secure password from the encrypted wallet
+log_user 0
+set timeout 10
+spawn -noecho oswallet -w sshtools -g $USER
+expect -re "(.*)\n"
+set PASSWORD $expect_out(1,string)
+
+#set timeout 1
+#send -i $user_spawn_id "ssh -Y -p$PORT -L$TUNNELPORT:localhost:$MYSQLPORT $USER@$MACHINE using PASSWORD $PASSWORD"
+spawn -noecho ssh -Y -p$PORT -L$TUNNELPORT:localhost:$MYSQLPORT $USER@$MACHINE
+#sleep 0.5
+
+set timeout 100
+#set DONE 0
+expect "assword:" { send "$PASSWORD\r" }
+#log_user 1
+set timeout 0
+interact
+

@@ -1,0 +1,26 @@
+#!/usr/bin/expect
+
+set HOST [lindex $argv 0]
+set PORT [lindex $argv 1]
+set USER [lindex $argv 2]
+set PASS [lindex $argv 3]
+set DB [lindex $argv 4]
+
+#set timeout 1
+spawn -noecho mysqlwrap -h$HOST -P$PORT -u$USER -p$PASS $DB
+#sleep 0.5
+
+log_user 1
+if {$DB != ""} {
+    set timeout 5
+    expect "mysql" { 
+	send "show tables;\r"
+    }
+} else {
+    set timeout 5
+    expect "mysql" { 
+	send "show databases;\r"
+    }
+}
+interact
+

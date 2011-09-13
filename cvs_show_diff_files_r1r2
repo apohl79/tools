@@ -1,0 +1,29 @@
+#!/usr/bin/perl
+
+use strict;
+
+if (scalar(@ARGV) < 2 || scalar(@ARGV) > 3) {
+  print STDERR "usage: $0 rev1 rev2 [-all|-code|-ccode]\n";
+  exit 1;
+}
+
+if ($ARGV[2] eq "-code") {
+  system 'cvs diff -b -w -B -r '.$ARGV[0].' -r '.$ARGV[1].' 2>/dev/null | egrep -v "^\?"';
+} elsif ($ARGV[2] eq "-ccode") {
+  system 'cvs diff -b -w -B -p -r '.$ARGV[0].' -r '.$ARGV[1].' 2>/dev/null | egrep -v "^\?"';
+} elsif ($ARGV[2] eq "-nodiff") {
+  print `cvs diff -r $ARGV[0] -r $ARGV[1] 2>/dev/null|grep "Index: "|awk '{print \$2}'`;
+} else {
+  my $all = ($ARGV[2] eq "-all");
+  my $files = `cvs diff -r $ARGV[0] -r $ARGV[1] 2>/dev/null|grep "Index: "|awk '{print \$2}'`;
+  foreach my $file (split /\n/, $files) {
+    my $diff = `cvs diff -b -w -B -r $ARGV[0] -r $ARGV[1] $file | egrep -v "^Index|^====|^RCS file|^retrieving|^diff"`;
+    if (length $diff) {
+      print "$file\n";
+    } else {
+      if ($all) {
+	print "$file (no changes)\n";
+      }
+    }
+  }
+}

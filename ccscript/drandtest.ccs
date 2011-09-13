@@ -1,0 +1,6 @@
+int nws[] = { 224,247,500,565,627,525,323,512,418,662 };
+cout << sizeof( nws )/sizeof(int) << endl;
+srand48( time( NULL) );
+int r = 1000 + (int) floor( drand48() * 255 );
+
+cout << "r = " << r << endl;

@@ -1,0 +1,176 @@
+#!/usr/bin/perl
+
+use strict;
+use IO::Socket::INET;
+use Term::ReadKey;
+use Crypt::Blowfish;
+use Digest::MD5 qw(md5_hex);
+
+my $settingsfile = "$ENV{HOME}/.mysqlconnect";
+my $connectscript = "$0.exp";
+my @hosts;
+
+# oswallet stuff
+my $usewallet = 1;
+my $wallet = "mysql";
+my $server = "localhost";
+my $port = 30101;
+my $timeout = 900;
+
+loadSettings();
+
+$|++;
+
+if ($ARGV[0] eq "-h") {
+  usage();
+} elsif ($ARGV[0] eq "-a") {
+  if ($ARGV[1] =~ /[a-zA-Z0-9_\-\.]+\@[a-zA-Z0-9_\-\.]+:\d+/) {
+    open F, ">>$settingsfile" or die "can't open $settingsfile: $!";
+    print F $ARGV[1]."\n";
+    close F;
+  } else {
+    print "wrong format: $ARGV[1]\n";
+    usage();
+  }
+} elsif ($ARGV[0] eq "-c") {
+  if ($ARGV[1] =~ /[a-zA-Z0-9_\-\.]+\@[a-zA-Z0-9_\-\.]+:\d+/) {
+    # connect
+    connectServer($ARGV[1]);
+  } else {
+    print "wrong format: $ARGV[1]\n";
+    usage();
+  }
+} elsif ($ARGV[0] eq "-d") {
+  shift @ARGV;
+  deleteHost($hosts[getHostNumber()]);
+} elsif ($ARGV[0] eq "-p") {
+  shift @ARGV;
+  $usewallet = 0;
+  connectServer($hosts[getHostNumber()]);
+} else {
+  connectServer($hosts[getHostNumber()]);
+}
+
+
+sub usage {
+  print <<_EOF
+Usage: $0 [<options>]
+
+  -a user\@host:port[/DB]   Add new host (eg: root\@guinan:3306/Delivery)
+  -c user\@host:port[/DB]   Connect to host using port and user
+  -d                        Delete a connection
+  -p                        Ask for the password instead of getting it from the wallet
+
+_EOF
+    ;
+  exit 1;
+}
+
+sub connectServer {
+  my $host = shift;
+  if ($host =~ /([^\@]+)@([^:]+):(\d+)(\/(.*))?$/) {
+    my ($user, $host, $port, $db) = ($1, $2, $3, $5);
+    my $shorthost = getShortHostName($host);
+    my $pass = getPassword($user);
+    my $cmd = "$connectscript $host $port $user $pass '$db'";
+    print "connecting to $host ...\n";
+    print "\033]0;db:$shorthost\007";
+    system "$cmd";
+  }
+}
+
+sub getShortHostName {
+  my $host = shift;
+  if (length $host > 17) {
+    # try to find the dc
+    if ($host =~ /\.(dc1|dc2|us-ec|us-wc)\./) {
+      return substr($host, 0, 13).".".$1;
+    } else {
+      return substr($host, 0, 17);
+    }
+  }
+  return $host;
+}
+
+sub getHostNumber {
+  my $num = 0;
+  if (scalar(@hosts) > 0) {
+    print "The following hosts are available:\n\n";
+    my $i = 1;
+    foreach my $h (@hosts) {
+      printf "[%3i] %s\n", $i++, $h;
+    }
+    print "\nPlease select a number: ";
+    $num = <>;
+    if ($num > 0 && $num <= scalar(@hosts)) {
+      return $num - 1;
+    } else {
+      print "Invalid number!\n";
+      exit 1;
+    }
+  } else {
+    print "Please add a host first!\n";
+    usage();
+  }
+}
+
+sub deleteHost {
+  my $del = shift;
+  open F, ">$settingsfile" or die "can't open $settingsfile: $!";
+  foreach my $h (@hosts) {
+    if ($del ne $h) {
+      print F $h."\n";
+    }
+  }
+  close F;
+  print "$del deleted.\n";
+}
+
+sub loadSettings {
+  if (-e $settingsfile) {
+    open F, "<$settingsfile" or die "can't open $settingsfile: $!";
+    while (<F>) {
+      chomp;
+      push @hosts, $_;
+    }
+    close F;
+    @hosts = sort @hosts;
+  }
+}
+
+sub getPassword {
+  my $user = shift;
+
+  if (!$usewallet) {
+    return "";
+  }
+
+  my $sock = IO::Socket::INET->new( PeerHost => $server, PeerPort => $port );
+  if( !defined $sock ) {
+    print "no oswallet server available\n";
+    exit 2;
+  }
+  $sock->autoflush( 1 );
+
+  print $sock "get $wallet $user\n";
+  my $buf = <$sock> or goto sock_failed;
+  chomp $buf;
+  if( $buf eq "key" ) {
+    print "password for wallet $wallet: ";
+    ReadMode( "noecho" );
+    my $pass_wallet = ReadLine( 0 );
+    chomp $pass_wallet;
+    $pass_wallet = md5_hex( $pass_wallet );
+    ReadMode( "normal" );
+    print "\n";
+    print $sock $pass_wallet."\n" or goto sock_failed;
+    $buf = <$sock> or goto sock_failed;
+    chomp $buf;
+  }
+  goto sock_end;
+  sock_failed:
+  print "access to wallet $wallet failed\n";
+  sock_end:
+  close $sock;
+  return $buf;
+}

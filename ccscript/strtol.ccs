@@ -1,0 +1,5 @@
+cout << "strtol(AA) = " << strtol( "AA", NULL, 16 ) << endl;
+cout << "strtol(aA) = " << strtol( "aA", NULL, 16 ) << endl;
+cout << "strtol(aa) = " << strtol( "aa", NULL, 16 ) << endl;
+cout << "strtol(Aa) = " << strtol( "Aa", NULL, 16 ) << endl;
+cout << "strtol(aax) = " << strtol( "aax", NULL, 16 ) << endl;

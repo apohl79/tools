@@ -1,0 +1,214 @@
+#!/usr/bin/perl
+#
+# Control program for the Ericsson F3507g Minicard.
+#
+# (c) 2010 Andread Pohl
+
+use strict;
+use Device::SerialPort;
+#use Getopt::Long;
+
+$|++;
+
+my $pin = "0808";
+my $devNameControl = "Ericsson F3507g Mobile Broadband Minicard Data Modem";
+my $devNameGPS = "Ericsson F3507g Mobile Broadband Minicard GPS Port";
+my $port;
+
+my %erinfo = ('0,1,0' => "GPRS",
+	      '0,0,1' => "3G",
+	      '0,0,2' => "HSDPA");
+
+#$result = GetOptions("length=i" => \$length,    # numeric
+#		     "file=s"   => \$data,      # string
+#"verbose"  => \$verbose);  # flag
+
+main();
+
+sub main {
+  init();
+  my $cmd = $ARGV[0];
+  if ($cmd eq "enable") {
+    if ($ARGV[1] eq "card") {
+      enableCard();
+    } elsif ($ARGV[1] eq "gps") {
+    }
+  } elsif ($cmd eq "disable") {
+    if ($ARGV[1] eq "card") {
+      disableCard();
+    } elsif ($ARGV[1] eq "gps") {
+    }
+  } elsif ($cmd eq "status") {
+    status();
+  } elsif ($cmd eq "send") {
+    print call($ARGV[1])."\n";
+  } else {
+    usage();
+  }
+  $port->close();
+}
+
+sub usage {
+  print <<__eof
+Usage: $0 [Options] Command
+
+Commands:
+  enable/disable {card|gps}    Enable or disable a device.
+  status                       Show status (network, signal, ...)
+  send <at command>            Send an AT command. (eg: $0 send AT)
+
+__eof
+    ;
+}
+
+#
+# Status
+#
+sub status {
+  #$port->read_const_time(300);
+  my $indicators = call("AT+CIND?");
+  $indicators =~ s/\+CIND: //;
+  my ($signal, $service, $roam) = (split /,/, $indicators)[1,4,8];
+  $roam = $roam? "YES": "NO";
+  $signal ||= 0;
+  my $network = "NO";
+  my $capability = "NO";
+  if ($service) {
+    $network = call("AT+COPS?");
+    $network =~ s/.*"(.*)".*/\1/;
+    $network = "NO" unless length $network;
+    $capability = call("AT*ERINFO?");
+    $capability =~ s/\*ERINFO: //;
+    $capability = $erinfo{$capability};
+    $capability = "NO" unless length $capability;
+  }
+  my $connected = call("AT*ENAP?");
+  $connected =~ s/\*ENAP: //;
+  $connected = 0 if $connected eq "ERROR";
+  $connected = $connected? "YES": "NO";
+  print "Network: $network\n";
+  print "Signal: $signal\n";
+  print "Capability: $capability\n";
+  print "Roaming: $roam\n";
+  print "Connected: $connected\n";
+}
+
+#
+# Enabling / Disabling devices
+#
+sub enableCard {
+  print "Enabling F3507g card ... ";
+  # Check if card is already enabled
+  if (call("AT+CFUN?") ne "+CFUN: 4") {
+    print "already enabled\n";
+    return;
+  }
+  # Check if PIN is required
+  if (call("AT+CPIN?") =~ /SIM PIN/) {
+    if (call("AT+CPIN=\"$pin\"") ne "OK") {
+      print "failed\n";
+      perror("Setting PIN");
+    }
+  }
+  # Enabling card
+  if (call("AT+CFUN=1") ne "OK") {
+    print "failed\n";
+    perror("Setting CFUN=1");
+  }
+  # Waiting for the card to be enabled
+  #if (!waitforstr("+PACSP", 10)) {
+  #  print "failed\n";
+  #  perror("Didn't receive '+PACSP'");
+  #}
+  print "ok\n";
+}
+
+sub disableCard {
+  print "Disabling F3507g card ... ";
+  # Check if card is already disabled
+  if (call("AT+CFUN?") eq "+CFUN: 4") {
+    print "already disabled\n";
+    return;
+  }
+  if (call("AT+CFUN=4") ne "OK") {
+    print "failed\n";
+    perror("Setting CFUN=4");
+  }
+  print "ok\n";
+}
+
+#
+# Some base helper functions
+#
+sub init {
+  $port = Device::SerialPort->new(getDev($devNameControl));
+  if (defined $port) {
+    $port->read_char_time(0);     # don't wait for each character
+    $port->read_const_time(1000); # 1 second per unfulfilled "read" call
+  } else {
+    print STDERR "Failed to open device\n";
+    exit 1;
+  }
+}
+
+my $last_cmd = "";
+my $last_ret = "";
+sub call {
+  my $cmd = shift;
+  my $ret = "";
+  $last_cmd = $cmd;
+
+  $port->write("$cmd\r\n");
+
+  my $tries = 10;
+  while ($tries > 0) {
+    my ($count, $buf) = $port->read(255);
+    if ($count > 0) {
+      my @lines = split("\r\n", $buf);
+      $ret = $lines[1]; # we support only 1 line aswers.
+      last;
+    } else {
+      $tries--;
+    }
+  }
+  $last_ret = $ret;
+  return $ret;
+}
+
+sub waitforstr {
+  my $str = shift;
+  my $tries = shift;
+  my $found = 0;
+
+  while ($tries > 0) {
+    my ($count, $buf) = $port->read(255);
+    if ($count > 0 && $buf =~ /$str/) {
+      $found = 1;
+      last;
+    }
+    $tries--;
+  }
+  return $found;
+}
+
+sub getDev {
+  my $devName = shift;
+  my $ret = "";
+  foreach my $dev (</sys/class/tty/ttyACM*/device/interface>) {
+    open F, "<$dev";
+    my $name = <F>;
+    close F;
+    chomp $name;
+    if ($name eq $devName) {
+      $dev =~ s|.*/(ttyACM\d+)/.*|\1|;
+      $ret = "/dev/$dev";
+      last;
+    }
+  }
+  return $ret;
+}
+
+sub perror {
+  print STDERR "Error: ".shift()." (AT_CMD='$last_cmd' RET='$last_ret')\n";
+  exit 1;
+}

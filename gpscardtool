@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# Original version from:
+#   http://www.thinkwiki.org/wiki/Ericsson_F3507g_Mobile_Broadband_Module
+
+PIN="0808"
+GPSDPID="/tmp/gpsd.pid"
+
+CONTROL_DEVICE () {
+    echo /dev/$(for n in /sys/class/tty/ttyACM*/device/interface;do if [ "$(cat $n)" = "Ericsson F3507g Mobile Broadband Minicard Data Modem" ]; then echo $n|awk -F '/' '{print $5}'; fi; done)
+}
+
+GPS_DEVICE () {
+    echo /dev/$(for n in /sys/class/tty/ttyACM*/device/interface;do if [ "$(cat $n)" = "Ericsson F3507g Mobile Broadband Minicard GPS Port" ]; then echo $n|awk -F '/' '{print $5}'; fi; done)
+}
+
+powerup_F3507g () {
+	echo -n "Turning on F3507g card..."
+	/usr/sbin/chat -v -t 1 "" "AT+CPIN?" "READY" > $(CONTROL_DEVICE) < $(CONTROL_DEVICE)
+	if [ $? != 0 ] && [ -n "$PIN" ]; then
+	    /usr/sbin/chat -v "" "AT+CPIN?" "SIM PIN" "AT" "OK" "AT+CPIN=\"$PIN\"" "OK" > $(CONTROL_DEVICE) < $(CONTROL_DEVICE)
+	    if [ $? != 0 ]; then
+		echo "failed"
+		exit 1
+	    fi
+	fi
+	/usr/sbin/chat -v -t 1 "" "AT+CPIN?" "OK" > $(CONTROL_DEVICE) < $(CONTROL_DEVICE)
+	if [ $? != 0 ]; then
+	    echo "failed"
+	    exit 1
+	fi
+	/usr/sbin/chat -v "" "AT+CFUN=1" "+PACSP" "AT" "OK" > $(CONTROL_DEVICE) < $(CONTROL_DEVICE)
+	if [ $? != 0 ]; then
+	    echo "failed"
+	    exit 1
+	else
+	    echo "done"
+	fi	
+}
+
+powerdown_F3507g () {
+	echo -n "Turning off F3507g card..."
+	/usr/sbin/chat -v "" "AT+CFUN=4" "OK" > $(CONTROL_DEVICE) < $(CONTROL_DEVICE)
+	echo "done"
+}
+
+configure_GPS () {
+	/usr/sbin/chat -v "" "AT*E2GPSCTL=$1,$2,$3" "OK" > $(CONTROL_DEVICE) < $(CONTROL_DEVICE)
+}
+
+turnon_GPS () {
+	echo -n "Starting NMEA stream on $(GPS_DEVICE)..."
+	configure_GPS 1 1 1
+	sleep 1
+	/usr/sbin/chat -v "" "AT*E2GPSNPD" "GPGGA" > $(GPS_DEVICE) < $(GPS_DEVICE)
+	start-stop-daemon --start --exec /usr/sbin/gpsd -- -P $GPSDPID $(GPS_DEVICE)
+	echo "done"
+}
+
+turnoff_GPS () {
+	echo -n "Stopping NMEA stream on $(GPS_DEVICE)..."
+	start-stop-daemon --stop --pidfile $GPSDPID
+	configure_GPS 0 1 0
+	echo "done"
+}
+
+#if [ "`id`" != "uid=0(root) gid=0(root) groups=0(root)" ]; then
+#    echo "You need to run this script as root (or with sudo)!"
+#    exit 1
+#fi
+
+case "$1" in
+    gpson)
+	turnon_GPS
+	;;
+    gpsoff)
+	turnoff_GPS
+	;;
+    cardon)
+	powerup_F3507g
+	;;
+    cardoff)
+	powerdown_F3507g
+	;;
+    allon)
+	powerup_F3507g
+	turnon_GPS
+	;;
+    alloff)
+	turnoff_GPS
+	powerdown_F3507g
+	;;
+    show)
+	for n in `ls /sys/class/*/*{ACM,wdm,usb0}*/device/interface`;do echo $(echo $n|awk -F '/' '{print $5}') : $(cat $n);done
+	;;
+    *)
+	echo "Usage: $0 {gpson|gpsoff|cardon|cardoff|allon|alloff|show}"
+	;;
+esac

@@ -1,0 +1,1 @@
+cout << "sizeof(time_t) = " << sizeof(time_t) << endl;

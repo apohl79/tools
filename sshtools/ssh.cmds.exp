@@ -1,0 +1,42 @@
+#!/usr/bin/expect
+
+set HOME [lindex $argv 0]
+set WALLET [lindex $argv 1]
+set USER [lindex $argv 2]
+set MACHINE [lindex $argv 3]
+set COMMAND [lindex $argv 4]
+set SUDO [lindex $argv 5]
+set PUBKEY [lindex $argv 6]
+
+if {$PUBKEY != 1} {
+    # get the secure password from the encrypted wallet
+    log_user 0
+    set timeout 100
+    spawn -noecho $HOME/oswallet -w $WALLET -g $USER
+    expect -re "(.*)\n"
+    set PASSWORD $expect_out(1,string)
+}
+
+send -i $user_spawn_id "Connecting to $USER@$MACHINE... "
+if {$SUDO > 0} {
+    spawn -noecho ssh -Y $USER@$MACHINE
+    if {$PUBKEY != 1} {
+	set timeout 2
+	expect "assword" { send "$PASSWORD\r" }
+	log_user 1
+    }
+    expect "$USER" { 
+	send "sudo su -c \"$COMMAND\" && exit\r"
+	set timeout 2
+	expect "assword" { send "$PASSWORD\r" }
+    }
+} else {
+    spawn -noecho ssh -Y $USER@$MACHINE "$COMMAND"
+    if {$PUBKEY != 1} {
+	set timeout 10
+	expect "assword" { send "$PASSWORD\r" }
+	log_user 1
+    }
+}
+set timeout 0
+interact

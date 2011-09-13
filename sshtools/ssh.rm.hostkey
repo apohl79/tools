@@ -1,0 +1,27 @@
+#!/usr/bin/perl
+
+use strict;
+
+chomp $ARGV[0];
+my( $file, $line ) = split /:/, $ARGV[0];
+$line++; $line--;
+#$line =~ s/(\d+)[^\d]*/$1/g;
+
+print "Do you really want to remove the host key in line $line? (Y/n) ";
+my $answer = "y"; # <STDIN>;
+chomp $answer;
+
+if( $answer eq "" || lc( $answer ) eq "y" ) {
+  open F, "<$file" or die "can't open $file for reading: $!";
+  my @lines = <F>;
+  close F;
+  open F, ">$file" or die "can't open $file for writing: $!";
+  my $c = 1;
+  foreach (@lines) {
+    print F if $line != $c++;
+  }
+  close F;
+  print "Host key removed.\n"
+} else {
+  print "No host key removed.\n";
+}

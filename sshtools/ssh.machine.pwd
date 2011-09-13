@@ -1,0 +1,20 @@
+#!/bin/sh
+
+MACHINE=`basename $0|sed -e's/:.*//'`
+PORT=`basename $0|sed -e 's/:/ /'|awk '{print $2}'`
+SESSIONNAME=`dcop $KONSOLE_DCOP_SESSION sessionName`
+
+# set the session name to machine for kde konsole
+dcop $KONSOLE_DCOP_SESSION renameSession "$MACHINE"
+
+if [ ! -z "$1" ]; then
+    MACHINE=$1@$MACHINE
+fi
+if [ ! -z "$PORT" ]; then
+    MACHINE="$MACHINE -p $PORT"
+fi
+echo "Connecting $MACHINE..."
+ssh -Y $MACHINE
+
+# set the session name back to original
+dcop $KONSOLE_DCOP_SESSION renameSession "$SESSIONNAME"

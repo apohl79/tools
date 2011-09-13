@@ -1,0 +1,64 @@
+/* -*- mode: c++-mode -*- */
+unsigned long long num = 25000000;
+unsigned long long num2 = 100000000;
+
+srand( time(NULL) );
+
+unsigned long long count = 0;
+int start = time(NULL);
+
+/*
+cout << "hash_map" << endl;
+hash_map<unsigned long, int> hm;
+for( unsigned long long i = 1; i < num; i++ ) {
+	hm.insert( make_pair( i, 1 ) );
+	count++;
+	if( count % 1000000 == 0 )
+		cout << "  " << count << endl;
+}
+cout << "insert " << (time(NULL)-start) << endl;
+start = time(NULL);
+count = 0;
+for( unsigned long i = 1; i < num2; i++ ) {
+	int r = rand();
+	hash_map<unsigned long, int>::iterator it=hm.find( r );
+	//if( it != hm.end() ) {
+	//	cout << "found " << r << " " << count << endl;
+		//break;
+	//}
+	count++;
+	if( count % 100000 == 0 )
+		cout << "  " << count << endl;
+}
+cout << "find " << (time(NULL)-start) << endl;
+hm.clear();
+*/
+
+cout << "dense_hash_map" << endl;
+dense_hash_map<unsigned long, int> dhm;
+dhm.set_empty_key( 0 );
+start = time(NULL);
+count = 0;
+for( unsigned long i = 1; i < num; i++ ) {
+	dhm.insert( make_pair( i, 1 ) );
+	count++;
+	if( count % 1000000 == 0 )
+		cout << "  " << count << endl;
+}
+cout << "insert " << (time(NULL)-start) << endl;
+start = time(NULL);
+count = 0;
+for( unsigned long i = 1; i < num2; i++ ) {
+	int r = rand();
+	dense_hash_map<unsigned long, int>::iterator it=dhm.find( r );
+	//if( it != dhm.end() ) {
+	//	cout << "found " << r << " " << count << endl;
+		//break;
+	//}
+	count++;
+	if( count % 100000 == 0 )
+		cout << "  " << count << endl;
+}
+cout << "find " << (time(NULL)-start) << endl;
+
+return 0;

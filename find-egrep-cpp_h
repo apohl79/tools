@@ -1,0 +1,2 @@
+#!/bin/sh
+find . | egrep -i "cpp$|h$|cc$|hpp$|cxx$|hxx$|c$" | xargs egrep --color=auto -n -i -- "$*"

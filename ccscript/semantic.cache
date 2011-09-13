@@ -1,0 +1,15 @@
+;; Object ccscript/
+;; SEMANTICDB Tags save file
+(semanticdb-project-database-file "ccscript/"
+  :tables (list 
+   (semanticdb-table "script.cpp"
+    :major-mode 'c++-mode
+    :tags '(("stdio.h" include (:system-flag t) (dependency-file "/usr/include/stdio.h") [1 19]) ("string" include (:system-flag t) (dependency-file none) [20 37]) ("iostream" include (:system-flag t) (dependency-file none) [38 57]) ("main" function (:type "int") nil [81 285]))
+    :file "script.cpp"
+    :pointmax 286
+    )
+   )
+  :file "semantic.cache"
+  :semantic-tag-version "2.0pre3"
+  :semanticdb-version "2.0pre3"
+  )

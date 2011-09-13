@@ -1,0 +1,330 @@
+#!/bin/bash
+
+SSHTOOLS=$HOME/bin/sshtools
+SSHEXP=$SSHTOOLS/ssh.exp
+SSHFIXEXP=$SSHTOOLS/ssh.fix.exp
+SSHCMDEXP=$SSHTOOLS/ssh.cmd.exp
+SSHCMDEXPS=$SSHTOOLS/ssh.cmds.exp
+SSHMNTEXP=$SSHTOOLS/ssh.mnt.exp
+OSWALLET=$HOME/bin/sshtools/oswallet
+CHCKHOST=$SSHTOOLS/chckhost.pl
+
+# Define a list of commands that skip establishing a SSH session
+NOWALLET="mnt umnt q qh"
+# Define a list of machines that do not work with LDAP
+ROOT_MACHINES="dubidam.de softwaretest"
+# Define a list of machines that work with pub keys
+PUBKEY_MACHINES="dubidam.de"
+
+LDAP_USER="unset"
+WALLET="sshtools"
+
+if [ -e $HOME/.sshsessions/.sshsettings ]; then
+    . $HOME/.sshsessions/.sshsettings
+fi
+
+# set by INIT
+BASENAME=`basename $0`
+MACHINE=""
+USER=$LDAP_USER
+PORT=0
+SESSIONNAME=""
+NEWSESSIONNAME=""
+USE_PUBKEY=0
+USE_SUDO=1 # become root via sudo after logging in is the default
+
+function renameSession {
+    echo -ne "\033]0;$NEWSESSIONNAME\007"
+}
+
+function renameSessionBack {
+    echo -ne "\033]0;$SESSIONNAME\007"
+}
+
+function SSH {
+    echo $$ > /tmp/sshtools.$BASENAME.$$
+    renameSession
+    $SSHEXP $SSHTOOLS $WALLET $USER $MACHINE $PORT $USE_SUDO $USE_PUBKEY
+    renameSessionBack
+    rm /tmp/sshtools.$BASENAME.$$
+}
+
+function SSHRUN {
+    echo $$ > /tmp/sshtools.$BASENAME.$$
+    renameSession
+    $SSHCMDEXP $SSHTOOLS $WALLET $USER $MACHINE "$1" $USE_SUDO $USE_PUBKEY
+    renameSessionBack
+    rm /tmp/sshtools.$BASENAME.$$
+}
+
+function SSHRUNSINGLE {
+    echo $$ > /tmp/sshtools.$BASENAME.$$
+    renameSession
+    $SSHCMDEXPS $SSHTOOLS $WALLET $USER $MACHINE "$1" $USE_SUDO $USE_PUBKEY
+    renameSessionBack
+    rm /tmp/sshtools.$BASENAME.$$
+}
+
+function QUERYSELECTOR {
+    URL="http://$MACHINE:$PORT/agent/transform=no&compress=no&$1"
+    if [ "hl" = "$2" ]; then
+	lwp-request "$URL"|xmlstarlet fo|highlight -A -S xml
+    else
+	lwp-request "$URL"|xmlstarlet fo
+    fi
+}
+
+function SSHLOG {
+    SSHRUN "tail -n30 -f $1"
+}
+
+function INIT {
+    if [ "unset" = "$LDAP_USER" ]; then
+	echo "No settings found!"
+	echo "Creating inital file: $HOME/.sshsessions/.sshsettings"
+	echo "LDAP_USER=\"unset\"" > $HOME/.sshsessions/.sshsettings
+	echo "WALLET=\"sshtools\"" >> $HOME/.sshsessions/.sshsettings
+	
+	echo "Please edit the file and setup your user!"
+	exit 1;
+    fi
+
+    MACHINE=`basename $0|sed 's/^.*+//'|sed -e's/:.*//'`
+    if [ "$MACHINE" != `basename $0|sed -e's/:.*//'` ]; then
+        USER=`basename $0|sed 's/+.*$//'`
+	USE_SUDO=0
+    fi
+    PORT=`basename $0|sed -e 's/:/ /'|awk '{print $2}'`
+    if [ -z "$PORT" ]; then
+        PORT=22
+    fi
+    
+
+    NEWSESSIONNAME=`echo $MACHINE|sed 's/[\.:_].*$//'`
+    
+    if [ ! -z `echo $MACHINE|grep -i dc2` ]; then
+        NEWSESSIONNAME="$NEWSESSIONNAME.dc2"
+    elif [ ! -z `echo $MACHINE|grep -i us-ec` ]; then
+        NEWSESSIONNAME="$NEWSESSIONNAME.East"
+    elif [ ! -z `echo $MACHINE|grep -i us-wc` ]; then
+        NEWSESSIONNAME="$NEWSESSIONNAME.West"
+    fi
+    #if [ ! -z `echo $NEWSESSIONNAME|grep -i "qa-"` ]; then
+    #	WALLET="adtech_qa"
+    #	USE_SUDO=0
+    #	USER="root"
+    #fi
+
+    # special handling for dubidam - overwrite the user
+    #if [ "$MACHINE" = "dubidam.de" ]; then
+    #	USER="osar"
+    #fi
+
+    for m in $ROOT_MACHINES; do
+	if [ "$MACHINE" = "$m" ] && [ $USE_SUDO = 1 ]; then
+	    echo "Atomatic sudo disabled."
+	    USER="root"
+	    USE_SUDO=0
+	fi
+    done
+    for m in $PUBKEY_MACHINES; do
+	if [ "$MACHINE" = "$m" ]; then
+	    echo "Public key authentication enabled."
+	    SKIP="yes"
+	    USE_PUBKEY=1
+	fi
+    done
+
+    CMD=`echo "$1"|sed 's/^-*//'`
+    if [ -z "$CMD" ]; then
+	CMD="unknown"
+    fi
+    if [ -z "$SKIP" ]; then
+	SKIP=`echo "$NOWALLET"|grep $CMD`
+    fi
+    if [ -z "$SKIP" ]; then
+        # open the wallet
+	$OSWALLET -w $WALLET -g $USER -q || exit 
+        # check if the machine is reachable
+	AVAIL=`$CHCKHOST $MACHINE`
+	if [ -z "$AVAIL" ]; then
+	    echo "$MACHINE is not reachable";
+	    exit 1;
+	fi
+    fi
+    export TERM=xterm-color
+}
+
+function USAGE {
+    echo "Usage: $0 [option] [command]"
+    echo ""
+    echo "  options:"
+    echo "    --help|-h        Show help screen."
+    echo "    --single|-s      Run a single remote command and return."
+    echo ""
+    echo "  commands:"
+    echo "    fix              Run this for the first connect or if the servers public"
+    echo "                     key has changed."
+    echo "    mnt [DIR]        Mount remote dir DIR to $HOME/mnt/$MACHINE."
+    echo "    umnt             Unmount a mounted remote directory from $HOME/mnt/$MACHINE."
+    echo "    scp              Copy files."
+    echo "    rscp             Copy files recursive."
+    echo ""
+    echo "    *                Any remote command."
+    echo ""
+    echo "    ADTECH CMDs"
+    echo "    -----------"
+    echo "    zenoss           Enable/Disable a machine in zenoss. (only on sys-mgmt* machines)"
+    echo "    q type=value     Query a selector (only on select* machines)"
+    echo "    qh type=value    Query a selector with highlighting (only on select* machines)"
+    echo "    jc [port]        Open a jconsole to this host:port (default port is 8999)"
+    echo ""
+    echo "    ADTECH LOGs"
+    echo "    -----------"
+    echo "    adlog            Show Adserver log."
+    echo "    sellog           Show Selector log."
+    echo "    gclog            Show GoalCache log."
+    echo "    mgclog           Show Master GoalCache log."
+    echo "    pushlog          Show Push log."
+    echo "    wslog            Show PushWS log."
+    echo ""
+    exit;
+}
+
+function MAIN {
+    INIT $1
+
+    #ssh root@$MACHINE "$*"
+    if [ -z "$1" ]; then
+	SSH
+    else
+        case $1 in
+	    "--help"|"-h")
+		USAGE
+		;;
+	    "--single"|"-s")
+		if [ -z "$2" ]; then
+		    USAGE
+		fi
+		shift
+		SSHRUNSINGLE "$*"
+		;;
+    	    "fix")
+    		$SSHFIXEXP $SSHTOOLS $WALLET $USER $MACHINE $PORT
+    		echo
+    		;;
+    	    "mnt")
+    		if [ -d "$HOME/mnt/$MACHINE" ]; then
+    		    echo "$HOME/mnt/$MACHINE already mounted!" 
+    		    exit 1
+    		fi
+    		mkdir $HOME/mnt/$MACHINE
+    		#$SSHMNTEXP $USER $MACHINE $PORT "$2" $HOME/mnt/$MACHINE
+		sshfs -p$PORT $USER@$MACHINE:$2 $HOME/mnt/$MACHINE
+    		;;
+    	    "umnt")
+    		if [ ! -d "$HOME/mnt/$MACHINE" ]; then
+    		    echo "$HOME/mnt/$MACHINE does not exists!" 
+    		    exit 1
+    		fi
+    		sudo umount $HOME/mnt/$MACHINE
+    		rm -r $HOME/mnt/$MACHINE
+    		;;
+    	    "scp" | "rscp" )
+    		if [ -z "$2" ] || [ -z "$3" ]; then
+    		    echo "Usage: $0 [r]scp <source> <target>"
+    		    echo "   eg: $0 [r]scp localfile.txt :/tmp"
+    		    echo "       $0 [r]scp :/tmp/remotefile.txt ."
+    		    exit 1
+    		fi
+    		OK="no"
+    		if [ -z "`echo $2|grep ':'`" ]; then
+    		    F1=$2
+    		    F2="$USER@$MACHINE$3"
+    		    OK="yes"
+    		elif [ -z "`echo $3|grep ':'`" ]; then
+    		    F1="$USER@$MACHINE$2"
+    		    F2=$3
+    		    OK="yes"
+    		fi
+    		if [ "$OK" = "no" ]; then
+    		    echo "Usage: $0 [r]scp <source> <target>"
+    		    echo "   eg: $0 [r]scp localfile.txt :/tmp"
+    		    echo "       $0 [r]scp :/tmp/remotefile.txt ."
+    		    exit 1
+    		fi
+    		SCP=$1
+    		shift # scp
+    		shift # F1
+    		shift # F2
+		#echo "F1=$F1 F2=$F2"
+    		$SSHTOOLS/$SCP.exp $WALLET $MACHINE $USER "$F1" "$F2"
+    		;;
+	    # ADTECH commands
+	    "zenoss")
+		shift
+		if [ "$1" == "on" ] && [ -n "$2" ]; then
+		    echo "Setting $2 to produnction state..."
+		    echo
+		    SSHRUNSINGLE "/adtech/sh/zenoss-set-mode.sh $2 production"
+		elif [ "$1" == "off" ] && [ -n "$2" ]; then
+		    echo "Setting $2 to maintenance state..."
+		    echo
+		    SSHRUNSINGLE "/adtech/sh/zenoss-set-mode.sh $2 maintenance"
+		else
+		    echo "Usage: $0 zenoss {on|off} <machine>"
+		    echo "   eg: $0 zenoss off deliverydb001"
+		    exit 1
+		fi
+		;;
+	    "q")
+		if [ -n "$3" ]; then
+		    PORT=$3
+		else
+		    PORT=8080
+		fi
+		QUERYSELECTOR $2
+		;;
+	    "qh")
+		if [ -n "$3" ]; then
+		    PORT=$3
+		else
+		    PORT=8080
+		fi
+		QUERYSELECTOR $2 "hl"
+		;;
+	    "jc")
+		if [ -n "$2" ]; then
+		    PORT=$3
+		else
+		    PORT=8999
+		fi
+		jconsole $MACHINE:$PORT
+		;;
+	    # LOG commands
+    	    "adlog")
+    		SSHLOG "/adtech/log/NGAdserver.log"
+    		;;
+    	    "sellog")
+    		SSHLOG "/adtech/log/NGSelector.log"
+    		;;
+    	    "pushlog")
+    		SSHLOG "/adtech/log/NGPush.log"
+    		;;
+    	    "wslog")
+    		SSHLOG "/adtech/log/NGDelivery.log"
+    		;;
+    	    "gclog")
+    		SSHLOG "/adtech/log/GoalCache.log"
+    		;;
+    	    "mgclog")
+    		SSHLOG "/adtech/log/GoalCache-Master.log"
+    		;;
+    	    *)
+		SSHRUN "$*"
+    		;;
+        esac
+    fi
+}
+
+MAIN $*

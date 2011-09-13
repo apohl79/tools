@@ -1,0 +1,48 @@
+#!/usr/bin/expect
+
+set HOME [lindex $argv 0]
+set WALLET [lindex $argv 1]
+set USER [lindex $argv 2]
+set MACHINE [lindex $argv 3]
+set PORT [lindex $argv 4]
+
+# get the secure password from the encrypted wallet
+log_user 0
+set timeout 10
+spawn -noecho $HOME/oswallet -w $WALLET -g $USER
+expect -re "(.*)\n"
+set PASSWORD $expect_out(1,string)
+
+send -i $user_spawn_id "Connecting to $USER@$MACHINE... "
+spawn -noecho ssh -Y -p$PORT $USER@$MACHINE "exit"
+#sleep 0.5
+
+# if the host key changed on the remote host, ask for removal
+set timeout 2
+expect -re "Offending key (for IP )?in (.*)\n" {
+    send -i $user_spawn_id "\nThe host key for $MACHINE has changed!\n"
+    spawn -noecho ssh.rm.hostkey $expect_out(2,string)
+    interact
+    spawn ssh.fix.exp $HOME $WALLET $USER $MACHINE $PORT 
+    interact
+    exit
+}
+
+set timeout 2
+expect "yes/no" { 
+    send "yes\r"
+    # if the host key changed on the remote host, ask for removal
+    expect -re "Offending key (for IP )?in (.*)\n" {
+	send -i $user_spawn_id "\nThe host key for $MACHINE differs from the key for its IP!\n"
+	spawn -noecho ssh.rm.hostkey $expect_out(2,string)
+	interact
+	spawn ssh.fix.exp $HOME $WALLET $USER $MACHINE $PORT 
+	interact
+	exit
+    }
+}
+set timeout 100
+expect "assword:" { send "$PASSWORD\r" }
+set timeout 0
+log_user 1
+interact

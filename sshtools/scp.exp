@@ -1,0 +1,23 @@
+#!/usr/bin/expect
+
+set WALLET [lindex $argv 0]
+set MACHINE [lindex $argv 1]
+set USER [lindex $argv 2]
+set F1 [lindex $argv 3]
+set F2 [lindex $argv 4]
+
+# get the secure password from the encrypted wallet
+log_user 0
+set timeout 10
+spawn -noecho oswallet -w $WALLET -g $USER
+expect -re "(.*)\n"
+set PASSWORD $expect_out(1,string)
+
+set timeout 0
+send -i $user_spawn_id "Connecting to $MACHINE... "
+spawn -noecho scp $F1 $F2
+
+set timeout 10
+expect "assword" { send "$PASSWORD\r" }
+log_user 1
+interact
