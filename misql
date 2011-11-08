@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# (c) 2009 Andreas Pohl
+# (c) 2009 Andreas Pohl <apohl@pohlproductions.com>
 #
 # A MySQL/Sybase command line interface to replace isql.
 #
@@ -8,10 +8,11 @@
 #
 # You need the following packages:
 #
-# aptitude install libdbd-sybase-perl libterm-readline-gnu-perl libterm-readline-perl-perl libcurses-perl
+# aptitude install libdbd-sybase-perl libterm-readline-gnu-perl libterm-readline-perl-perl libcurses-perl libxml-simple-perl
 #
 # The LD_LIBRARY_PATH needs to contain the sybase libs directory.
 
+use strict;
 use Getopt::Std;
 use Term::ReadLine;
 use Term::ANSIColor qw(:constants);
@@ -19,12 +20,15 @@ use Curses;
 use DBI;
 use Time::HiRes qw(gettimeofday);
 use IO::Select;
+use XML::Simple;
 
-my $VERSION = "MiSQL v2.2 - MySQL/Sybase Commandline Tool\n\nCopyright (c) 2009 Andreas Pohl <ap\@osar-music.de>";
-my $prompt_format = '$mode:$vhost/$db> ';
+my $VERSION = "MiSQL v2.3 - MySQL/Sybase Commandline Tool\n\nCopyright (c) 2009 Andreas Pohl <apohl\@pohlproductions.com>";
 
+#
+# PRE WORK
+#
 $|++;
-$s = IO::Select->new();
+my $s = IO::Select->new();
 $s->add(\*STDIN);
 
 $Term::ReadLine::termcap_nowarn = 0;
@@ -37,30 +41,12 @@ BEGIN {
   $ENV{LANG} = "en_US";
 }
 
+# command line params
 my %opt;
 getopt( "h:u:P:p:d:e:m:f:s:n", \%opt );
 if (!exists($opt{h}) || !exists($opt{u}) || !exists($opt{p})) {
   usage();
 }
-
-my @keywords;
-chop and push @keywords, split while <DATA>;
-my @databases;
-my @tables;
-my @fields;
-my @sqlfuncs = ("count", "sum", "max");
-my $keysref = undef;
-
-# some sybase execute flags
-my $GET_TABLES = 0x100;
-my $GET_DATABASES = 0x101;
-my $GET_COLUMNS = 0x102;
-my $USE_DB = 0x103;
-my $SHOW = 0x104;
-my $RECON = 0x105;
-my $HELP = 0x106;
-my $RAW_COMMAND = 0x107;
-
 my $host = $opt{h};
 my $vhost = $opt{s};
 my $port = $opt{P};
@@ -70,10 +56,50 @@ my $mode = $opt{m};
 my $format = $opt{f};
 my $nohilight = exists($opt{n});
 my $db_param = $opt{d};
-my $db = "";
 my $exec_param = $opt{e};
-my $directExecMode = 0;
+
+# keywords for autocompletion
+my @keywords;
+chop and push @keywords, split while <DATA>;
+my @databases;
+my @tables;
+my @fields;
+my @sqlfuncs = ("count", "sum", "max", "avg", "abs", "acos", "asin", "atan2", "atan", "atan", "ceil", "ceiling", "conv", "cos", "cot", "crc32", "degrees", "exp", "floor", "ln", "log10", "log2","log", "mod", "oct", "pi", "pow", "power", "radians", "rand", "round", "sign", "sin", "sqrt", "tan", "truncate", "ascii", "bin", "bit_length", "char_length", "char",	"character_length", "concat_ws", "concat", "elt", "export_set", "field", "find_in_set",	"format", "hex", "insert", "instr", "lcase", "left", "length", "like", "load_file", "locate", "lower", "lpad", "ltrim", "make_set", "match", "mid", "notlike", "notregexp", "octet_length", "ord", "position", "quote", "regexp", "repeat", "replace", "reverse", "right", "rlike", "rpad", "rtrim", "soundex", "soundslike", "space", "strcmp", "substr", "substring_index", "substring", "trim", "ucase", "unhex", "upper");
+my @bmfuncs = ("add", "exec", "delete", "show", "edit", "load");
+my $keysref = undef;
+my $bookmarkref;
+my @bookmarknames;
+
+# this is used by the event hook to replace the line buffer with the bm to load
+my $tmp_load_bookmark;
+# buffer for getc chars to detect arrow keys (3 chars)
+my @getc_buf;
+# avoid calling redisplay on left/right arrow keys
+#my $skip_redisplay = 0;
+
+# some execute flags
+my $GET_TABLES = 0x100;
+my $GET_DATABASES = 0x101;
+my $GET_COLUMNS = 0x102;
+my $USE_DB = 0x103;
+my $SHOW = 0x104;
+my $RECON = 0x105;
+my $HELP = 0x106;
+my $RAW_COMMAND = 0x107;
+my $BOOKMARK = 0x108;
+
+# define key char sequences
+my $K_RIGHT = [27,91,67];
+my $K_LEFT = [27,91,68];
+my $K_END = [27,79,70];
+my $K_HOME = [27,79,72];
+
+# additional globals
+my $db = "";
+my $direct_exec_mode = 0;
+my $prompt_format = '$mode:$vhost/$db> ';
 my $historyfile = "/tmp/misql.$mode.$user.$host.$port.hist";
+my $bookmarkfile = "$ENV{HOME}/.misql_bookmarks";
 
 $vhost ||= $host;
 
@@ -85,7 +111,7 @@ if ($s->can_read(.5)) {
 }
 
 if (length $exec_param || scalar(@stdinCmds) > 0) {
-  $directExecMode = 1;
+  $direct_exec_mode = 1;
 }
 
 my $dbh;
@@ -93,39 +119,45 @@ my $sth;
 mconnect();
 
 if (defined $db_param) {
-  changeDatabase("use $db_param");
+  change_database("use $db_param");
 } else {
-  getDatabases() if !$directExecMode;
+  get_databases() if !$direct_exec_mode;
 }
 
 if (length $exec_param) {
-  executeCmd($exec_param);
+  execute_cmd($exec_param);
   exit;
 }
 
 foreach (@stdinCmds) {
-  executeCmd($_);
+  execute_cmd($_);
 }
 
-if ($directExecMode) {
+if ($direct_exec_mode) {
   exit;
 }
 
-getDatabases(1) if defined $db_param;
+get_databases(1) if defined $db_param;
 
-my $term = new Term::ReadLine 'Sybase';
+my $term = new Term::ReadLine 'misql';
 $term->ornaments(0);
 my $attr = $term->Attribs;
 $attr->{attempted_completion_function} = \&complete;
+$attr->{completion_function} = sub {};
+$attr->{event_hook} = \&my_event_hook;
 if (!$nohilight) {
   $attr->{getc_function} = \&my_getc_wrapper;
-  $attr->{redisplay_function} = \&my_redisplay_function;
+  #$attr->{redisplay_function} = \&my_redisplay_function;
 }
 my $prompt;
-my $doHighLight = 0;
+my $do_highlight = 0;
 eval "\$prompt = \"$prompt_format\"";
 my $OUT = $term->OUT || \*STDOUT;
 init();
+
+#
+# MAIN LOOP
+#
 while ( defined ($_ = $term->readline($prompt)) ) {
   chomp;
   my $cmd = $_;
@@ -134,33 +166,38 @@ while ( defined ($_ = $term->readline($prompt)) ) {
     terminate();
   }
   #$term->addhistory($_) if /\S/;
-  my $flags = getExecuteFlagsByCommand($cmd);
+  my $flags = get_execute_flags_by_command($cmd);
   if ($flags == $USE_DB) {
-    changeDatabase($cmd);
+    change_database($cmd);
   } elsif ($flags == $SHOW) {
-    handleShowCommand($cmd);
+    handle_show_command($cmd);
+  } elsif ($flags == $BOOKMARK) {
+    handle_bookmark_command($cmd);
   } elsif ($flags == $HELP) {
     if ($mode eq "mysql") {
-      helpMysql($cmd);
+      help_mysql($cmd);
     } else {
       print "No help available in $mode mode.\n";
     }
   } elsif ($flags == $RAW_COMMAND) {
     if ($mode eq "mysql") {
-      rawMysql($cmd);
+      raw_mysql($cmd);
     } else {
       print "RAW commands are not available in $mode mode.\n";
     }
   } elsif ($flags == $RECON) {
     mconnect();
   } else {
-    executeCmd($cmd, 0);
+    execute_cmd($cmd, 0);
   }
   eval "\$prompt = \"$prompt_format\"";
 }
 
 terminate();
 
+#
+# FUNCS
+#
 sub usage {
   print <<_EOF
 $VERSION
@@ -199,7 +236,7 @@ sub mconnect {
     }
     $dbh = DBI->connect($str, $user, $pass) or die $DBI::errstr;
     if (length $db > 0) {
-      changeDatabase("use $db");
+      change_database("use $db");
     }
   } else {
     die "Mode $mode not supported!";
@@ -213,6 +250,11 @@ sub init {
     print "Loading history...\n";
     $term->ReadHistory($historyfile);
   }
+  if (-e $bookmarkfile) {
+    print "Loading bookmarks...\n";
+    $bookmarkref = XMLin($bookmarkfile);
+    @bookmarknames = keys %{$bookmarkref};
+  }
 }
 
 sub terminate {
@@ -224,57 +266,57 @@ sub terminate {
   exit;
 }
 
-sub getTables {
+sub get_tables {
   print "Getting tables ... \n" if ($format ne "csv");
   @tables = ();
   if ($mode eq "sybase") {
-    executeCmd("sp_tables \@table_type = \"'TABLE'\"", 0, $GET_TABLES);
+    execute_cmd("sp_tables \@table_type = \"'TABLE'\"", 0, $GET_TABLES);
   } elsif ($mode eq "mysql") {
-    executeCmd("show tables", 0, $GET_TABLES);
+    execute_cmd("show tables", 0, $GET_TABLES);
   }
 }
 
-sub getTableInfo {
+sub get_table_info {
   print "Updating table information " if ($format ne "csv");
   @fields = ();
   foreach my $tab (@tables) {
     if ($mode eq "sybase") {
-      executeCmd("sp_columns $tab", 1, $GET_COLUMNS);
+      execute_cmd("sp_columns $tab", 1, $GET_COLUMNS);
     } elsif ($mode eq "mysql") {
-      executeCmd("desc $tab", 1, $GET_COLUMNS);
+      execute_cmd("desc $tab", 1, $GET_COLUMNS);
     }
-    print "." if ($foreach ne "csv");
+    print "." if ($format ne "csv");
   }
   print "\n\n";
   @fields = sort keys %{{ map { $_ => 1 } @fields }};
 }
 
-sub getDatabases {
+sub get_databases {
   my $noOutput = shift;
   print "Getting databases ... \n" if ($format ne "csv");
   @databases = ();
   if ($mode eq "sybase") {
-    executeCmd("sp_databases", $noOutput, $GET_DATABASES);
+    execute_cmd("sp_databases", $noOutput, $GET_DATABASES);
   } elsif ($mode eq "mysql") {
-    executeCmd("show databases", $noOutput, $GET_DATABASES);
+    execute_cmd("show databases", $noOutput, $GET_DATABASES);
   }
 }
 
-sub changeDatabase {
+sub change_database {
   my $cmd = shift;
   chomp $cmd;
   if ($cmd =~ /^use +([^ ]+) *$/) {
     my $newdb = $1;
     print "Changing database to $newdb ... \n" if ($format ne "csv");
-    if (executeCmd($cmd, 0, $USE_DB)) {
+    if (execute_cmd($cmd, 0, $USE_DB)) {
       $db = $newdb;
-      getTables() if !$directExecMode;
-      getTableInfo() if !$directExecMode;
+      get_tables() if !$direct_exec_mode;
+      get_table_info() if !$direct_exec_mode;
     }
   }
 }
 
-sub handleShowCommand {
+sub handle_show_command {
   my $cmd = shift;
   if ($cmd =~ /^show +([^ ]+)/) {
     my $type = $1;
@@ -297,14 +339,69 @@ sub handleShowCommand {
 	print "  $c\n";
       }
     } else {
-      executeCmd($cmd, 0);
+      execute_cmd($cmd, 0);
     }
   } else {
     print "Usage: show {version|all|databases|tables|columns}\n";
   }
 }
 
-sub getExecuteFlagsByCommand {
+sub handle_bookmark_command {
+  my $cmd = shift;
+  chomp $cmd;
+  $cmd =~ s/ +/ /g;
+  my (undef, $bm, $name, $query) = split(/ /, $cmd, 4);
+  if ($bm eq "add") {
+    print "Saving bookmark '$name': $query\n";
+    $bookmarkref->{$name} = $query;
+    @bookmarknames = keys %{$bookmarkref};
+    XMLout($bookmarkref, OutputFile => $bookmarkfile);
+  } elsif ($bm eq "delete") {
+    print "Deleting bookmark '$name'\n";
+    delete $bookmarkref->{$name};
+    @bookmarknames = keys %{$bookmarkref};
+    XMLout($bookmarkref, OutputFile => $bookmarkfile);
+  } elsif ($bm eq "load") {
+    if (exists $bookmarkref->{$name}) {
+      $tmp_load_bookmark = $bookmarkref->{$name};
+    } else {
+      print "No bookmark exists under that name.\n";
+    }
+  } elsif ($bm eq "exec") {
+    if (exists $bookmarkref->{$name}) {
+      print "Executing query: $bookmarkref->{$name}\n";
+      execute_cmd($bookmarkref->{$name}, 0);
+    } else {
+      print "No bookmark exists under that name.\n";
+    }
+  } elsif ($bm eq "edit") {
+    my $editor = $ENV{EDITOR};
+    $editor ||= "emacs";
+    if (exists $bookmarkref->{$name}) {
+      open F, ">/tmp/bmtmp.sql";
+      print F $bookmarkref->{$name};
+      close F;
+      print "Launching: $editor\n";
+      system "$editor /tmp/bmtmp.sql";
+      open F, "</tmp/bmtmp.sql";
+      $bookmarkref->{$name} = <F>;
+      close F;
+      chomp $bookmarkref->{$name};
+      XMLout($bookmarkref, OutputFile => $bookmarkfile);
+      print "Done\n";
+    } else {
+      print "No bookmark exists under that name.\n";
+    }
+  } elsif ($bm eq "show") {
+    foreach my $n (sort keys %{$bookmarkref}) {
+      if (!defined $name || index($n, $name) > -1) {
+	printf "%-25s %s\n", $n, highlight($bookmarkref->{$n});
+      }
+    }
+  }
+}
+
+sub get_execute_flags_by_command {
   my $cmd = shift;
   if (index($cmd, "sp_tables ") == 0 || index($cmd, "show tables") == 0) {
     return $GET_TABLES;
@@ -322,24 +419,26 @@ sub getExecuteFlagsByCommand {
     return $HELP;
   } elsif (index($cmd, "raw") == 0) {
     return $RAW_COMMAND;
+  } elsif (index($cmd, "bm") == 0) {
+    return $BOOKMARK;
   }
   return undef;
 }
 
-sub helpMysql {
+sub help_mysql {
   my $cmd = shift;
   my $helptext = `mysql -h$host -P$port -u$user -p$pass -e "$cmd"`;
   print $helptext;
 }
 
-sub rawMysql {
+sub raw_mysql {
   my $cmd = shift;
   $cmd = substr($cmd, 3); # removing "raw "
   system "mysql -h$host -P$port -u$user -p$pass -e \"$cmd\"";
   #print $helptext;
 }
 
-sub checkForReconnect {
+sub check_for_reconnect {
   my $errstr = shift;
   if ($errstr =~ /MySQL server has gone away/) {
     print "Connection lost!\n";
@@ -347,7 +446,7 @@ sub checkForReconnect {
   }
 }
 
-sub executeCmd {
+sub execute_cmd {
   my $cmd = shift;
   my $noOutput = shift;
   my $flags = shift;
@@ -362,27 +461,27 @@ sub executeCmd {
   my $tstart = gettimeofday;
   my $sth = $dbh->prepare($cmd);
   if ($DBI::errstr) {
-    checkForReconnect($DBI::errstr);
+    check_for_reconnect($DBI::errstr);
     $sth = $dbh->prepare($cmd);
     if ($DBI::errstr) {
-      print "executeCmd: prepare failed: ".$DBI::errstr."\n";
+      print "execute_cmd: prepare failed: ".$DBI::errstr."\n";
       return 0;
     }
   }
   $sth->execute();
   if ($DBI::errstr) {
-    checkForReconnect($DBI::errstr);
+    check_for_reconnect($DBI::errstr);
     $sth = $dbh->prepare($cmd);
     $sth->execute();
     if ($DBI::errstr) {
-      print "executeCmd: execute failed: ".$DBI::errstr."\n";
+      print "execute_cmd: execute failed: ".$DBI::errstr."\n";
       return 0;
     }
   }
   my $telap = sprintf "%.4f", (gettimeofday-$tstart);
   if ($sth->{NUM_OF_FIELDS} > 0) {
     #print "NUM_OF_FIELDS = ".$sth->{NUM_OF_FIELDS}."\n";
-    my $numFields = $sth->{NUM_OF_FIELDS};
+    my $num_fields = $sth->{NUM_OF_FIELDS};
     my $names = $sth->{NAME};
     my $types = $sth->{TYPE};
     #print join(",", @$types)."\n";
@@ -427,13 +526,13 @@ sub executeCmd {
 	my $first = 1;
 	foreach my $row (@data) {
 	  my $i;
-	  for ($i = 0; $i < $numFields; $i++) {
+	  for ($i = 0; $i < $num_fields; $i++) {
 	    my $isStr = ($first || $types->[$i] == 1 || $types->[$i] == -4 || $types->[$i] == 12 || $types->[$i] == 11);
-	    my $isHex = ($types->[$i] == -4);
+	    my $isHex = 0; #($types->[$i] == -4);
 	    if ($i != 0) {
 	      print ",";
 	    }
-	    print "0x" if $isHex;
+	    #print "0x" if $isHex;
 	    print (defined $row->[$i]? $row->[$i]: "NULL");
 	  }
 	  print "\n";
@@ -443,7 +542,7 @@ sub executeCmd {
 	foreach my $row (@data) {
 	  my $i;
 	  if ($first) {
-	    for ($i = 0; $i < $numFields; $i++) {
+	    for ($i = 0; $i < $num_fields; $i++) {
 	      print BOLD.BLACK if !($format eq "plain");
 	      print "+" if $i == 0;
 	      print "-"x($lens[$i]+2);
@@ -451,9 +550,9 @@ sub executeCmd {
 	    }
 	    print "\n";
 	  }
-	  for ($i = 0; $i < $numFields; $i++) {
+	  for ($i = 0; $i < $num_fields; $i++) {
 	    my $isStr = ($first || $types->[$i] == 1 || $types->[$i] == -4 || $types->[$i] == 12 || $types->[$i] == 11);
-	    my $isHex = ($types->[$i] == -4);
+	    my $isHex = 0; #($types->[$i] == -4);
 	    if ($i == 0) {
 	      print BOLD.BLACK if !($format eq "plain");
 	      print "|";
@@ -467,7 +566,7 @@ sub executeCmd {
 	  }
 	  print "\n";
 	  if ($first) {
-	    for ($i = 0; $i < $numFields; $i++) {
+	    for ($i = 0; $i < $num_fields; $i++) {
 	      print BOLD.BLACK if !($format eq "plain");
 	      print "+" if $i == 0;
 	      print "-"x($lens[$i]+2);
@@ -477,7 +576,7 @@ sub executeCmd {
 	    $first = 0;
 	  }
 	}
-	for ($i = 0; $i < $numFields; $i++) {
+	for ($i = 0; $i < $num_fields; $i++) {
 	  print BOLD.BLACK if !($format eq "plain");
 	  print "+" if $i == 0;
 	  print "-"x($lens[$i]+2);
@@ -490,42 +589,75 @@ sub executeCmd {
   return 1;
 }
 
+#
+# FUNC HOOKS
+#
 sub my_getc_wrapper {
   my $c = $term->getc($term->IN);
-  #if ($c != 10 && ($c == 32 || $c == 59 || $c == 44 || $c == 93 || $c == 40 || $c == 41 || $c == 43 || $c == 45 || $c == 47 || $c == 9 || $c == 65 || $c == 66 || $c == 37 || $c == 34 || $c == 39)) {
-    # no new line
-  #  $doHighLight = 1;
-    #open F, ">>/tmp/misql.log";
-    #print F "$c\n";
-    #close F;
-  #}
-  #else {
-  #  open F, ">>/tmp/misql.log";
-  #  print F "X: $c\n";
-  #  close F;
-  #}
-  if ($c != 27 && $c != 91 && $c != 67 && $c != 68) { # filter out arrow keys
-    $doHighLight = 1;
+  push @getc_buf, $c;
+  shift @getc_buf if $#getc_buf > 2;
+
+  # filter keys
+  if (!(int_compare_array(\@getc_buf, $K_LEFT) ||
+	int_compare_array(\@getc_buf, $K_RIGHT) ||
+	int_compare_array(\@getc_buf, $K_END) ||
+	int_compare_array(\@getc_buf, $K_HOME)
+       )) {
+    $do_highlight = 1;
   }
+
   return $c;
 }
 
-sub my_redisplay_function {
-  $term->redisplay;
-  if ($doHighLight) {
+#sub my_redisplay_function {
+#  #open F, ">>/tmp/rdtmp";
+#  #print F "skip_redisplay = $skip_redisplay\n";
+#  #close F;
+#
+#  if (!$skip_redisplay) {
+#    $term->redisplay;
+#  } else {
+#    $skip_redisplay = 0;
+#  }
+#}
+
+sub my_event_hook {
+  if (!$nohilight && $do_highlight) {
     highlight();
-    $doHighLight = 0;
+    $do_highlight = 0;
+  }
+  if (length $tmp_load_bookmark && !length $term->{line_buffer}) {
+    $term->{line_buffer} = $tmp_load_bookmark;
+    send_key(@$K_END);
+    $tmp_load_bookmark = "";
+    $do_highlight = 1;
   }
 }
 
+sub int_compare_array {
+  my $arr1 = shift;
+  my $arr2 = shift;
+  return 0 if scalar(@$arr1) != scalar(@$arr2);
+  for (my $i = 0; $i < scalar(@$arr1); $i++) {
+    return 0 if $arr1->[$i] != $arr2->[$i];
+  }
+  return 1;
+}
+
+#
+# SYNTAX HIGHLIGHTING
+#
 sub highlight {
-  my $outstr = $prompt;
+  my $string = shift;
+  # if no string has been passed, we have to highlight the current line buffer and have a prompt.
+  my $outstr = defined $string? "": $prompt;
   my $len = length($prompt);
   my $first = 1;
   my $suffix = "";
   my @parts;
+  $string ||= $term->{line_buffer};
   #print "\n";
-  foreach my $w (split / /, $term->{line_buffer}) {
+  foreach my $w (split / /, $string) {
     if ($first) {
       $first = 0;
     } else {
@@ -644,21 +776,31 @@ sub highlight {
   }
   $outstr .= RESET;
 
-  my $rows = int($len / $MAX_X);
-  system "tput sc"; # save cursor position
-  print "\r";
-  for (my $i = 0; $i < $rows; $i++) {
-    system "tput cuu1"; # move the cursor one row up
+  if (length $prompt) {
+    my $rows = int($len / $MAX_X);
+    system "tput sc";		# save cursor position
+    print "\r";
+    #for (my $i = 0; $i < $rows; $i++) {
+    #  system "tput cuu1"; # move the cursor one row up
+    #}
+    if ($rows) {
+      system "tput cuu $rows";
+    }
+    print $outstr;
+    system "tput rc";		# restore cursor position
+  } else {
+    return $outstr;
   }
-  print $outstr;
-  system "tput rc"; # restore cursor position
 }
 
+#
+# AUTOCOMPLETION CODE
+#
 sub complete {
   my ($text, $line, $start, $end) = @_;
 
   if (length $text == 0) {
-    return "";
+    return ();
   }
 
   my $index;
@@ -722,14 +864,46 @@ sub complete {
   $index = rindex($line, "select ", $start - 1);
   if ($index > -1) {
     if ($str =~ /^([^ ,]+( as [^ ,]+)? ?( ?, ?[^ ,]+)*)?$/) {
-      if (contains($text, @fields)) {
+      my $is_field = contains($text, @fields);
+      my $is_func = contains($text, @sqlfuncs);
+      if ($is_field && !$is_func) {
 	$keysref = \@fields;
 	return $term->completion_matches($text, \&lookup);
       }
-      if (contains($text, @sqlfuncs)) {
+      if ($is_func && !$is_field) {
 	$keysref = \@sqlfuncs;
+	@ret = $term->completion_matches($text, \&lookup);
+	# add an opening bracket to sql functions
+	if (scalar @ret == 1) {
+	  $ret[0] .= "(";
+	  # move the cursor back to be directly behind the bracket
+	  send_key(@$K_LEFT);
+	}
+	return @ret;
+      }
+      if ($is_field && $is_func) {
+	my @tmparr = (@fields, @sqlfuncs);
+	$keysref = \@tmparr;
 	return $term->completion_matches($text, \&lookup);
       }
+    }
+  }
+
+  foreach my $bmfunc (@bmfuncs) {
+    $index = rindex($line, "bm $bmfunc ", $start - 1);
+    if ($index > -1) {
+      if (contains($text, @bookmarknames)) {
+	$keysref = \@bookmarknames;
+	return $term->completion_matches($text, \&lookup);
+      }
+    }
+  }
+
+  $index = rindex($line, "bm ", $start - 1);
+  if ($index > -1) {
+    if (contains($text, @bmfuncs)) {
+      $keysref = \@bmfuncs;
+      return $term->completion_matches($text, \&lookup);
     }
   }
 
@@ -758,18 +932,37 @@ sub lookup {
     $g_i = 0;
   }
   for (; $g_i <= scalar(@$keysref); $g_i++) {
-    return $keysref->[$g_i] if $keysref->[$g_i] =~ /^\Q$text/;
+    if ($keysref->[$g_i] =~ /^\Q$text/) {
+      return $keysref->[$g_i];
+    }
   }
-  return undef;
+  return ();
+}
+
+sub debug {
+  my $msg = shift;
+  open F, ">>/tmp/misql.dbg";
+  print F $msg."\n";
+  close F;
+}
+
+#
+# TERM HELPERS
+#
+sub send_key {
+  foreach my $c (@_) {
+    $term->stuff_char($c);
+  }
 }
 
 __DATA__
 select create drop insert from where into rowcount set update use quit alter table commit
 begin shutdown while group by as is not having case when desc describe explain call
-delete do handler load data infile replace truncate dump tran with
+delete do handler load data infile replace truncate dump tran with if ifnull nullif
 
 show databases tables columns all reconnect function view index procedure trigger
-duplicate key processlist full help and or distinct limit insert into between in
+duplicate key processlist full help and or distinct limit insert into between in bm add
+load exec edit
 
 sp_activeroles
 sp_add_qpgroup
