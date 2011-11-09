@@ -649,13 +649,18 @@ sub int_compare_array {
 #
 sub highlight {
   my $string = shift;
+  my $use_line_buffer = 0;
+  my $outstr = "";
   # if no string has been passed, we have to highlight the current line buffer and have a prompt.
-  my $outstr = defined $string? "": $prompt;
-  my $len = length($prompt);
+  if (length($string) == 0) {
+    $use_line_buffer = 1;
+    $string = $term->{line_buffer};
+    $outstr = $prompt;
+  }
+  my $len = length($outstr);
   my $first = 1;
   my $suffix = "";
   my @parts;
-  $string ||= $term->{line_buffer};
   #print "\n";
   foreach my $w (split / /, $string) {
     if ($first) {
@@ -675,7 +680,6 @@ sub highlight {
     push @parts, $w if length $w;
   }
   #print "\n";
-  my $first = 1;
   for (my $i = 0; $i < scalar(@parts); $i++) {
     my $w = $parts[$i];
     my $done = 0;
@@ -776,7 +780,7 @@ sub highlight {
   }
   $outstr .= RESET;
 
-  if (length $prompt) {
+  if ($use_line_buffer) {
     my $rows = int($len / $MAX_X);
     system "tput sc";		# save cursor position
     print "\r";
