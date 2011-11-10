@@ -64,8 +64,8 @@ chop and push @keywords, split while <DATA>;
 my @databases;
 my @tables;
 my @fields;
-my @sqlfuncs = ("count", "sum", "max", "avg", "abs", "acos", "asin", "atan2", "atan", "atan", "ceil", "ceiling", "conv", "cos", "cot", "crc32", "degrees", "exp", "floor", "ln", "log10", "log2","log", "mod", "oct", "pi", "pow", "power", "radians", "rand", "round", "sign", "sin", "sqrt", "tan", "truncate", "ascii", "bin", "bit_length", "char_length", "char",	"character_length", "concat_ws", "concat", "elt", "export_set", "field", "find_in_set",	"format", "hex", "insert", "instr", "lcase", "left", "length", "like", "load_file", "locate", "lower", "lpad", "ltrim", "make_set", "match", "mid", "notlike", "notregexp", "octet_length", "ord", "position", "quote", "regexp", "repeat", "replace", "reverse", "right", "rlike", "rpad", "rtrim", "soundex", "soundslike", "space", "strcmp", "substr", "substring_index", "substring", "trim", "ucase", "unhex", "upper");
-my @bmfuncs = ("add", "exec", "delete", "show", "edit", "load");
+my @sqlfuncs = ("count", "sum", "max", "avg", "abs", "acos", "asin", "atan2", "atan", "atan", "ceil", "ceiling", "conv", "cos", "cot", "crc32", "degrees", "exp", "floor", "ln", "log10", "log2","log", "mod", "oct", "pi", "pow", "power", "radians", "rand", "round", "sign", "sin", "sqrt", "tan", "truncate", "ascii", "bin", "bit_length", "char_length", "char",	"character_length", "concat_ws", "concat", "elt", "export_set", "field", "find_in_set",	"format", "hex", "insert", "instr", "lcase", "left", "length", "like", "load_file", "locate", "lower", "lpad", "ltrim", "make_set", "match", "mid", "notlike", "notregexp", "octet_length", "ord", "position", "quote", "regexp", "repeat", "replace", "reverse", "right", "rlike", "rpad", "rtrim", "soundex", "soundslike", "space", "strcmp", "substr", "substring_index", "substring", "trim", "ucase", "unhex", "upper", "date");
+my @bmfuncs = ("add", "exec", "delete", "show", "edit", "load", "rename", "copy");
 my $keysref = undef;
 my $bookmarkref;
 my @bookmarknames;
@@ -352,13 +352,24 @@ sub handle_bookmark_command {
   $cmd =~ s/ +/ /g;
   my (undef, $bm, $name, $query) = split(/ /, $cmd, 4);
   if ($bm eq "add") {
-    print "Saving bookmark '$name': $query\n";
+    print "Saving bookmark '$name'\n";
     $bookmarkref->{$name} = $query;
     @bookmarknames = keys %{$bookmarkref};
     XMLout($bookmarkref, OutputFile => $bookmarkfile);
   } elsif ($bm eq "delete") {
     print "Deleting bookmark '$name'\n";
     delete $bookmarkref->{$name};
+    @bookmarknames = keys %{$bookmarkref};
+    XMLout($bookmarkref, OutputFile => $bookmarkfile);
+  } elsif ($bm eq "rename") {
+    print "Renaming bookmark '$name' to '$query'\n";
+    $bookmarkref->{$query} = $bookmarkref->{$name};
+    delete $bookmarkref->{$name};
+    @bookmarknames = keys %{$bookmarkref};
+    XMLout($bookmarkref, OutputFile => $bookmarkfile);
+  } elsif ($bm eq "copy") {
+    print "Copying bookmark '$name' to '$query'\n";
+    $bookmarkref->{$query} = $bookmarkref->{$name};
     @bookmarknames = keys %{$bookmarkref};
     XMLout($bookmarkref, OutputFile => $bookmarkfile);
   } elsif ($bm eq "load") {
@@ -369,8 +380,10 @@ sub handle_bookmark_command {
     }
   } elsif ($bm eq "exec") {
     if (exists $bookmarkref->{$name}) {
-      print "Executing query: $bookmarkref->{$name}\n";
-      execute_cmd($bookmarkref->{$name}, 0);
+      my $out = $bookmarkref->{$name};
+      $out =~ s /##newline##/\n/g;
+      print "Executing query:\n$out\n";
+      execute_cmd($out, 0);
     } else {
       print "No bookmark exists under that name.\n";
     }
@@ -378,15 +391,19 @@ sub handle_bookmark_command {
     my $editor = $ENV{EDITOR};
     $editor ||= "emacs";
     if (exists $bookmarkref->{$name}) {
+      my $out = $bookmarkref->{$name};
+      $out =~ s /##newline##/\n/g;
       open F, ">/tmp/bmtmp.sql";
-      print F $bookmarkref->{$name};
+      print F $out;
       close F;
       print "Launching: $editor\n";
       system "$editor /tmp/bmtmp.sql";
       open F, "</tmp/bmtmp.sql";
-      $bookmarkref->{$name} = <F>;
+      $bookmarkref->{$name} = "";
+      $bookmarkref->{$name} .= $_ while (<F>);
+      $bookmarkref->{$name} =~ s/\n/##newline##/g;
       close F;
-      chomp $bookmarkref->{$name};
+      #chomp $bookmarkref->{$name};
       XMLout($bookmarkref, OutputFile => $bookmarkfile);
       print "Done\n";
     } else {
@@ -395,7 +412,12 @@ sub handle_bookmark_command {
   } elsif ($bm eq "show") {
     foreach my $n (sort keys %{$bookmarkref}) {
       if (!defined $name || index($n, $name) > -1) {
-	printf "%-25s %s\n", $n, highlight($bookmarkref->{$n});
+	my $ln = $n;
+	foreach my $l (split /##newline##/, $bookmarkref->{$n}) {
+	  printf BOLD."%-25s".RESET." %s\n", $ln, highlight($l);
+	  $ln = "";
+	}
+	print "\n";
       }
     }
   }
@@ -962,11 +984,10 @@ sub send_key {
 __DATA__
 select create drop insert from where into rowcount set update use quit alter table commit
 begin shutdown while group by as is not having case when desc describe explain call
-delete do handler load data infile replace truncate dump tran with if ifnull nullif
-
+delete do handler load data infile replace truncate dump tran with if ifnull nullif rename
 show databases tables columns all reconnect function view index procedure trigger
 duplicate key processlist full help and or distinct limit insert into between in bm add
-load exec edit
+load exec edit copy
 
 sp_activeroles
 sp_add_qpgroup
