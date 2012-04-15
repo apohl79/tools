@@ -44,16 +44,16 @@ BEGIN {
 # command line params
 my %opt;
 getopt( "h:u:P:p:d:e:m:f:s:n", \%opt );
-if (!exists($opt{h}) || !exists($opt{u}) || !exists($opt{p})) {
-  usage();
-}
-my $host = $opt{h};
+#if (!exists($opt{h}) || !exists($opt{u}) || !exists($opt{p})) {
+#  usage();
+#}
+my $host = $opt{h} || "localhost";
 my $vhost = $opt{s};
 my $port = $opt{P};
-my $user = $opt{u};
+my $user = $opt{u} || $ENV{USER};
 my $pass = $opt{p};
-my $mode = $opt{m};
-my $format = $opt{f};
+my $mode = $opt{m} || "mysql";
+my $format = $opt{f} || "color";
 my $nohilight = exists($opt{n});
 my $db_param = $opt{d};
 my $exec_param = $opt{e};
@@ -87,6 +87,7 @@ my $RECON = 0x105;
 my $HELP = 0x106;
 my $RAW_COMMAND = 0x107;
 my $BOOKMARK = 0x108;
+my $SET_COMMAND = 0x109;
 
 # define key char sequences
 my $K_RIGHT = [27,91,67];
@@ -98,10 +99,15 @@ my $K_HOME = [27,79,72];
 my $db = "";
 my $direct_exec_mode = 0;
 my $prompt_format = '$mode:$vhost/$db> ';
-my $historyfile = "/tmp/misql.$mode.$user.$host.$port.hist";
+my $historyfile = "$ENV{HOME}/.misql/misql.$mode.$user.$vhost.hist";
 my $bookmarkfile = "$ENV{HOME}/.misql_bookmarks";
+my $outputfile = undef;
 
 $vhost ||= $host;
+
+if (!-d "$ENV{HOME}/.misql") {
+  mkdir "$ENV{HOME}/.misql";
+}
 
 my @stdinCmds;
 if ($s->can_read(.5)) {
@@ -125,12 +131,12 @@ if (defined $db_param) {
 }
 
 if (length $exec_param) {
-  execute_cmd($exec_param);
+  execute_cmd($exec_param, 0, 0, $outputfile);
   exit;
 }
 
 foreach (@stdinCmds) {
-  execute_cmd($_);
+  execute_cmd($exec_param, 0, 0, $outputfile);
 }
 
 if ($direct_exec_mode) {
@@ -173,6 +179,8 @@ while ( defined ($_ = $term->readline($prompt)) ) {
     handle_show_command($cmd);
   } elsif ($flags == $BOOKMARK) {
     handle_bookmark_command($cmd);
+  } elsif ($flags == $SET_COMMAND) {
+    handle_set_command($cmd);
   } elsif ($flags == $HELP) {
     if ($mode eq "mysql") {
       help_mysql($cmd);
@@ -188,7 +196,7 @@ while ( defined ($_ = $term->readline($prompt)) ) {
   } elsif ($flags == $RECON) {
     mconnect();
   } else {
-    execute_cmd($cmd, 0);
+    execute_cmd($cmd, 0, 0, $outputfile);
   }
   eval "\$prompt = \"$prompt_format\"";
 }
@@ -228,13 +236,13 @@ sub mconnect {
     print "Connecting to $user\@$host".(defined $db? "/$db_param": "")." ($mode) ...\n";
   }
   if ($mode eq "sybase") {
-    $dbh = DBI->connect("dbi:Sybase:$host", $user, $pass) or die $DBI::errstr;
+    $dbh = DBI->connect("dbi:Sybase:$host", $user, $pass) or exit;
   } elsif ($mode eq "mysql") {
     my $str = "DBI:mysql:host=$host";
     if (defined $port) {
       $str .= ":port=$port";
     }
-    $dbh = DBI->connect($str, $user, $pass) or die $DBI::errstr;
+    $dbh = DBI->connect($str, $user, $pass) or exit;
     if (length $db > 0) {
       change_database("use $db");
     }
@@ -423,6 +431,39 @@ sub handle_bookmark_command {
   }
 }
 
+sub handle_set_command {
+  my $cmd = shift;
+  chomp $cmd;
+  $cmd =~ s/ +$//;
+  my (undef, $key, $value) = split(/ /, $cmd, 3);
+  if (defined $key) {
+    set_key_value("format", $key, $value, \$format);
+    set_key_value("outputfile", $key, $value, \$outputfile);
+  } else {
+    set_key_value("format", undef, undef, \$format);
+    set_key_value("outputfile", $key, $value, \$outputfile);
+  }
+}
+
+sub set_key_value {
+  my ($name, $key, $value, $ref) = @_;
+  if (defined $key) {
+    if ($key eq $name) {
+      if (!defined $value) {
+	print "$name = ".${$ref}."\n";
+      } else {
+	${$ref} = $value;
+	print "New value:\n";
+	print "$key = ".${$ref}."\n";
+      }
+      return 1;
+    }
+  } else {
+    print "$name = ".${$ref}."\n";
+  }
+  return 0;
+}
+
 sub get_execute_flags_by_command {
   my $cmd = shift;
   if (index($cmd, "sp_tables ") == 0 || index($cmd, "show tables") == 0) {
@@ -443,6 +484,8 @@ sub get_execute_flags_by_command {
     return $RAW_COMMAND;
   } elsif (index($cmd, "bm") == 0) {
     return $BOOKMARK;
+  } elsif (index($cmd, "set") == 0) {
+    return $SET_COMMAND;
   }
   return undef;
 }
@@ -472,6 +515,13 @@ sub execute_cmd {
   my $cmd = shift;
   my $noOutput = shift;
   my $flags = shift;
+  my $redirect = shift;
+
+  if (defined $redirect) {
+    open OUT, ">$redirect";
+  } else {
+    open OUT, ">&STDOUT";
+  }
 
   chomp $cmd;
   $cmd =~ s/[ ;]+$//;
@@ -486,7 +536,7 @@ sub execute_cmd {
     check_for_reconnect($DBI::errstr);
     $sth = $dbh->prepare($cmd);
     if ($DBI::errstr) {
-      print "execute_cmd: prepare failed: ".$DBI::errstr."\n";
+      print "execute_cmd: prepare failed\n";
       return 0;
     }
   }
@@ -496,7 +546,7 @@ sub execute_cmd {
     $sth = $dbh->prepare($cmd);
     $sth->execute();
     if ($DBI::errstr) {
-      print "execute_cmd: execute failed: ".$DBI::errstr."\n";
+      print "execute_cmd: execute failed\n";
       return 0;
     }
   }
@@ -552,12 +602,12 @@ sub execute_cmd {
 	    my $isStr = ($first || $types->[$i] == 1 || $types->[$i] == -4 || $types->[$i] == 12 || $types->[$i] == 11);
 	    my $isHex = 0; #($types->[$i] == -4);
 	    if ($i != 0) {
-	      print ",";
+	      print OUT ",";
 	    }
 	    #print "0x" if $isHex;
-	    print (defined $row->[$i]? $row->[$i]: "NULL");
+	    print OUT (defined $row->[$i]? $row->[$i]: "NULL");
 	  }
-	  print "\n";
+	  print OUT "\n";
 	}
       } else {
 	my $first = 1;
@@ -565,49 +615,55 @@ sub execute_cmd {
 	  my $i;
 	  if ($first) {
 	    for ($i = 0; $i < $num_fields; $i++) {
-	      print BOLD.BLACK if !($format eq "plain");
-	      print "+" if $i == 0;
-	      print "-"x($lens[$i]+2);
-	      print "+".RESET if !($format eq "plain");
+	      print OUT BOLD.BLACK if !($format eq "plain");
+	      print OUT "+" if $i == 0;
+	      print OUT "-"x($lens[$i]+2);
+	      print OUT "+".RESET if !($format eq "plain");
 	    }
-	    print "\n";
+	    print OUT "\n";
 	  }
 	  for ($i = 0; $i < $num_fields; $i++) {
 	    my $isStr = ($first || $types->[$i] == 1 || $types->[$i] == -4 || $types->[$i] == 12 || $types->[$i] == 11);
 	    my $isHex = 0; #($types->[$i] == -4);
 	    if ($i == 0) {
-	      print BOLD.BLACK if !($format eq "plain");
-	      print "|";
-	      print RESET if !($format eq "plain");
+	      print OUT BOLD.BLACK if !($format eq "plain");
+	      print OUT "|";
+	      print OUT RESET if !($format eq "plain");
 	    }
-	    print " ".BOLD if !($format eq "plain");
-	    printf "%".($isStr? "-": "").($lens[$i])."s", (!$first && $isHex? "0x": "").(defined $row->[$i]? $row->[$i]: "NULL");
-	    print BOLD.BLACK if !($format eq "plain");
-	    print " |";
-	    print RESET if !($format eq "plain");
+	    print OUT " ".BOLD if !($format eq "plain");
+	    printf OUT "%".($isStr? "-": "").($lens[$i])."s", (!$first && $isHex? "0x": "").(defined $row->[$i]? $row->[$i]: "NULL");
+	    print OUT BOLD.BLACK if !($format eq "plain");
+	    print OUT " |";
+	    print OUT RESET if !($format eq "plain");
 	  }
-	  print "\n";
+	  print OUT "\n";
 	  if ($first) {
 	    for ($i = 0; $i < $num_fields; $i++) {
-	      print BOLD.BLACK if !($format eq "plain");
-	      print "+" if $i == 0;
-	      print "-"x($lens[$i]+2);
-	      print "+".RESET if !($format eq "plain");
+	      print OUT BOLD.BLACK if !($format eq "plain");
+	      print OUT "+" if $i == 0;
+	      print OUT "-"x($lens[$i]+2);
+	      print OUT "+".RESET if !($format eq "plain");
 	    }
-	    print "\n";
+	    print OUT "\n";
 	    $first = 0;
 	  }
 	}
 	for ($i = 0; $i < $num_fields; $i++) {
-	  print BOLD.BLACK if !($format eq "plain");
-	  print "+" if $i == 0;
-	  print "-"x($lens[$i]+2);
-	  print "+".RESET if !($format eq "plain");
+	  print OUT BOLD.BLACK if !($format eq "plain");
+	  print OUT "+" if $i == 0;
+	  print OUT "-"x($lens[$i]+2);
+	  print OUT "+".RESET if !($format eq "plain");
 	}
-	print "\n(".(scalar(@data) - 1)." records received in $telap seconds)\n\n";
+	print OUT "\n(".(scalar(@data) - 1)." records received in $telap seconds)\n\n";
       }
     }
   }
+
+  if (defined $redirect) {
+    close(OUT);
+    print "Data written to $redirect\n";
+  }
+
   return 1;
 }
 

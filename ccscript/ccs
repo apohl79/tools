@@ -2,12 +2,13 @@
 
 use strict;
 
-my $CXX = "g++-4.1";
+my $CXX = "g++";
 my $outf = "/tmp/script.temp.".(time).".cpp";
 my $exec = "/tmp/script.exec.".(time);
 
 my $template = "
 #include <stdio.h>
+#include <stdlib.h>
 #include <string>
 #include <iostream>
 #include <iomanip>
@@ -18,13 +19,13 @@ my $template = "
 #include <sstream>
 #include <vector>
 #include <map>
-#include <ext/hash_map>
-#include <ext/hash_set>
+//#include <ext/hash_map>
+//#include <ext/hash_set>
 #include <bitset>
-#include <pasync.h>
+//#include <pasync.h>
 #include <pinet.h>
-#include <glib.h>
-#include <glib/gunicode.h>
+//#include <glib.h>
+//#include <glib/gunicode.h>
 
 using namespace std;
 using namespace __gnu_cxx;
@@ -75,7 +76,7 @@ close W;
 my $cmd = "$CXX -O3 -I/home/osar/workspace/ptypes/include -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -c -o $exec.o $outf";
 system( $cmd ) == 0
   or die "compile command '$cmd' failed";
-$cmd = "$CXX -ggdb -g -Wall $exec.o -L/home/osar/workspace/ptypes/lib -L/usr/lib -lptypes -lglib-2.0 -lpthread -o $exec";
+$cmd = "$CXX -ggdb -g -Wall $exec.o -L/home/osar/workspace/ptypes/lib -L/usr/lib -lpthread -o $exec";
 system( $cmd ) == 0
   or die "link command '$cmd' failed";
 
