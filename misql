@@ -8,7 +8,7 @@
 #
 # You need the following packages:
 #
-# aptitude install libdbd-sybase-perl libterm-readline-gnu-perl libterm-readline-perl-perl libcurses-perl libxml-simple-perl
+# aptitude install libdbd-mysql-perl libterm-readline-gnu-perl libterm-readline-perl-perl libcurses-perl libxml-simple-perl
 #
 # The LD_LIBRARY_PATH needs to contain the sybase libs directory.
 
@@ -39,6 +39,10 @@ endwin;
 BEGIN {
   $ENV{SYBASE} = "/opt/sybase" unless exists $ENV{SYBASE};
   $ENV{LANG} = "en_US";
+}
+
+if ($ARGV[0] eq "--help") {
+  usage();
 }
 
 # command line params
@@ -117,6 +121,7 @@ if ($s->can_read(.5)) {
 }
 
 if (length $exec_param || scalar(@stdinCmds) > 0) {
+  print "Direct mode\n";
   $direct_exec_mode = 1;
 }
 
@@ -136,6 +141,8 @@ if (length $exec_param) {
 }
 
 foreach (@stdinCmds) {
+  chomp;
+  print "Executing: $_\n";
   execute_cmd($exec_param, 0, 0, $outputfile);
 }
 
@@ -550,6 +557,7 @@ sub execute_cmd {
       return 0;
     }
   }
+
   my $telap = sprintf "%.4f", (gettimeofday-$tstart);
   if ($sth->{NUM_OF_FIELDS} > 0) {
     #print "NUM_OF_FIELDS = ".$sth->{NUM_OF_FIELDS}."\n";
