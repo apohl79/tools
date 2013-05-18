@@ -1,12 +1,12 @@
 #!/bin/bash
 
-SSHTOOLS=$HOME/bin/sshtools
+SSHTOOLS=$HOME/bin/tools/sshtools
 SSHEXP=$SSHTOOLS/ssh.exp
 SSHFIXEXP=$SSHTOOLS/ssh.fix.exp
 SSHCMDEXP=$SSHTOOLS/ssh.cmd.exp
 SSHCMDEXPS=$SSHTOOLS/ssh.cmds.exp
 SSHMNTEXP=$SSHTOOLS/ssh.mnt.exp
-OSWALLET=$HOME/bin/sshtools/oswallet
+OSWALLET=$SSHTOOLS/oswallet
 CHCKHOST=$SSHTOOLS/chckhost.pl
 
 # Define a list of commands that skip establishing a SSH session
