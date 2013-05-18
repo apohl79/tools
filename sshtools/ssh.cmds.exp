@@ -39,4 +39,3 @@ if {$SUDO > 0} {
     }
 }
 set timeout 0
-interact
