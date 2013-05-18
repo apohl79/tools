@@ -9,7 +9,7 @@ set F2 [lindex $argv 4]
 # get the secure password from the encrypted wallet
 log_user 0
 set timeout 10
-spawn -noecho oswallet -w $WALLET -g $USER
+spawn -noecho keywrapper -w $WALLET -g $USER
 expect -re "(.*)\n"
 set PASSWORD $expect_out(1,string)
 

@@ -1,0 +1,50 @@
+#!/bin/sh
+
+ARGS=$(getopt w:s:g:b $*)
+if [ $? != 0 ]; then
+    echo 'Usage: ...'
+    exit 2
+fi
+set -- $ARGS
+for i; do
+    case "$i"
+        in
+        -w)
+	    WALLET=$2
+            shift; shift;;
+	-v)
+	    OSWALLET_ARGS+=" -v"
+            shift;;
+	-q)
+	    OSWALLET_ARGS+=" -q"
+	    shift;;
+	-s)
+	    MODE="set"
+	    USER=$2
+	    OSWALLET_ARGS+=" -s $2"
+	    shift; shift;;
+	-g)
+	    MODE="get"
+	    USER=$2
+	    OSWALLET_ARGS+=" -g $2"
+	    shift; shift;;
+	-b)
+	    MODE="srv"
+	    shift;;
+        --)
+            shift; break;;
+    esac
+done
+
+OS=$(uname)
+if [ "$OS" = "Darwin" ]; then
+    if [ "$MODE" = "get" ]; then
+	security find-generic-password -s $WALLET -a $USER -g 2>&1 | grep password: | perl -ne 'print substr $_, 11, length($_)-13; print "\n"'
+    else
+	echo "not supported on OS X"
+	oswallet
+	exit 1
+    fi
+else
+    oswallet -w $WALLET $OSWALLET_ARGS
+fi
