@@ -59,11 +59,11 @@
   ;; use extended compound-text coding for X clipboard
   (set-selection-coding-system 'compound-text-with-extensions)
   (set-face-background 'default "#ffffff")
-  (set-frame-size (selected-frame) 136 45))
+  (set-frame-size (selected-frame) 199 60))
   ;;(set-frame-height (selected-frame) 200))
 
-;; key bindings
-(when (eq system-type 'darwin) ;; mac specific settings
+;; special key bindings for OS X
+(when (eq system-type 'darwin)
   (setq mac-option-modifier nil)
   (setq mac-command-modifier 'meta)
   )
