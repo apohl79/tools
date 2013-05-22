@@ -6,7 +6,7 @@ SSHFIXEXP=$SSHTOOLS/ssh.fix.exp
 SSHCMDEXP=$SSHTOOLS/ssh.cmd.exp
 SSHCMDEXPS=$SSHTOOLS/ssh.cmds.exp
 SSHMNTEXP=$SSHTOOLS/ssh.mnt.exp
-OSWALLET=$SSHTOOLS/oswallet
+OSWALLET=$SSHTOOLS/keywrapper
 CHCKHOST=$SSHTOOLS/chckhost.pl
 
 # Define a list of commands that skip establishing a SSH session
