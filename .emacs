@@ -45,6 +45,20 @@
 ;; Now my stuff... 
 ;; --------------------------------------------------------------------------
 
+;; color theme
+(add-to-list 'load-path "/Users/osar/bin/tools/color-theme-6.6.0")
+(require 'color-theme)
+(eval-after-load "color-theme"
+  '(progn
+     (color-theme-initialize)
+     (color-theme-hober)))
+
+;; line numbers
+(global-linum-mode 1)
+
+;; replace active region just by typing
+(delete-selection-mode 1)
+
 ;(add-to-list 'load-path "/home/osar/workspace/git-emacs")
 ;(require 'git-emacs)
 
@@ -58,7 +72,7 @@
   ;(set-default-font "9x15")
   ;; use extended compound-text coding for X clipboard
   (set-selection-coding-system 'compound-text-with-extensions)
-  (set-face-background 'default "#ffffff")
+  ;(set-face-background 'default "#ffffff")
   (set-frame-size (selected-frame) 199 60))
   ;;(set-frame-height (selected-frame) 200))
 
@@ -98,7 +112,7 @@
 (defun my-cperl-mode-hook ()
   (local-set-key [return] 'newline-and-indent)
   ;; indentation should be 4 (2 is default)
-  ;(setq cperl-indent-level 4)
+  (setq cperl-indent-level 4)
   ;; if()\n{\n
   ;(setq cperl-extra-newline-before-brace t)
   ;; automatic newline and indent
@@ -114,6 +128,8 @@
   ;;(c-set-style "gnu")
   ;; my customizations for all of c-mode and related modes
   (c-set-offset 'substatement-open 0)
+  ;; don't indent inside namespaces
+  (c-set-offset 'innamespace 0)
   ;; other customizations can go here
   (setq tab-width 4)
   (setq c-basic-offset 4)
