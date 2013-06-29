@@ -2,7 +2,7 @@
 
 use strict;
 
-my $CXX = "g++";
+my $CXX = "g++-4.9";
 my $outf = "/tmp/script.temp.".(time).".cpp";
 my $exec = "/tmp/script.exec.".(time);
 
@@ -15,17 +15,20 @@ my $template = "
 #include <math.h>
 #include <time.h>
 #include <string.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
 #include <fstream>
 #include <sstream>
 #include <vector>
 #include <map>
-//#include <ext/hash_map>
-//#include <ext/hash_set>
+#include <thread>
+#include <atomic>
 #include <bitset>
-//#include <pasync.h>
-//#include <pinet.h>
-//#include <glib.h>
-//#include <glib/gunicode.h>
+##incl##
 
 using namespace std;
 using namespace __gnu_cxx;
@@ -40,12 +43,20 @@ int main(int argc, char **argv) {
 
 my $code;
 my $func;
+my $headers;
+if( $ARGV[0] eq "-i" ) {
+  for my $h (split(/,/, $ARGV[1])) {
+    $headers .= "#include <$h>\n";
+  }
+  shift @ARGV;
+  shift @ARGV;
+}
 if( $ARGV[0] eq "-e" ) {
   $code = $ARGV[1];
   shift @ARGV;
   shift @ARGV;
 } elsif( $ARGV[0] eq "-h" || !scalar(@ARGV) ) {
-  print "Usage: [VALGRIND=1] [INSURE=1] [GDB=1] $0 {<scriptfile>|-e <code>|-h}\n";
+  print "Usage: [VALGRIND=1] [INSURE=1] [GDB=1] $0 {<scriptfile>|[-i \"header1,header2,...\"] -e <code>|-h}\n";
   exit -1;
 } else {
   open F, "<$ARGV[0]" or die "can't open $ARGV[0]: $!";
@@ -65,6 +76,7 @@ if( $ARGV[0] eq "-e" ) {
   }
   shift @ARGV;
 }
+$template =~s /##incl##/$headers/;
 $template =~s /##func##/$func/;
 $template =~s /##code##/$code/;
 
@@ -73,10 +85,10 @@ print W $template;
 close W;
 
 #my $cmd = "g++ -ggdb -g -I/adtech/ptypes/include -c -o $exec.o $outf";
-my $cmd = "$CXX -O3 -c -o $exec.o $outf";
+my $cmd = "$CXX -O3 -std=c++11 -c -o $exec.o $outf";
 system( $cmd ) == 0
   or die "compile command '$cmd' failed";
-$cmd = "$CXX -ggdb -g -Wall $exec.o -lpthread -o $exec";
+$cmd = "$CXX -std=c++11 -ggdb -g -Wall $exec.o -lpthread -o $exec";
 system( $cmd ) == 0
   or die "link command '$cmd' failed";
 
