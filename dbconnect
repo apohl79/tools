@@ -24,6 +24,8 @@ if ($0 =~ /dbadmin/) {
   $uimode = "admin";
 } elsif ($0 =~ /dbgui/) {
   $uimode = "gui";
+} elsif ($0 =~ /dbnative/) {
+  $uimode = "native";
 }
 
 if ($ARGV[0] eq "-h") {
@@ -121,6 +123,11 @@ sub connectServer {
     my $skip = 0;
     if ($type eq "mysql" && $uimode eq "admin") {
       $cmd = "mysql-admin -h$host -u$user -p$pass";
+      if ($port) {
+	$cmd .= " -P$port";
+      }
+    } elsif ($type eq "mysql" && $uimode eq "native") {
+      $cmd = "mysql --skip-secure-auth -h$host -u$user -p$pass";
       if ($port) {
 	$cmd .= " -P$port";
       }

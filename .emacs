@@ -80,6 +80,7 @@
 (when (eq system-type 'darwin)
   (setq mac-option-modifier nil)
   (setq mac-command-modifier 'meta)
+  (when window-system (x-focus-frame nil))
   )
 
 ;; Get rid of startup message
@@ -88,8 +89,15 @@
 ;; turn of the menu bar
 (menu-bar-mode -1)
 
+;; customize the mouse buffer menu 
+(custom-set-variables '(mouse-buffer-menu-mode-mult 0))
+
 ;; Make all "yes or no" prompts show "y or n" instead
 (fset 'yes-or-no-p 'y-or-n-p)
+
+;; default indention
+(setq-default indent-tabs-mode nil)
+(setq-default tab-width 8)
 
 ;; CEDET stuff
 ;(setq semantic-load-turn-useful-things-on t)
@@ -131,14 +139,14 @@
   ;; don't indent inside namespaces
   (c-set-offset 'innamespace 0)
   ;; other customizations can go here
-  (setq tab-width 4)
+  (setq tab-width 8)
   (setq c-basic-offset 4)
-  (setq indent-tabs-mode t)
+  ;(setq indent-tabs-mode nil)
   ;; automatic newline, and hungry mode
   ;;(c-toggle-auto-hungry-state 1)
 )
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
-;(add-hook 'c++-mode-hook 'my-c-mode-common-hook)
+(add-hook 'c++-mode-hook 'my-c-mode-common-hook)
 
 (add-hook 'java-mode-hook 'my-java-mode-hook)
 (defun my-java-mode-hook ()
@@ -332,8 +340,8 @@ This function is the opposite of `bury-buffer'."
 (setq column-number-mode t)
 
 ;; tabs (t) or spaces (nil)
-(setq-default indent-tabs-mode t)
-(setq indent-tabs-mode t)
+(setq-default indent-tabs-mode nil)
+(setq indent-tabs-mode nil)
 
 ;; use all the 'Win-keys'
 ;(pc-selection-mode)

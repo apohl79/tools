@@ -29,12 +29,14 @@ if {$PUBKEY != 1} {
     log_user 1
 }
 if {$SUDO > 0} {
-    set timeout 2
+    set timeout 15
     expect "$USER" { 
 	send "sudo su - && exit\r"
+        set timeout 1
 	expect "assword" { send "$PASSWORD\r" }
 	set DONE 1
     }
+    set timeout 1
     if {$DONE == 0} {
 	expect "bash" { 
 	    send "sudo su - && exit\r"

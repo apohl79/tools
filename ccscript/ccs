@@ -2,7 +2,7 @@
 
 use strict;
 
-my $CXX = "g++-4.9";
+my $CXX = "g++-4.8";
 my $outf = "/tmp/script.temp.".(time).".cpp";
 my $exec = "/tmp/script.exec.".(time);
 
@@ -85,10 +85,10 @@ print W $template;
 close W;
 
 #my $cmd = "g++ -ggdb -g -I/adtech/ptypes/include -c -o $exec.o $outf";
-my $cmd = "$CXX -O3 -std=c++11 -c -o $exec.o $outf";
+my $cmd = "$CXX -O3 -std=c++11 $ENV{CXXFLAGS} -c -o $exec.o $outf";
 system( $cmd ) == 0
   or die "compile command '$cmd' failed";
-$cmd = "$CXX -std=c++11 -ggdb -g -Wall $exec.o -lpthread -o $exec";
+$cmd = "$CXX -std=c++11 -ggdb -g -Wall $exec.o -lpthread $ENV{LDFLAGS} -o $exec";
 system( $cmd ) == 0
   or die "link command '$cmd' failed";
 
