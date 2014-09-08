@@ -101,3 +101,8 @@ fi
 alias mv_files_by_date='for f in *; do d=$(stat -t "%F" "$f"|awk -F\" "{print \$2}"); if [ ! -d $d ]; then mkdir $d; fi; mv "$f" $d/; done'
 alias ssh_tor="ssh -o ProxyCommand='nc -x 127.0.0.1:9150 %h %p'"
 export JAVA_HOME=/opt/java
+
+# local stuff
+if [ -e $HOME/.bashrc_local ]; then
+    . $HOME/.bashrc_local
+fi
