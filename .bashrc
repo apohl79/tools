@@ -21,23 +21,8 @@ export EDITOR=emacs
 
 export PATH=$HOME/bin:$HOME/bin/tools/sshtools:$HOME/bin/tools:$HOME/.sshsessions:$HOME/android/tools:$HOME/android/adt/sdk/tools:$HOME/android/adt/sdk/platform-tools:/usr/local/bin:/usr/local/sbin:/opt/433ctrl/scripts:$PATH
 
-# make less more friendly for non-text input files, see lesspipe(1)
-[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
-
 # set a fancy prompt (non-color, unless we know we "want" color)
 export TERM=xterm-color
-
-# Try to make ls output colored
-ls --color >/dev/null 2>&1
-if [ $? == 0 ]; then
-    alias ls='ls --color'
-else
-    ls -G >/dev/null 2>&1
-    if [ $? == 0 ]; then
-        alias ls='ls -G'
-    fi
-fi
-alias ll='ls -la'
 
 # Use colors anywhere else
 if [ $(id -u) == 0 ]; then
@@ -78,6 +63,21 @@ else
         fi
     fi
 fi
+
+# make less more friendly for non-text input files, see lesspipe(1)
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+
+# Try to make ls output colored
+ls --color >/dev/null 2>&1
+if [ $? == 0 ]; then
+    alias ls='ls --color'
+else
+    ls -G >/dev/null 2>&1
+    if [ $? == 0 ]; then
+        alias ls='ls -G'
+    fi
+fi
+alias ll='ls -la'
 
 # Some android dev helpers
 if [ -n "$(which adb)" ]; then
