@@ -46,7 +46,7 @@
 ;; --------------------------------------------------------------------------
 
 ;; color theme
-(add-to-list 'load-path "/Users/osar/bin/tools/color-theme-6.6.0")
+(add-to-list 'load-path "~/bin/tools/color-theme-6.6.0")
 (require 'color-theme)
 (eval-after-load "color-theme"
   '(progn
@@ -116,6 +116,12 @@
 ;; for c++
 ;(add-hook 'c++-mode-hook 'setnu-mode)
 
+;; Outline settings
+(global-set-key [M-left] 'hide-subtree)
+(global-set-key [M-right] 'show-children)
+(global-set-key [M-up] 'hide-other)
+(global-set-key [M-down] 'show-all)
+
 ;; Some cperl-mode customization
 (defun my-cperl-mode-hook ()
   (local-set-key [return] 'newline-and-indent)
@@ -144,6 +150,7 @@
   ;(setq indent-tabs-mode nil)
   ;; automatic newline, and hungry mode
   ;;(c-toggle-auto-hungry-state 1)
+  (outline-minor-mode)
 )
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
 (add-hook 'c++-mode-hook 'my-c-mode-common-hook)
@@ -221,6 +228,14 @@
     ret))
 
 ;; end TAGS C++
+
+(defun indent-buffer ()
+  "Indents an entire buffer using the default intenting scheme."
+  (interactive)
+  (save-excursion 
+    (delete-trailing-whitespace)
+    (indent-region (point-min) (point-max) nil)
+    (untabify (point-min) (point-max))))  
 
 ;;=================
 ;;===  K E Y S ====
