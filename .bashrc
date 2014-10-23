@@ -1,7 +1,13 @@
 export PATH=$HOME/bin:$HOME/bin/tools/sshtools:$HOME/bin/tools:$HOME/.sshsessions:$HOME/android/tools:$HOME/android/adt/sdk/tools:$HOME/android/adt/sdk/platform-tools:/usr/local/bin:/usr/local/sbin:/opt/433ctrl/scripts:$PATH
 
+IS_TTY=1
+if [ -n "$(which tty)" ]; then
+    tty -s
+    IS_TTY=$?
+fi
+
 # Check if running bash
-if [ -n "$BASH_VERSION" ]; then
+if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
     # don't put duplicate lines in the history. See bash(1) for more options
     # don't overwrite GNU Midnight Commander's setting of `ignorespace'.
     export HISTCONTROL=$HISTCONTROL${HISTCONTROL+,}ignoredups
@@ -19,7 +25,6 @@ if [ -n "$BASH_VERSION" ]; then
 
     export LANG=C
     export EDITOR=emacs
-
 
     # set a fancy prompt (non-color, unless we know we "want" color)
     export TERM=xterm-color
@@ -51,6 +56,8 @@ if [ -n "$BASH_VERSION" ]; then
         if [ -f /etc/bash_completion ]; then
             . /etc/bash_completion
         fi
+
+        tty > /tmp/tty.x
 
         # SSH agent
         if [ -e $HOME/.ssh/id_rsa ]; then
