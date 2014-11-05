@@ -187,7 +187,7 @@
 ;; C/C++
 (load "clang-format" t)
 (defun my-c-mode-common-hook ()
-  ;(local-set-key [return] 'newline-and-indent)
+  (local-set-key [return] 'newline-and-indent)
   (c-set-offset 'substatement-open 0)
   (c-set-offset 'innamespace 0)
   (setq tab-width 8)
@@ -195,7 +195,8 @@
   (outline-minor-mode)
   ; If clang-format is available, use it and deactivate electric chars
   (when clang-format-binary-found
-    (setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4}")
+    (message "Using clang-format for C/C++ indention")
+    (setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2}")
     (add-hook 'c-special-indent-hook 'clang-format-region)
     (c-toggle-electric-state -1)))
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
