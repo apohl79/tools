@@ -50,25 +50,29 @@
 
 (defun clang-format (begin end)
   "Use clang-format to format the code between BEGIN and END."
-  (when (string-match-p "[^ ]" (buffer-substring-no-properties begin end))
-    (let* ((orig-windows (get-buffer-window-list (current-buffer)))
-           (orig-window-starts (mapcar #'window-start orig-windows))
-           (orig-point (point))
-           (style clang-format-style))
-      (unwind-protect
-          (call-process-region (point-min) (point-max) clang-format-binary
-                               t (list t nil) nil
-                               "-offset" (number-to-string (1- begin))
-                               "-length" (number-to-string (- end begin))
-                               "-cursor" (number-to-string (1- (point)))
-                               "-assume-filename" (buffer-file-name)
-                               "-style" style)
-        (goto-char (point-min))
-        (let ((json-output (json-read-from-string
-                            (buffer-substring-no-properties
-                             (point-min) (line-beginning-position 2)))))
-          (delete-region (point-min) (line-beginning-position 2))
-          (goto-char (1+ (cdr (assoc 'Cursor json-output))))
-          (dotimes (index (length orig-windows))
-            (set-window-start (nth index orig-windows)
-                              (nth index orig-window-starts))))))))
+  (setq my-char-pos (buffer-substring-no-properties (point) (1+ (point))))
+  (when (string-match-p "[^ ]" (buffer-substring-no-properties begin end)) ; ignore empty lines
+    (when (not (equal "}" my-char-pos)) ; allow to move closing }
+      (when (not (equal ")" my-char-pos)) ; allow to move closing )
+        (when (not (equal "]" my-char-pos)) ; allow to move closing ]
+          (let* ((orig-windows (get-buffer-window-list (current-buffer)))
+                 (orig-window-starts (mapcar #'window-start orig-windows))
+                 (orig-point (point))
+                 (style clang-format-style))
+            (unwind-protect
+                (call-process-region (point-min) (point-max) clang-format-binary
+                                     t (list t nil) nil
+                                     "-offset" (number-to-string (1- begin))
+                                     "-length" (number-to-string (- end begin))
+                                     "-cursor" (number-to-string (1- (point)))
+                                     "-assume-filename" (buffer-file-name)
+                                     "-style" style)
+              (goto-char (point-min))
+              (let ((json-output (json-read-from-string
+                                  (buffer-substring-no-properties
+                                   (point-min) (line-beginning-position 2)))))
+                (delete-region (point-min) (line-beginning-position 2))
+                (goto-char (1+ (cdr (assoc 'Cursor json-output))))
+                (dotimes (index (length orig-windows))
+                  (set-window-start (nth index orig-windows)
+                                    (nth index orig-window-starts)))))))))))

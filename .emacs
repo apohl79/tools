@@ -103,6 +103,9 @@
 ;; Don't ask for reloading buffer.
 (setq revert-without-query '(".*"))
 
+;; Persist the mini-buffer history accross sessions
+(savehist-mode 1)
+
 (put 'downcase-region 'disabled nil)
 (put 'upcase-region 'disabled nil)
 (put 'narrow-to-region 'disabled nil)
@@ -198,7 +201,8 @@
     (message "Using clang-format for C/C++ indention")
     (setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2}")
     (add-hook 'c-special-indent-hook 'clang-format-region)
-    (c-toggle-electric-state -1)))
+    (c-toggle-electric-state -1)
+    ))
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
 (add-hook 'c++-mode-hook 'my-c-mode-common-hook)
 
