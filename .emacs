@@ -14,6 +14,14 @@
      (color-theme-initialize)
      (color-theme-hober)))
 
+;; Enable package melpa package repo
+(when (>= emacs-major-version 24)
+  (require 'package)
+  (package-initialize)
+  (add-to-list 'package-archives '("melpa" . "http://melpa.milkbox.net/packages/") t)
+  ;;  (add-to-list 'package-archives '("marmalade" . "http://marmalade-repo.org/packages/") t)
+  )
+
 ;; uncomment this line to disable loading of "default.el" at startup
 ; (setq inhibit-default-init t)
 
@@ -178,15 +186,6 @@
         ((looking-at "[])}]") (forward-char) (backward-sexp 1))))
 (global-set-key "\C-cp" 'match-paren)
 
-;; Perl
-(defun my-cperl-mode-hook ()
-  (local-set-key [return] 'newline-and-indent)
-  (setq cperl-indent-level 4)
-  (setq cperl-continued-brace-offset -2))
-(add-hook 'cperl-mode-hook 'my-cperl-mode-hook)
-;; Use cperl-mode if perl is in the shebang
-(add-to-list 'interpreter-mode-alist '("perl" . cperl-mode))
-
 ;; C/C++
 (load "clang-format" t)
 (defun my-c-mode-common-hook ()
@@ -199,12 +198,24 @@
   ; If clang-format is available, use it and deactivate electric chars
   (when clang-format-binary-found
     (message "Using clang-format for C/C++ indention")
-    (setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2}")
+    (setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, AllowShortFunctionsOnASingleLine: false}")
     (add-hook 'c-special-indent-hook 'clang-format-region)
     (c-toggle-electric-state -1)
     ))
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
 (add-hook 'c++-mode-hook 'my-c-mode-common-hook)
+
+;; Perl
+(defun my-cperl-mode-hook ()
+  (local-set-key [return] 'newline-and-indent)
+  (setq cperl-indent-level 4)
+  (setq cperl-continued-brace-offset -2))
+(add-hook 'cperl-mode-hook 'my-cperl-mode-hook)
+;; Use cperl-mode if perl is in the shebang
+(add-to-list 'interpreter-mode-alist '("perl" . cperl-mode))
+
+;; Enable doxygen. Downloaded from https://github.com/TreeRex/doxygen-el
+(require 'doxygen)
 
 (defun etags-tags-completion-table ()
   "make tags completion table,  guess C++ member functions correctly"
@@ -337,3 +348,77 @@
                 ("\\.\\([pP][Llm]\\|al\\)$" . cperl-mode)
                 ("\\.pod$"                  . cperl-mode)
                 ) auto-mode-alist))
+
+;; ***** Auto complete plugins *****
+;; Install:
+;; - auto-complete
+;; - auto-complete-c-headers
+;; - auto-complete-chunk
+;; - auto-complete-clang
+;; - flycheck
+;; - popup
+(when (require 'auto-complete-config nil 'noerror)
+  ;(add-to-list 'ac-dictionary-directories "~/.emacs.d/AC/ac-dict")
+  (require 'auto-complete-c-headers)
+  (require 'auto-complete-clang)
+  (add-to-list 'ac-sources 'ac-source-c-headers)
+  (setq ac-auto-start nil)
+  (setq ac-quick-help-delay 0)
+  ;; Add aditional include flags for clang. You can get this list with echo "" | clang++ -v -x c++ -E -
+  (setq ac-clang-flags
+        (mapcar (lambda (item)(concat "-I" item))
+                (split-string
+                 "
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../include/c++/v1
+/usr/local/include
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/clang/6.0/include
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
+/usr/include
+/System/Library/Frameworks
+/Library/Frameworks
+"
+                 )
+                )
+        )
+  (setq ac-clang-flags (cons "-std=c++11" ac-clang-flags))
+
+  ;; rebind completion key
+  (global-unset-key "\C-cc")
+  (define-key ac-mode-map "\C-cc" 'auto-complete)
+  
+  (defun my-ac-config ()
+    (setq-default ac-sources '(ac-source-abbrev ac-source-dictionary ac-source-words-in-same-mode-buffers))
+    (add-hook 'emacs-lisp-mode-hook 'ac-emacs-lisp-mode-setup)
+    ;; (add-hook 'c-mode-common-hook 'ac-cc-mode-setup)
+    (add-hook 'ruby-mode-hook 'ac-ruby-mode-setup)
+    (add-hook 'css-mode-hook 'ac-css-mode-setup)
+    (add-hook 'auto-complete-mode-hook 'ac-common-setup)
+    (global-auto-complete-mode t))
+  (defun my-ac-cc-mode-setup ()
+    (setq ac-sources (append '(ac-source-clang ac-source-yasnippet) ac-sources)))
+  (add-hook 'c-mode-common-hook 'my-ac-cc-mode-setup)
+  ;; ac-source-gtags
+  (my-ac-config)
+  
+  ;; Make newline-and-indent work with the auto-complete popup
+  (defvar my-backup-return-binding nil)
+  (defun my-pre-auto-complete (&optional sources)
+    (setq my-backup-return-binding (local-key-binding [return]))
+    (when my-backup-return-binding
+      (local-unset-key [return])))
+  (defun my-post-auto-complete ()
+    (when my-backup-return-binding
+      (local-set-key [return] my-backup-return-binding)
+      (setq my-backup-return-binding nil)))
+  (advice-add 'auto-complete :after #'my-pre-auto-complete)
+  (advice-add 'ac-complete :after #'my-post-auto-complete)
+  (advice-add 'ac-abort :after #'my-post-auto-complete)
+  )
+
+;; ***** CMake font lock plugin *****
+;; Install:
+;; - cmake-font-lock
+;; - cmake-ide
+;; - cmake-mode
+(autoload 'cmake-font-lock-activate "cmake-font-lock" nil t)
+(add-hook 'cmake-mode-hook 'cmake-font-lock-activate)
