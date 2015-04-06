@@ -89,7 +89,13 @@
 (menu-bar-mode -1)
 
 ;; customize the mouse buffer menu
-(custom-set-variables '(mouse-buffer-menu-mode-mult 0))
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(ecb-options-version "2.40")
+ '(mouse-buffer-menu-mode-mult 0))
 
 ;; Make all "yes or no" prompts show "y or n" instead
 (fset 'yes-or-no-p 'y-or-n-p)
@@ -198,7 +204,7 @@
   ; If clang-format is available, use it and deactivate electric chars
   (when clang-format-binary-found
     (message "Using clang-format for C/C++ indention")
-    (setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, AllowShortFunctionsOnASingleLine: false}")
+    (setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
     (add-hook 'c-special-indent-hook 'clang-format-region)
     (c-toggle-electric-state -1)
     ))
@@ -215,7 +221,7 @@
 (add-to-list 'interpreter-mode-alist '("perl" . cperl-mode))
 
 ;; Enable doxygen. Downloaded from https://github.com/TreeRex/doxygen-el
-(require 'doxygen)
+(require 'doxygen nil 'noerror)
 
 (defun etags-tags-completion-table ()
   "make tags completion table,  guess C++ member functions correctly"
@@ -383,8 +389,8 @@
   (setq ac-clang-flags (cons "-std=c++11" ac-clang-flags))
 
   ;; rebind completion key
-  (global-unset-key "\C-cc")
-  (define-key ac-mode-map "\C-cc" 'auto-complete)
+  ;(global-unset-key "\C-cc")
+  (define-key ac-mode-map "\C-cx" 'auto-complete)
   
   (defun my-ac-config ()
     (setq-default ac-sources '(ac-source-abbrev ac-source-dictionary ac-source-words-in-same-mode-buffers))
@@ -422,3 +428,12 @@
 ;; - cmake-mode
 (autoload 'cmake-font-lock-activate "cmake-font-lock" nil t)
 (add-hook 'cmake-mode-hook 'cmake-font-lock-activate)
+
+;; activate ecb
+(require 'ecb nil 'noerror)
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ )
