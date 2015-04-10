@@ -14,6 +14,10 @@
      (color-theme-initialize)
      (color-theme-hober)))
 
+(require 'highlight-current-line)
+(highlight-current-line-on t)
+(set-face-background 'highlight-current-line-face "#222")
+
 ;; Enable package melpa package repo
 (when (>= emacs-major-version 24)
   (require 'package)
@@ -73,29 +77,26 @@
   ;; use extended compound-text coding for X clipboard
   (set-selection-coding-system 'compound-text-with-extensions)
   ;(set-face-background 'default "#ffffff")
-  (set-frame-size (selected-frame) 199 60))
+  ;(set-frame-size (selected-frame) 199 60)
+  )
 ;;(set-frame-height (selected-frame) 200))
 
 ;; special key bindings for OS X
 (when (eq system-type 'darwin)
   (setq mac-option-modifier nil)
   (setq mac-command-modifier 'meta)
-  (when window-system (x-focus-frame nil)))
+  (when window-system
+    (x-focus-frame nil)
+    (set-frame-font "Inconsolata-15")))
+
+(when window-system
+  (add-to-list 'default-frame-alist '(fullscreen . maximized)))
 
 ;; Get rid of startup message
 (setq inhibit-startup-message t)
 
 ;; turn of the menu bar
 (menu-bar-mode -1)
-
-;; customize the mouse buffer menu
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(ecb-options-version "2.40")
- '(mouse-buffer-menu-mode-mult 0))
 
 ;; Make all "yes or no" prompts show "y or n" instead
 (fset 'yes-or-no-p 'y-or-n-p)
@@ -431,9 +432,4 @@
 
 ;; activate ecb
 (require 'ecb nil 'noerror)
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
+
