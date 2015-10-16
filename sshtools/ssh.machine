@@ -30,7 +30,9 @@ USER=$LDAP_USER
 PORT=0
 SESSIONNAME=""
 NEWSESSIONNAME=""
-USE_PUBKEY=0
+#USE_PUBKEY=0
+# now that we have pubkey ldap support, we can skip the pwd check per default
+USE_PUBKEY=1
 USE_SUDO=1 # become root via sudo after logging in is the default
 
 function renameSession {
