@@ -1,3 +1,9 @@
+;; Added by Package.el.  This must come before configurations of
+;; installed packages.  Don't delete this line.  If you don't want it,
+;; just comment it out by adding a semicolon to the start of the line.
+;; You may delete these explanatory comments.
+;(package-initialize)
+
 ;; Load stuff
 (add-to-list 'load-path "~/tools/emacs.d")
 
@@ -87,7 +93,7 @@
   (setq mac-command-modifier 'meta)
   (when window-system
     (x-focus-frame nil)
-    (set-frame-font "Inconsolata-15")))
+    (set-frame-font "Ubuntu Mono-15")))
 
 (when window-system
   (add-to-list 'default-frame-alist '(fullscreen . maximized)))
@@ -299,7 +305,7 @@
                           ("\\<\\(TODO\\)" 1 font-lock-warning-face prepend)
                           ("\\<\\(and\\|or\\|not\\|constexpr\\|thread_local\\|noexcept\\)\\>" . font-lock-keyword-face)
                           ("\\<\\(char16_t\\|char32_t\\)\\>" . font-lock-type-face)
-                          ("\\<\\(nullptr\\)\\>" . font-lock-constant-face)
+                          ("\\<\\(nullptr\\|true\\|false\\)\\>" . font-lock-constant-face)
                           ("^%\\(typemap\\|define\\|enddef\\|include\\|module\\)" 1 font-lock-builtin-face)
                           ))
 ;; Perl
@@ -367,7 +373,7 @@
 (when (require 'auto-complete-config nil 'noerror)
   ;(add-to-list 'ac-dictionary-directories "~/.emacs.d/AC/ac-dict")
   (require 'auto-complete-c-headers)
-  (require 'auto-complete-clang)
+;  (require 'auto-complete-clang)
   (add-to-list 'ac-sources 'ac-source-c-headers)
   (setq ac-auto-start nil)
   (setq ac-quick-help-delay 0)
@@ -430,6 +436,45 @@
 (autoload 'cmake-font-lock-activate "cmake-font-lock" nil t)
 (add-hook 'cmake-mode-hook 'cmake-font-lock-activate)
 
-;; activate ecb
-(require 'ecb nil 'noerror)
+;; IDO mode
+(setq ido-enable-flex-matching t)
+(setq ido-everywhere t)
+(setq ido-create-new-buffer 'always)
+(setq ido-file-extensions-order '(".h" ".cpp" ".c" ".hh" ".lua" ".txt" ".cfg" ".conf" ".cnf" ".xml" ".emacs" ".el"))
+(ido-mode 1)
+;; IDO for M-x
+(global-set-key
+ "\M-x"
+ (lambda ()
+   (interactive)
+   (call-interactively
+    (intern
+     (ido-completing-read
+      "M-x "
+      (all-completions "" obarray 'commandp))))))
 
+;; activate ecb
+(when (require 'ecb nil 'noerror)
+  (setq ecb-auto-activate t)
+  (setq ecb-tip-of-the-day nil)
+  
+  (custom-set-variables
+   ;; custom-set-variables was added by Custom.
+   ;; If you edit it by hand, you could mess it up, so be careful.
+   ;; Your init file should contain only one such instance.
+   ;; If there is more than one, they won't work right.
+   '(ecb-layout-name "left8")
+   '(ecb-layout-window-sizes
+     (quote
+      (("left8"
+        (ecb-directories-buffer-name 0.1365079365079365 . 0.2839506172839506)
+        (ecb-sources-buffer-name 0.1365079365079365 . 0.2222222222222222)
+        (ecb-methods-buffer-name 0.1365079365079365 . 0.2839506172839506)
+        (ecb-history-buffer-name 0.1365079365079365 . 0.19753086419753085))
+       ("left3"
+        (ecb-directories-buffer-name 0.13333333333333333 . 0.35802469135802467)
+        (ecb-sources-buffer-name 0.13333333333333333 . 0.32098765432098764)
+        (ecb-methods-buffer-name 0.13333333333333333 . 0.30864197530864196)))))
+   '(ecb-mouse-click-destination (quote last-point))
+   '(ecb-options-version "2.40")
+   '(ecb-primary-secondary-mouse-buttons (quote mouse-1--mouse-2))))
