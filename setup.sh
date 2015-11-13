@@ -8,3 +8,4 @@ fi
 ln -sf $(pwd)/.emacs $HOME/
 ln -sf $(pwd)/.bashrc $HOME/
 ln -sf $HOME/.bashrc $HOME/.profile
+ln -sf $(pwd)/.clang-format $HOME/

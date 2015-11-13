@@ -93,8 +93,9 @@
   (setq mac-command-modifier 'meta)
   (when window-system
     (x-focus-frame nil)
-    (set-frame-font "Ubuntu Mono-15")))
-
+    (set-frame-font "Ubuntu Mono-15"))
+  )
+(message "system-type: %s" system-type)
 (when window-system
   (add-to-list 'default-frame-alist '(fullscreen . maximized)))
 
@@ -210,8 +211,9 @@
   (outline-minor-mode)
   ; If clang-format is available, use it and deactivate electric chars
   (when clang-format-binary-found
-    (message "Using clang-format for C/C++ indention")
-    (setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
+    (message "Using clang-format for C/C++ indention: %s" clang-format-binary)
+    ;(setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
+    (setq clang-format-style "file")
     (add-hook 'c-special-indent-hook 'clang-format-region)
     (c-toggle-electric-state -1)
     ))
@@ -456,25 +458,35 @@
 ;; activate ecb
 (when (require 'ecb nil 'noerror)
   (setq ecb-auto-activate t)
-  (setq ecb-tip-of-the-day nil)
-  
-  (custom-set-variables
-   ;; custom-set-variables was added by Custom.
-   ;; If you edit it by hand, you could mess it up, so be careful.
-   ;; Your init file should contain only one such instance.
-   ;; If there is more than one, they won't work right.
-   '(ecb-layout-name "left8")
-   '(ecb-layout-window-sizes
-     (quote
-      (("left8"
-        (ecb-directories-buffer-name 0.1365079365079365 . 0.2839506172839506)
-        (ecb-sources-buffer-name 0.1365079365079365 . 0.2222222222222222)
-        (ecb-methods-buffer-name 0.1365079365079365 . 0.2839506172839506)
-        (ecb-history-buffer-name 0.1365079365079365 . 0.19753086419753085))
-       ("left3"
-        (ecb-directories-buffer-name 0.13333333333333333 . 0.35802469135802467)
-        (ecb-sources-buffer-name 0.13333333333333333 . 0.32098765432098764)
-        (ecb-methods-buffer-name 0.13333333333333333 . 0.30864197530864196)))))
-   '(ecb-mouse-click-destination (quote last-point))
-   '(ecb-options-version "2.40")
-   '(ecb-primary-secondary-mouse-buttons (quote mouse-1--mouse-2))))
+  (setq ecb-tip-of-the-day nil))
+
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(ecb-layout-name "left8")
+ '(ecb-layout-window-sizes
+   (quote
+    (("left8"
+      (ecb-directories-buffer-name 0.1365079365079365 . 0.2839506172839506)
+      (ecb-sources-buffer-name 0.1365079365079365 . 0.2222222222222222)
+      (ecb-methods-buffer-name 0.1365079365079365 . 0.2839506172839506)
+      (ecb-history-buffer-name 0.1365079365079365 . 0.19753086419753085))
+     ("left3"
+      (ecb-directories-buffer-name 0.13333333333333333 . 0.35802469135802467)
+      (ecb-sources-buffer-name 0.13333333333333333 . 0.32098765432098764)
+      (ecb-methods-buffer-name 0.13333333333333333 . 0.30864197530864196)))))
+ '(ecb-mouse-click-destination (quote last-point))
+ '(ecb-options-version "2.40")
+ '(ecb-primary-secondary-mouse-buttons (quote mouse-1--mouse-2))
+ '(ecb-source-path (quote (("~/workspace/" "/"))))
+ '(package-selected-packages
+   (quote
+    (lua-mode flycheck ecb cmake-ide cmake-font-lock auto-complete-clang auto-complete-chunk auto-complete-c-headers))))
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(ecb-default-highlight-face ((t (:background "cornflower blue" :foreground "black")))))
