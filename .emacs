@@ -4,33 +4,25 @@
 ;; You may delete these explanatory comments.
 ;(package-initialize)
 
-;; Load stuff
-(add-to-list 'load-path "~/tools/emacs.d")
-
-; Load yasnippet only on my OS X devbox
-;(when (eq system-type 'darwin)
-;  (add-to-list 'load-path "~/tools/emacs.d/yasnippet")
-;  (require 'yasnippet)
-;  (yas-global-mode 1))
-
-(add-to-list 'load-path "~/tools/emacs.d/color-theme-6.6.0")
-(require 'color-theme)
-(eval-after-load "color-theme"
-  '(progn
-     (color-theme-initialize)
-     (color-theme-hober)))
-
-(require 'highlight-current-line)
-(highlight-current-line-on t)
-(set-face-background 'highlight-current-line-face "#222")
-
 ;; Enable package melpa package repo
 (when (>= emacs-major-version 24)
   (require 'package)
   (package-initialize)
-  (add-to-list 'package-archives '("melpa" . "http://melpa.milkbox.net/packages/") t)
-  ;;  (add-to-list 'package-archives '("marmalade" . "http://marmalade-repo.org/packages/") t)
-  )
+  (add-to-list 'package-archives '("melpa" . "http://melpa.org/packages/")))
+
+;; Load stuff
+(add-to-list 'load-path "~/tools/emacs.d")
+
+(load-theme #'mustard t)
+
+(when (require 'highlight-current-line)
+  (highlight-current-line-on t))
+
+(when (require 'smart-mode-line nil 'noerror)
+  (setq sml/no-confirm-load-theme t)
+  ;(setq sml/theme 'dark)
+  (setq sml/theme 'powerline)
+  (sml/setup))
 
 ;; uncomment this line to disable loading of "default.el" at startup
 ; (setq inhibit-default-init t)
@@ -41,6 +33,7 @@
 
 ;; show line of file in status line
 (setq line-number-mode t)
+(setq linum-format " %d")
 
 ;; display the column of point in mode line
 (setq column-number-mode t)
@@ -76,8 +69,12 @@
 (when window-system
   ;; enable wheelmouse support by default
   (mwheel-install)
-  ;; turn of the tool-bar
+  ;; turn off the tool-bar
   (tool-bar-mode -1)
+  ;; turn off scrollbars
+  (toggle-scroll-bar -1)
+  ;; turn off the menu bar
+  ;(menu-bar-mode -1)
   ;; font-size
   ;(set-default-font "9x15")
   ;; use extended compound-text coding for X clipboard
@@ -91,9 +88,10 @@
 (when (eq system-type 'darwin)
   (setq mac-option-modifier nil)
   (setq mac-command-modifier 'meta)
+  (setq ns-use-srgb-colorspace nil)
   (when window-system
     (x-focus-frame nil)
-    (set-frame-font "Ubuntu Mono-15"))
+    (set-frame-font "Monaco-13"))
   )
 (message "system-type: %s" system-type)
 (when window-system
@@ -101,9 +99,6 @@
 
 ;; Get rid of startup message
 (setq inhibit-startup-message t)
-
-;; turn of the menu bar
-(menu-bar-mode -1)
 
 ;; Make all "yes or no" prompts show "y or n" instead
 (fset 'yes-or-no-p 'y-or-n-p)
@@ -142,7 +137,7 @@
 (global-set-key [end] 'end-of-line)
 (global-set-key "\C-xre" 'replace-regexp)
 (global-set-key [C-return] 'newline-and-indent)
-(global-set-key "\C-cc" 'dabbrev-expand)
+(global-set-key "\C-cx" 'dabbrev-expand)
 (global-set-key "\C-cb" 'revert-buffer)
 (global-set-key "\C-cu" 'upcase-region)
 (global-set-key "\C-cd" 'downcase-region)
@@ -364,73 +359,7 @@
                 ("\\.pod$"                  . cperl-mode)
                 ) auto-mode-alist))
 
-;; ***** Auto complete plugins *****
-;; Install:
-;; - auto-complete
-;; - auto-complete-c-headers
-;; - auto-complete-chunk
-;; - auto-complete-clang
-;; - flycheck
-;; - popup
-(when (require 'auto-complete-config nil 'noerror)
-  ;(add-to-list 'ac-dictionary-directories "~/.emacs.d/AC/ac-dict")
-  (require 'auto-complete-c-headers)
-;  (require 'auto-complete-clang)
-  (add-to-list 'ac-sources 'ac-source-c-headers)
-  (setq ac-auto-start nil)
-  (setq ac-quick-help-delay 0)
-  ;; Add aditional include flags for clang. You can get this list with echo "" | clang++ -v -x c++ -E -
-  (setq ac-clang-flags
-        (mapcar (lambda (item)(concat "-I" item))
-                (split-string
-                 "
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../include/c++/v1
-/usr/local/include
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/../lib/clang/6.0/include
-/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include
-/usr/include
-/System/Library/Frameworks
-/Library/Frameworks
-"
-                 )
-                )
-        )
-  (setq ac-clang-flags (cons "-std=c++11" ac-clang-flags))
-
-  ;; rebind completion key
-  ;(global-unset-key "\C-cc")
-  (define-key ac-mode-map "\C-cx" 'auto-complete)
-  
-  (defun my-ac-config ()
-    (setq-default ac-sources '(ac-source-abbrev ac-source-dictionary ac-source-words-in-same-mode-buffers))
-    (add-hook 'emacs-lisp-mode-hook 'ac-emacs-lisp-mode-setup)
-    ;; (add-hook 'c-mode-common-hook 'ac-cc-mode-setup)
-    (add-hook 'ruby-mode-hook 'ac-ruby-mode-setup)
-    (add-hook 'css-mode-hook 'ac-css-mode-setup)
-    (add-hook 'auto-complete-mode-hook 'ac-common-setup)
-    (global-auto-complete-mode t))
-  (defun my-ac-cc-mode-setup ()
-    (setq ac-sources (append '(ac-source-clang ac-source-yasnippet) ac-sources)))
-  (add-hook 'c-mode-common-hook 'my-ac-cc-mode-setup)
-  ;; ac-source-gtags
-  (my-ac-config)
-  
-  ;; Make newline-and-indent work with the auto-complete popup
-  (defvar my-backup-return-binding nil)
-  (defun my-pre-auto-complete (&optional sources)
-    (setq my-backup-return-binding (local-key-binding [return]))
-    (when my-backup-return-binding
-      (local-unset-key [return])))
-  (defun my-post-auto-complete ()
-    (when my-backup-return-binding
-      (local-set-key [return] my-backup-return-binding)
-      (setq my-backup-return-binding nil)))
-  (advice-add 'auto-complete :after #'my-pre-auto-complete)
-  (advice-add 'ac-complete :after #'my-post-auto-complete)
-  (advice-add 'ac-abort :after #'my-post-auto-complete)
-  )
-
-;; ***** CMake font lock plugin *****
+;; CMake font lock plugin
 ;; Install:
 ;; - cmake-font-lock
 ;; - cmake-ide
@@ -438,37 +367,137 @@
 (autoload 'cmake-font-lock-activate "cmake-font-lock" nil t)
 (add-hook 'cmake-mode-hook 'cmake-font-lock-activate)
 
-;; IDO mode
-(setq ido-enable-flex-matching t)
-(setq ido-everywhere t)
-(setq ido-create-new-buffer 'always)
-(setq ido-file-extensions-order '(".h" ".cpp" ".c" ".hh" ".lua" ".txt" ".cfg" ".conf" ".cnf" ".xml" ".emacs" ".el"))
-(ido-mode 1)
-;; IDO for M-x
-(global-set-key
- "\M-x"
- (lambda ()
-   (interactive)
-   (call-interactively
-    (intern
-     (ido-completing-read
-      "M-x "
-      (all-completions "" obarray 'commandp))))))
+;; Helm
+(when (require 'helm nil 'noerror)
+  (require 'helm-config)
+
+  ;; The default "C-x c" is quite close to "C-x C-c", which quits Emacs.
+  ;; Changed to "C-c h". Note: We must set "C-c h" globally, because we
+  ;; cannot change `helm-command-prefix-key' once `helm-config' is loaded.
+  (global-set-key (kbd "C-c h") 'helm-command-prefix)
+  (global-unset-key (kbd "C-x c"))
+  (global-set-key (kbd "M-x") 'helm-M-x)
+
+  (define-key helm-map (kbd "<tab>") 'helm-execute-persistent-action) ; rebind tab to run persistent action
+  (define-key helm-map (kbd "C-i") 'helm-execute-persistent-action) ; make TAB works in terminal
+  (define-key helm-map (kbd "C-y")  'helm-select-action) ; list actions using C-y
+
+  (when (executable-find "curl")
+    (setq helm-google-suggest-use-curl-p t))
+
+  (setq helm-split-window-in-side-p           t ; open helm buffer inside current window, not occupy whole other window
+        helm-move-to-line-cycle-in-source     t ; move to end or beginning of source when reaching top or bottom of source.
+        helm-ff-search-library-in-sexp        t ; search for library in `require' and `declare-function' sexp.
+        helm-scroll-amount                    8 ; scroll 8 lines other window using M-<next>/M-<prior>
+        helm-ff-file-name-history-use-recentf t)
+
+  (setq helm-gtags-ignore-case t
+        helm-gtags-auto-update t
+        helm-gtags-use-input-at-cursor t
+        helm-gtags-pulse-at-cursor t
+        helm-gtags-prefix-key "\C-cg"
+        helm-gtags-suggested-key-mapping t)
+
+  (require 'helm-gtags)
+  ;; Enable helm-gtags-mode
+  (add-hook 'dired-mode-hook 'helm-gtags-mode)
+  (add-hook 'eshell-mode-hook 'helm-gtags-mode)
+  (add-hook 'c-mode-hook 'helm-gtags-mode)
+  (add-hook 'c++-mode-hook 'helm-gtags-mode)
+  (add-hook 'asm-mode-hook 'helm-gtags-mode)
+
+  (define-key helm-gtags-mode-map (kbd "C-c g a") 'helm-gtags-tags-in-this-function)
+  (define-key helm-gtags-mode-map (kbd "C-j") 'helm-gtags-select)
+  (define-key helm-gtags-mode-map (kbd "M-.") 'helm-gtags-dwim)
+  (define-key helm-gtags-mode-map (kbd "M-,") 'helm-gtags-pop-stack)
+  (define-key helm-gtags-mode-map (kbd "C-c <") 'helm-gtags-previous-history)
+  (define-key helm-gtags-mode-map (kbd "C-c >") 'helm-gtags-next-history)
+
+  ;; Change some colors
+  (set-face-attribute 'helm-selection nil :background "#a1d7f2" :foreground "black")
+  (set-face-attribute 'helm-ff-directory nil :background "#191919" :foreground "#a1d7f2")
+  (set-face-attribute 'helm-buffer-directory nil :background "#191919" :foreground "#a1d7f2")
+  (set-face-attribute 'helm-bookmark-directory nil :background "#191919" :foreground "#a1d7f2")
+
+  (helm-mode 1))
+
+;; Install company, company-c-headers
+(when (require 'company nil 'noerror)
+  (add-hook 'after-init-hook 'global-company-mode)
+  (setq company-backends (delete 'company-clang company-backends))
+  (add-to-list 'company-backends 'company-c-headers) ; c header files completion
+  ;(add-to-list 'company-c-headers-path-system "/usr/include/c++/4.2.1/") ; c++ header files completion (osx)
+  ;(add-to-list 'company-c-headers-path-system "/usr/include/c++/4.9/") ; c++ header files completion (linux)
+  (global-set-key (kbd "C-c c") 'company-complete))
+
+(when (require 'semantic nil 'noerror)
+  (global-semanticdb-minor-mode 1)
+  (global-semantic-idle-scheduler-mode 1)
+  (semantic-add-system-include "/usr/include/boost" 'c++-mode)
+  (semantic-add-system-include "/usr/local/include/boost" 'c++-mode)
+  (global-set-key (kbd "C-c c") 'company-semantic)
+  ; show func header at the top if the func is longer than one screen
+  (add-to-list 'semantic-default-submodes 'global-semantic-stickyfunc-mode)
+  (semantic-mode 1))
+
+;; Install function-args
+(when (require 'function-args nil 'noerror)
+  (fa-config-default)
+  (add-hook 'c-mode-hook
+            (lambda ()
+              (define-key c-mode-map  [(control tab)] 'moo-complete)
+              (define-key c-mode-map (kbd "M-o")  'fa-show)))
+  (add-hook 'c++-mode-hook
+            (lambda ()
+              (define-key c++-mode-map  [(control tab)] 'moo-complete)
+              (define-key c++-mode-map (kbd "M-o")  'fa-show))))
+
+;; show unncessary whitespaces
+(add-hook 'prog-mode-hook (lambda () (interactive) (setq show-trailing-whitespace 1)))
 
 ;; activate ecb
 (when (require 'ecb nil 'noerror)
   (setq ecb-auto-activate t)
   (setq ecb-tip-of-the-day nil))
 
+;; auto-insert mode
+(add-hook 'find-file-hook 'auto-insert)
+
+;; yasnippet support
+(when (require 'yasnippet)
+  (yas-global-mode 1))
+
+;; load file templates from tools/emacs.d/templates (needs to be symlinked into ~/.emacs.d)
+(when (require 'yatemplate nil 'noerror)
+  (yatemplate-fill-alist))
+
+  (semantic-add-system-include "/usr/include/boost" 'c++-mode)
+  (semantic-add-system-include "/usr/local/include/boost" 'c++-mode)
+
+;; flycheck
+;(add-hook 'after-init-hook #'global-flycheck-mode)
+;(add-hook 'c++-mode-hook
+;          (lambda ()
+;            (setq flycheck-clang-language-standard "c++1y")
+;            (setq flycheck-clang-include-path '("/Users/andreas/workspace/nghttp2/src/includes"))
+;            ))
+
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(ecb-layout-name "left8")
+ '(column-number-mode t)
+ '(custom-safe-themes
+   (quote
+    ("79a3f477ac0cb4a106f78b6109614e991564a5c2467c36e6e854d4bc1102e178" "2dd32048690787844d8cba601ed3dd8b2f419e9bd985898d0c3792671a05b96b" default)))
+ '(ecb-layout-name "left2")
  '(ecb-layout-window-sizes
    (quote
-    (("left8"
+    (("left2"
+      (ecb-directories-buffer-name 0.10793650793650794 . 0.43209876543209874)
+      (ecb-sources-buffer-name 0.10793650793650794 . 0.5555555555555556))
+     ("left8"
       (ecb-directories-buffer-name 0.1365079365079365 . 0.2839506172839506)
       (ecb-sources-buffer-name 0.1365079365079365 . 0.2222222222222222)
       (ecb-methods-buffer-name 0.1365079365079365 . 0.2839506172839506)
@@ -481,12 +510,26 @@
  '(ecb-options-version "2.40")
  '(ecb-primary-secondary-mouse-buttons (quote mouse-1--mouse-2))
  '(ecb-source-path (quote (("~/workspace/" "/"))))
+ '(find-tag-default-function (quote tj-find-tag-default))
+ '(global-semantic-stickyfunc-mode t)
  '(package-selected-packages
    (quote
-    (lua-mode flycheck ecb cmake-ide cmake-font-lock auto-complete-clang auto-complete-chunk auto-complete-c-headers))))
+    (lua-mode flycheck ecb cmake-ide cmake-font-lock auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
+ '(temp-buffer-show-function (quote ecb-temp-buffer-show-function-emacs))
+ '(tool-bar-mode nil)
+ '(transient-mark-mode (quote (only . t))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(ecb-default-highlight-face ((t (:background "cornflower blue" :foreground "black")))))
+ '(ecb-default-highlight-face ((t (:background "#a1d7f2" :foreground "black"))))
+ '(font-lock-comment-delimiter-face ((t (:foreground "dim gray"))))
+ '(font-lock-comment-face ((t (:foreground "dim gray"))))
+ '(font-lock-function-name-face ((t (:foreground "#00cc60"))))
+ '(font-lock-type-face ((t (:foreground "#f7c527" :underline nil :weight bold))))
+ '(font-lock-warning-face ((t (:background "dark red" :foreground "#F8F8F0"))))
+ '(highlight-current-line-face ((t (:background "#232323"))))
+ '(linum ((t (:background "#232323"))))
+ '(fringe ((t (:background "#232323"))))
+ '(mode-line-inactive ((t (:inherit mode-line :background "#232323" :foreground "gray60" :inverse-video nil :box nil :weight light)))))
