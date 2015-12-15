@@ -29,6 +29,10 @@ if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
     # set a fancy prompt (non-color, unless we know we "want" color)
     export TERM=xterm-color
 
+    # git support
+    . $HOME/tools/git-completion.bash
+    . $HOME/tools/git-prompt.sh
+    
     # Use colors anywhere else
     if [ $(id -u) == 0 ]; then
         PS1_BASE='\[\033[02;31m\]\u\[\033[02;35m\]@\[\033[00m\]\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;30m\]\w\[\033[00m\]'
@@ -39,8 +43,8 @@ if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
 
     # OS X home brew found, my dev box
     if [ -n "$(which brew)" ]; then
-        if [ -f $(brew --prefix)/share/bash-completion/bash_completion ]; then
-            . $(brew --prefix)/share/bash-completion/bash_completion
+        if [ -f $(brew --prefix)/etc/bash_completion ]; then
+            . $(brew --prefix)/etc/bash_completion
         fi
         export HOMEBREW_NO_EMOJI=1
         export PATH=$(brew --prefix)/opt/coreutils/libexec/gnubin:$PATH
