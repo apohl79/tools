@@ -4,11 +4,45 @@
 ;; You may delete these explanatory comments.
 ;(package-initialize)
 
+;; Define required packages
+(setq package-list
+      '(cmake-font-lock
+        cmake-ide
+        cmake-mode
+        ecb
+        flycheck
+        lua-mode
+        async
+        company
+        company-c-headers
+        function-args
+        helm
+        helm-core
+        helm-flycheck
+        helm-git
+        helm-gtags
+        mustard-theme
+        smart-mode-line
+        smart-mode-line-powerline-theme
+        yasnippet
+        yatemplate))
+
 ;; Enable package melpa package repo
 (when (>= emacs-major-version 24)
   (require 'package)
+  (add-to-list 'package-archives '("melpa" . "http://melpa.org/packages/"))
   (package-initialize)
-  (add-to-list 'package-archives '("melpa" . "http://melpa.org/packages/")))
+  ;; Create a function that installs all need packages
+  (defun install-my-packages ()
+    (interactive)
+    (when (>= emacs-major-version 24)
+      (message "Installing packages...")
+      (unless package-archive-contents
+        (package-refresh-contents))
+      (dolist (package package-list)
+        (unless (package-installed-p package)
+          (package-install package)))
+      (message "Installing packages... done"))))
 
 ;; Load stuff
 (add-to-list 'load-path "~/tools/emacs.d")
@@ -91,9 +125,8 @@
   (setq ns-use-srgb-colorspace nil)
   (when window-system
     (x-focus-frame nil)
-    (set-frame-font "Monaco-13"))
-  )
-(message "system-type: %s" system-type)
+    (set-frame-font "Monaco-13")))
+
 (when window-system
   (add-to-list 'default-frame-alist '(fullscreen . maximized)))
 
@@ -206,7 +239,6 @@
   (outline-minor-mode)
   ; If clang-format is available, use it and deactivate electric chars
   (when clang-format-binary-found
-    (message "Using clang-format for C/C++ indention: %s" clang-format-binary)
     ;(setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
     (setq clang-format-style "file")
     (add-hook 'c-special-indent-hook 'clang-format-region)
@@ -514,7 +546,7 @@
  '(global-semantic-stickyfunc-mode t)
  '(package-selected-packages
    (quote
-    (lua-mode flycheck ecb cmake-ide cmake-font-lock auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
+    (cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
  '(temp-buffer-show-function (quote ecb-temp-buffer-show-function-emacs))
  '(tool-bar-mode nil)
  '(transient-mark-mode (quote (only . t))))
@@ -529,7 +561,7 @@
  '(font-lock-function-name-face ((t (:foreground "#00cc60"))))
  '(font-lock-type-face ((t (:foreground "#f7c527" :underline nil :weight bold))))
  '(font-lock-warning-face ((t (:background "dark red" :foreground "#F8F8F0"))))
+ '(fringe ((t (:background "#232323"))))
  '(highlight-current-line-face ((t (:background "#232323"))))
  '(linum ((t (:background "#232323"))))
- '(fringe ((t (:background "#232323"))))
  '(mode-line-inactive ((t (:inherit mode-line :background "#232323" :foreground "gray60" :inverse-video nil :box nil :weight light)))))
