@@ -28,6 +28,10 @@
   (setq clang-format-binary-found
         (not (equal "" (shell-command-to-string (concat "which " clang-format-binary))))))
 
+(when clang-format-binary-found
+  (message "Using clang-format for C/C++ indention: %s" clang-format-binary))
+(unless clang-format-binary-found (message "No clang-format found"))
+
 ;; Default style is to check for a .clang-format file
 (defvar clang-format-style "file")
 

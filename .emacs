@@ -24,6 +24,7 @@
         mustard-theme
         smart-mode-line
         smart-mode-line-powerline-theme
+        srefactor
         yasnippet
         yatemplate))
 
@@ -32,7 +33,8 @@
   (require 'package)
   (add-to-list 'package-archives '("melpa" . "http://melpa.org/packages/"))
   (package-initialize)
-  ;; Create a function that installs all need packages
+  ;; Create a function that installs all need packages after a fresh install
+  ;; Run: M-x install-my-packages
   (defun install-my-packages ()
     (interactive)
     (when (>= emacs-major-version 24)
@@ -47,7 +49,9 @@
 ;; Load stuff
 (add-to-list 'load-path "~/tools/emacs.d")
 
-(load-theme #'mustard t)
+;; Theme
+(when (require 'mustard-theme nil 'noerror)
+  (load-theme #'mustard t))
 
 (when (require 'highlight-current-line)
   (highlight-current-line-on t))
@@ -247,6 +251,22 @@
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
 (add-hook 'c++-mode-hook 'my-c-mode-common-hook)
 
+(defvar my-cpp-other-file-alist
+  '(("\\.cpp\\'" (".hpp" ".ipp" ".h"))
+    ("\\.ipp\\'" (".hpp" ".cpp"))
+    ("\\.hpp\\'" (".ipp" ".cpp"))
+    ("\\.cxx\\'" (".hxx" ".ixx"))
+    ("\\.ixx\\'" (".cxx" ".hxx"))
+    ("\\.hxx\\'" (".ixx" ".cxx"))
+    ("\\.cc\\'" (".h" ".hh"))
+    ("\\.c\\'" (".h"))
+    ("\\.h\\'" (".c" ".cpp" ".cc" ".cxx"))))
+
+(setq-default ff-other-file-alist 'my-cpp-other-file-alist)
+
+(add-hook 'c-initialization-hook
+          (lambda () (define-key c-mode-base-map (kbd "C-M-o") 'ff-get-other-file)))
+
 ;; Perl
 (defun my-cperl-mode-hook ()
   (local-set-key [return] 'newline-and-indent)
@@ -259,69 +279,7 @@
 ;; Enable doxygen. Downloaded from https://github.com/TreeRex/doxygen-el
 (require 'doxygen nil 'noerror)
 
-(defun etags-tags-completion-table ()
-  "make tags completion table,  guess C++ member functions correctly"
-  (let ((table (make-vector 511 0)))
-    (save-excursion
-      (goto-char (point-min))
-      ;; This monster regexp matches an etags tag line.
-      ;;   \1 is the string to match;
-      ;;   \2 is not interesting;
-      ;;   \3 is the guessed tag name; XXX guess should be better eg DEFUN
-      ;;   \4 is not interesting;
-      ;;   \5 is the explicitly-specified tag name.
-      ;;   \6 is the line to start searching at;
-      ;;   \7 is the char to start searching at.
-      (while (re-search-forward
-              "^\\(\\([^\177]+[^-a-zA-Z0-9_$\177]+\\)?\\([-a-zA-Z0-9_$?:]+\\)\
-\[^-a-zA-Z0-9_$?:\177]*\\)\177\\(\\([^\n\001]+\\)\001\\)?\
-\\([0-9]+\\)?,\\([0-9]+\\)?\n"
-              nil t)
-        (intern (if (match-beginning 5)
-                    ;; There is an explicit tag name.
-                    (buffer-substring (match-beginning 5) (match-end 5))
-                  ;; No explicit tag name.  Best guess.
-                  (let ((p1 (if (match-beginning 2)
-                                (buffer-substring (match-beginning 2) (match-end 2))
-                              ""))
-                        (p2 (buffer-substring (match-beginning 3) (match-end 3))))
-                    (if (string-match "::$" p1)
-                        (concat p1 p2)
-                      p2)))
-                table)))
-    table))
-
-(setq find-tag-default-function 'tj-find-tag-default)
-
-(defun tj-find-tag-default ()
-  (let ((old-syntax (char-to-string (char-syntax ?:)))
-        ret)
-    (modify-syntax-entry ?: "w")
-    (save-excursion
-      (while (looking-at "\\sw\\|\\s_")
-        (forward-char 1))
-      (if (or (re-search-backward "\\sw\\|\\s_"
-                                  (save-excursion (beginning-of-line)
-                                                  (point))
-                                  t)
-              (re-search-forward "\\(\\sw\\|\\s_\\)+"
-                                 (save-excursion (end-of-line)
-                                                 (point))
-                                 t))
-          (setq ret (progn (goto-char (match-end 0))
-                           (buffer-substring (point)
-                                             (progn (forward-sexp -1)
-                                                    (while (looking-at
-                                                            "\\s'")
-                                                      (forward-char
-                                                       1))
-                                                    (point)))))
-        nil))
-    (modify-syntax-entry ?: old-syntax)
-    ret))
-;; End C/C++
-
-;; Some additional keywords
+;; Add some additional keywords
 ;; C
 (font-lock-add-keywords 'c-mode
                         '(("\\<\\(FIXME\\)" 1 font-lock-warning-face prepend)
@@ -446,7 +404,7 @@
   (define-key helm-gtags-mode-map (kbd "C-c >") 'helm-gtags-next-history)
 
   ;; Change some colors
-  (set-face-attribute 'helm-selection nil :background "#a1d7f2" :foreground "black")
+  (set-face-attribute 'helm-selection nil :background "#232353" :foreground "yellow")
   (set-face-attribute 'helm-ff-directory nil :background "#191919" :foreground "#a1d7f2")
   (set-face-attribute 'helm-buffer-directory nil :background "#191919" :foreground "#a1d7f2")
   (set-face-attribute 'helm-bookmark-directory nil :background "#191919" :foreground "#a1d7f2")
@@ -460,8 +418,16 @@
   (add-to-list 'company-backends 'company-c-headers) ; c header files completion
   ;(add-to-list 'company-c-headers-path-system "/usr/include/c++/4.2.1/") ; c++ header files completion (osx)
   ;(add-to-list 'company-c-headers-path-system "/usr/include/c++/4.9/") ; c++ header files completion (linux)
-  (global-set-key (kbd "C-c c") 'company-complete))
+  (global-set-key (kbd "C-c c") 'company-complete)
+  (global-set-key (kbd "C-c x") 'company-dabbrev))
 
+;; semantic-refactor
+(when (require 'srefactor nil 'noerror)
+  (require 'srefactor-lisp nil 'noerror)
+  (define-key c-mode-map (kbd "M-RET") 'srefactor-refactor-at-point)
+  (define-key c++-mode-map (kbd "M-RET") 'srefactor-refactor-at-point))
+
+;; semantic-mode
 (when (require 'semantic nil 'noerror)
   (global-semanticdb-minor-mode 1)
   (global-semantic-idle-scheduler-mode 1)
@@ -546,7 +512,7 @@
  '(global-semantic-stickyfunc-mode t)
  '(package-selected-packages
    (quote
-    (cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
+    (srefactor cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
  '(temp-buffer-show-function (quote ecb-temp-buffer-show-function-emacs))
  '(tool-bar-mode nil)
  '(transient-mark-mode (quote (only . t))))
