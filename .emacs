@@ -11,10 +11,13 @@
         cmake-mode
         ecb
         flycheck
+        flycheck-irony
         lua-mode
         async
         company
-        company-c-headers
+        company-irony
+        company-irony-c-headers
+        irony
         function-args
         helm
         helm-core
@@ -243,11 +246,22 @@
   (outline-minor-mode)
   ; If clang-format is available, use it and deactivate electric chars
   (when clang-format-binary-found
-    ;(setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
-    (setq clang-format-style "file")
-    (add-hook 'c-special-indent-hook 'clang-format-region)
-    (c-toggle-electric-state -1)
-    ))
+                                        ;(setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
+    ;; Auto indent via clang-format
+    (add-hook 'c-special-indent-hook
+              (lambda ()
+                (interactive)
+                (setq my-char-pos (buffer-substring-no-properties (point) (1+ (point))))
+                (let ((beg (if mark-active (region-beginning)
+                             (min (line-beginning-position) (1- (point-max)))))
+                      (end (if mark-active (region-end)
+                             (line-end-position))))
+                  (when (string-match-p "[^ ]" (buffer-substring-no-properties beg end)) ; ignore empty lines
+                    (when (not (equal "}" my-char-pos)) ; allow to move closing }
+                      (when (not (equal ")" my-char-pos)) ; allow to move closing )
+                        (when (not (equal "]" my-char-pos)) ; allow to move closing ]
+                          (clang-format-region beg end))))))))
+    (c-toggle-electric-state -1)))
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
 (add-hook 'c++-mode-hook 'my-c-mode-common-hook)
 
@@ -411,13 +425,36 @@
 
   (helm-mode 1))
 
+;; irony
+;; complicated setup:
+;; 1) OSX: brew install llvm --with-clang
+;; 2) run M-x irony-install-server
+(when (require 'irony nil 'noerror)
+  (add-hook 'c++-mode-hook 'irony-mode)
+  (add-hook 'c-mode-hook 'irony-mode)
+  ;; replace the `completion-at-point' and `complete-symbol' bindings in
+  ;; irony-mode's buffers by irony-mode's function
+  (defun my-irony-mode-hook ()
+    (define-key irony-mode-map [remap completion-at-point]
+      'irony-completion-at-point-async)
+    (define-key irony-mode-map [remap complete-symbol]
+      'irony-completion-at-point-async))
+  (add-hook 'irony-mode-hook 'my-irony-mode-hook)
+  (add-hook 'irony-mode-hook 'irony-cdb-autosetup-compile-options)
+  (add-hook 'irony-mode-hook 'company-irony-setup-begin-commands)
+  (eval-after-load 'company
+    '(add-to-list 'company-backends '(company-irony-c-headers company-irony)))
+  (eval-after-load 'company
+    '(global-set-key (kbd "C-c c") 'company-irony))
+  (eval-after-load 'flycheck
+    '(add-hook 'flycheck-mode-hook #'flycheck-irony-setup)))
+
 ;; Install company, company-c-headers
 (when (require 'company nil 'noerror)
   (add-hook 'after-init-hook 'global-company-mode)
-  (setq company-backends (delete 'company-clang company-backends))
-  (add-to-list 'company-backends 'company-c-headers) ; c header files completion
-  ;(add-to-list 'company-c-headers-path-system "/usr/include/c++/4.2.1/") ; c++ header files completion (osx)
-  ;(add-to-list 'company-c-headers-path-system "/usr/include/c++/4.9/") ; c++ header files completion (linux)
+  (setq company-backends (delete 'company-semantic company-backends))
+  ;(add-to-list 'company-backends 'company-c-headers) ; c header files completion
+  (add-to-list 'company-backends '(company-irony-c-headers company-irony))
   (global-set-key (kbd "C-c c") 'company-complete)
   (global-set-key (kbd "C-c x") 'company-dabbrev))
 
@@ -433,7 +470,7 @@
   (global-semantic-idle-scheduler-mode 1)
   (semantic-add-system-include "/usr/include/boost" 'c++-mode)
   (semantic-add-system-include "/usr/local/include/boost" 'c++-mode)
-  (global-set-key (kbd "C-c c") 'company-semantic)
+  ;(global-set-key (kbd "C-c c") 'company-semantic)
   ; show func header at the top if the func is longer than one screen
   (add-to-list 'semantic-default-submodes 'global-semantic-stickyfunc-mode)
   (semantic-mode 1))
@@ -512,7 +549,7 @@
  '(global-semantic-stickyfunc-mode t)
  '(package-selected-packages
    (quote
-    (srefactor cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
+    (company-irony company-irony-c-headers flycheck-irony irony srefactor cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
  '(temp-buffer-show-function (quote ecb-temp-buffer-show-function-emacs))
  '(tool-bar-mode nil)
  '(transient-mark-mode (quote (only . t))))
