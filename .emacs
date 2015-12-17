@@ -17,6 +17,7 @@
         company
         company-irony
         company-irony-c-headers
+        company-try-hard
         irony
         function-args
         helm
@@ -76,7 +77,7 @@
 (setq line-number-mode t)
 (setq linum-format " %d")
 
-;; display the column of point in mode line
+;; Display the column of point in mode line
 (setq column-number-mode t)
 
 ;; line numbers
@@ -265,6 +266,7 @@
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
 (add-hook 'c++-mode-hook 'my-c-mode-common-hook)
 
+;; Switch between header and implementation
 (defvar my-cpp-other-file-alist
   '(("\\.cpp\\'" (".hpp" ".ipp" ".h"))
     ("\\.ipp\\'" (".hpp" ".cpp"))
@@ -403,6 +405,7 @@
         helm-gtags-suggested-key-mapping t)
 
   (require 'helm-gtags)
+
   ;; Enable helm-gtags-mode
   (add-hook 'dired-mode-hook 'helm-gtags-mode)
   (add-hook 'eshell-mode-hook 'helm-gtags-mode)
@@ -442,21 +445,28 @@
   (add-hook 'irony-mode-hook 'my-irony-mode-hook)
   (add-hook 'irony-mode-hook 'irony-cdb-autosetup-compile-options)
   (add-hook 'irony-mode-hook 'company-irony-setup-begin-commands)
-  (eval-after-load 'company
-    '(add-to-list 'company-backends '(company-irony-c-headers company-irony)))
-  (eval-after-load 'company
-    '(global-set-key (kbd "C-c c") 'company-irony))
+  ;;(eval-after-load 'company
+  ;;  '(add-to-list 'company-backends '(company-irony-c-headers company-irony)))
   (eval-after-load 'flycheck
     '(add-hook 'flycheck-mode-hook #'flycheck-irony-setup)))
+
+(defun my-cpp-company-backends ()
+  (setq company-backends (list '(company-irony-c-headers company-irony)
+                               'company-semantic
+                               'company-dabbrev-code
+                               'company-dabbrev))
+  (global-set-key (kbd "C-c c") #'company-try-hard)
+  (define-key company-active-map (kbd "C-c c") #'company-try-hard))
 
 ;; Install company, company-c-headers
 (when (require 'company nil 'noerror)
   (add-hook 'after-init-hook 'global-company-mode)
-  (setq company-backends (delete 'company-semantic company-backends))
-  ;(add-to-list 'company-backends 'company-c-headers) ; c header files completion
-  (add-to-list 'company-backends '(company-irony-c-headers company-irony))
-  (global-set-key (kbd "C-c c") 'company-complete)
-  (global-set-key (kbd "C-c x") 'company-dabbrev))
+  (setq company-idle-delay 0.02)
+  ;;(add-to-list 'company-backends 'company-c-headers) ; c header files completion
+  ;;(add-to-list 'company-backends '(company-irony-c-headers company-irony))
+  (add-hook 'c-mode-hook 'my-cpp-company-backends)
+  (add-hook 'c++-mode-hook 'my-cpp-company-backends)
+  (global-set-key (kbd "C-c c") 'company-complete))
 
 ;; semantic-refactor
 (when (require 'srefactor nil 'noerror)
@@ -549,7 +559,7 @@
  '(global-semantic-stickyfunc-mode t)
  '(package-selected-packages
    (quote
-    (company-irony company-irony-c-headers flycheck-irony irony srefactor cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
+    (company-try-hard company-irony company-irony-c-headers flycheck-irony irony srefactor cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
  '(temp-buffer-show-function (quote ecb-temp-buffer-show-function-emacs))
  '(tool-bar-mode nil)
  '(transient-mark-mode (quote (only . t))))
