@@ -4,6 +4,9 @@
 ;; You may delete these explanatory comments.
 ;(package-initialize)
 
+;; Load stuff
+(add-to-list 'load-path "~/tools/emacs.d")
+
 ;; Define required packages
 (setq package-list
       '(cmake-font-lock
@@ -50,21 +53,47 @@
           (package-install package)))
       (message "Installing packages... done"))))
 
-;; Load stuff
-(add-to-list 'load-path "~/tools/emacs.d")
+;; special key bindings for OS X
+(when (eq system-type 'darwin)
+  (setq mac-option-modifier nil)
+  (setq mac-command-modifier 'meta)
+  (setq ns-use-srgb-colorspace nil)
+  (when window-system
+    (x-focus-frame nil)
+    (set-frame-font "Monaco-13")))
 
-;; Theme
-(when (require 'mustard-theme nil 'noerror)
-  (load-theme #'mustard t))
+;; Window and font size
+(when window-system
+  ;; enable wheelmouse support by default
+  (mwheel-install)
+  ;; turn off the tool-bar
+  (tool-bar-mode -1)
+  ;; turn off scrollbars
+  (toggle-scroll-bar -1)
+  ;; turn off the menu bar
+  ;(menu-bar-mode -1)
+  ;; font-size
+  ;(set-default-font "9x15")
+  ;; use extended compound-text coding for X clipboard
+  (set-selection-coding-system 'compound-text-with-extensions)
+  ;(set-face-background 'default "#ffffff")
+  ;(set-frame-size (selected-frame) 199 60)
+  ;; Theme
+  (when (require 'mustard-theme nil 'noerror)
+    (load-theme #'mustard t))
+  ;; line numbers
+  (setq linum-format " %d")
+  (global-linum-mode 1)
 
-(when (require 'highlight-current-line)
-  (highlight-current-line-on t))
+  (when (require 'highlight-current-line)
+    (highlight-current-line-on t))
 
-(when (require 'smart-mode-line nil 'noerror)
-  (setq sml/no-confirm-load-theme t)
-  ;(setq sml/theme 'dark)
-  (setq sml/theme 'powerline)
-  (sml/setup))
+  (when (require 'smart-mode-line nil 'noerror)
+    (setq sml/no-confirm-load-theme t)
+    ;;(setq sml/theme 'dark)
+    (setq sml/theme 'powerline)
+    (sml/setup))
+  (add-to-list 'default-frame-alist '(fullscreen . maximized)))
 
 ;; uncomment this line to disable loading of "default.el" at startup
 ; (setq inhibit-default-init t)
@@ -75,13 +104,9 @@
 
 ;; show line of file in status line
 (setq line-number-mode t)
-(setq linum-format " %d")
 
 ;; Display the column of point in mode line
 (setq column-number-mode t)
-
-;; line numbers
-(global-linum-mode 1)
 
 ;; replace active region just by typing
 (delete-selection-mode 1)
@@ -106,37 +131,6 @@
 
 ;; stop at the end of the file, not just add lines
 (setq next-line-add-newlines nil)
-
-;; Window and font size
-(when window-system
-  ;; enable wheelmouse support by default
-  (mwheel-install)
-  ;; turn off the tool-bar
-  (tool-bar-mode -1)
-  ;; turn off scrollbars
-  (toggle-scroll-bar -1)
-  ;; turn off the menu bar
-  ;(menu-bar-mode -1)
-  ;; font-size
-  ;(set-default-font "9x15")
-  ;; use extended compound-text coding for X clipboard
-  (set-selection-coding-system 'compound-text-with-extensions)
-  ;(set-face-background 'default "#ffffff")
-  ;(set-frame-size (selected-frame) 199 60)
-  )
-;;(set-frame-height (selected-frame) 200))
-
-;; special key bindings for OS X
-(when (eq system-type 'darwin)
-  (setq mac-option-modifier nil)
-  (setq mac-command-modifier 'meta)
-  (setq ns-use-srgb-colorspace nil)
-  (when window-system
-    (x-focus-frame nil)
-    (set-frame-font "Monaco-13")))
-
-(when window-system
-  (add-to-list 'default-frame-alist '(fullscreen . maximized)))
 
 ;; Get rid of startup message
 (setq inhibit-startup-message t)
@@ -247,7 +241,7 @@
   (outline-minor-mode)
   ; If clang-format is available, use it and deactivate electric chars
   (when clang-format-binary-found
-                                        ;(setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
+    ;;(setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
     ;; Auto indent via clang-format
     (add-hook 'c-special-indent-hook
               (lambda ()
@@ -268,7 +262,7 @@
 
 ;; Switch between header and implementation
 (defvar my-cpp-other-file-alist
-  '(("\\.cpp\\'" (".hpp" ".ipp" ".h"))
+  '(("\\.cpp\\'" (".h" ".hpp" ".ipp"))
     ("\\.ipp\\'" (".hpp" ".cpp"))
     ("\\.hpp\\'" (".ipp" ".cpp"))
     ("\\.cxx\\'" (".hxx" ".ixx"))
@@ -276,7 +270,7 @@
     ("\\.hxx\\'" (".ixx" ".cxx"))
     ("\\.cc\\'" (".h" ".hh"))
     ("\\.c\\'" (".h"))
-    ("\\.h\\'" (".c" ".cpp" ".cc" ".cxx"))))
+    ("\\.h\\'" (".cpp" ".cc" ".cxx" ".c"))))
 
 (setq-default ff-other-file-alist 'my-cpp-other-file-alist)
 
@@ -451,8 +445,12 @@
     '(add-hook 'flycheck-mode-hook #'flycheck-irony-setup)))
 
 (defun my-cpp-company-backends ()
+  ;;(setq company-backends (list '(company-irony-c-headers company-irony)
+  ;;                             'company-semantic
+  ;;                             'company-dabbrev-code
+  ;;                             'company-dabbrev))
   (setq company-backends (list '(company-irony-c-headers company-irony)
-                               'company-semantic
+                               'company-gtags
                                'company-dabbrev-code
                                'company-dabbrev))
   (global-set-key (kbd "C-c c") #'company-try-hard)
@@ -490,34 +488,38 @@
   (fa-config-default)
   (add-hook 'c-mode-hook
             (lambda ()
-              (define-key c-mode-map  [(control tab)] 'moo-complete)
+              ;(define-key c-mode-map  [(control tab)] 'moo-complete)
               (define-key c-mode-map (kbd "M-o")  'fa-show)))
   (add-hook 'c++-mode-hook
             (lambda ()
-              (define-key c++-mode-map  [(control tab)] 'moo-complete)
+              ;(define-key c++-mode-map  [(control tab)] 'moo-complete)
               (define-key c++-mode-map (kbd "M-o")  'fa-show))))
 
 ;; show unncessary whitespaces
 (add-hook 'prog-mode-hook (lambda () (interactive) (setq show-trailing-whitespace 1)))
-
-;; activate ecb
-(when (require 'ecb nil 'noerror)
-  (setq ecb-auto-activate t)
-  (setq ecb-tip-of-the-day nil))
 
 ;; auto-insert mode
 (add-hook 'find-file-hook 'auto-insert)
 
 ;; yasnippet support
 (when (require 'yasnippet)
-  (yas-global-mode 1))
+  (yas-global-mode 1)
+  (setq yas-snippet-dirs '("~/.emacs.d/snippets"))
+  (global-set-key (kbd "C-<tab>") 'company-yasnippet))
 
 ;; load file templates from tools/emacs.d/templates (needs to be symlinked into ~/.emacs.d)
 (when (require 'yatemplate nil 'noerror)
   (yatemplate-fill-alist))
 
-  (semantic-add-system-include "/usr/include/boost" 'c++-mode)
-  (semantic-add-system-include "/usr/local/include/boost" 'c++-mode)
+(semantic-add-system-include "/usr/include/boost" 'c++-mode)
+(semantic-add-system-include "/usr/local/include/boost" 'c++-mode)
+
+;; activate ecb if not running emerge
+(when (not (string= "emerge-files-with-ancestor-command" (nth 2 command-line-args)))
+  (when window-system
+    (when (require 'ecb nil 'noerror)
+      (setq ecb-auto-activate t)
+      (setq ecb-tip-of-the-day nil))))
 
 ;; flycheck
 ;(add-hook 'after-init-hook #'global-flycheck-mode)
@@ -555,11 +557,11 @@
  '(ecb-options-version "2.40")
  '(ecb-primary-secondary-mouse-buttons (quote mouse-1--mouse-2))
  '(ecb-source-path (quote (("~/workspace/" "/"))))
- '(find-tag-default-function (quote tj-find-tag-default))
  '(global-semantic-stickyfunc-mode t)
+ '(mouse-buffer-menu-mode-mult 0)
  '(package-selected-packages
    (quote
-    (company-try-hard company-irony company-irony-c-headers flycheck-irony irony srefactor cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
+    (dockerfile-mode yaml-mode json-mode company-try-hard company-irony company-irony-c-headers flycheck-irony irony srefactor cmake-font-lock lua-mode flycheck ecb cmake-ide auto-complete-clang auto-complete-chunk auto-complete-c-headers)))
  '(temp-buffer-show-function (quote ecb-temp-buffer-show-function-emacs))
  '(tool-bar-mode nil)
  '(transient-mark-mode (quote (only . t))))

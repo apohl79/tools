@@ -32,7 +32,7 @@ if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
     # git support
     . $HOME/tools/git-completion.bash
     . $HOME/tools/git-prompt.sh
-    
+
     # Use colors anywhere else
     if [ $(id -u) == 0 ]; then
         PS1_BASE='\[\033[02;31m\]\u\[\033[02;35m\]@\[\033[00m\]\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;30m\]\w\[\033[00m\]'
@@ -55,6 +55,11 @@ if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
         GIT_PS1_SHOWDIRTYSTATE=1
         GIT_PS1_SHOWCOLORHINTS=1
         PROMPT_COMMAND='__git_ps1 "\[\e]0;\h: \w\a\]$PS1_BASE" "\\\$ "'
+
+        # SSH agent, required from 10.12 on
+        if [ -e $HOME/.ssh/id_rsa ]; then
+            ssh-add -K
+        fi
     else
         # Bash completion
         if [ -f /etc/bash_completion ]; then
