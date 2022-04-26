@@ -1,0 +1,20 @@
+#!/usr/bin/expect
+
+set USER [lindex $argv 0]
+set MACHINE [lindex $argv 1]
+set PORT [lindex $argv 2]
+set PASSWORD [lindex $argv 3]
+set COMMAND [lindex $argv 4]
+
+#set timeout 1
+send -i $user_spawn_id "Connecting to $USER@$MACHINE... \n"
+spawn -noecho ssh -p$PORT $USER@$MACHINE "$COMMAND"
+#sleep 0.5
+
+set DONE 0
+set timeout 100
+expect "assword:" { send "$PASSWORD\r" }
+log_user 1
+set timeout 0
+interact
+

@@ -1,0 +1,14 @@
+/*
+ * Copyright (c) 2022 Andreas Pohl
+ * Licensed under MIT (https://github.com/apohl79/audiogridder/blob/master/COPYING)
+ *
+ * Author: Andreas Pohl
+ */
+
+#include "`(file-name-nondirectory (file-name-sans-extension (buffer-file-name)))`.hpp"
+
+namespace e47 {
+
+$0
+
+} // namespace e47

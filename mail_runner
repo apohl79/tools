@@ -1,0 +1,16 @@
+#!/usr/bin/env python3 -u
+
+import json, plistlib, os
+
+user = 'pohlandr'
+plist = '/Library/Objective-See/LuLu/rules.plist'
+app = '/Applications/Mail.app/Contents/MacOS/Mail'
+
+with open(plist, 'rb') as f:
+    data = plistlib.load(f)
+    data[app]['action'] = 0
+
+with open(plist, 'wb') as f:
+    plistlib.dump(data, f)
+
+#os.system('sudo -u {} {}'.format(user, app))

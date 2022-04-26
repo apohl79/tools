@@ -1,0 +1,16 @@
+/*
+ * Copyright (c) 2022 SyncDNA Inc.
+ *
+ * Author: Andreas Pohl <andreas.pohl@syncdna.com>
+ */
+
+#ifndef ${1:_`(upcase (file-name-base buffer-file-name))`_HPP_$(upcase yas-text)}
+#define $1
+
+namespace syncdna {
+
+$0
+
+} // namespace syncdna
+
+#endif // $1

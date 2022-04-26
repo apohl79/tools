@@ -212,7 +212,11 @@ function MAIN {
 		SSHRUNSINGLE "$*"
 		;;
     	    "fix")
-    		$SSHFIXEXP $SSHTOOLS $WALLET $USER $MACHINE $PORT
+                if [ $USE_PUBKEY -eq 0 ]; then
+    		    $SSHFIXEXP $SSHTOOLS $WALLET $USER $MACHINE $PORT
+                else
+                    ssh -l $USER -p $PORT $MACHINE true
+                fi
     		echo
     		;;
     	    "mnt")

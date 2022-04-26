@@ -1,0 +1,13 @@
+/*
+ * Copyright (c) 2022 SyncDNA Inc.
+ *
+ * Author: Andreas Pohl <andreas.pohl@syncdna.com>
+ */
+
+#include "`(file-name-nondirectory (file-name-sans-extension (buffer-file-name)))`.hpp"
+
+namespace syncdna {
+
+$0
+
+} // namespace syncdna

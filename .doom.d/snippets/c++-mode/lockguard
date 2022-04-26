@@ -1,0 +1,5 @@
+# -*- mode: snippet -*-
+# name: lockguard
+# key: mlg
+# --
+std::lock_guard<std::mutex> lock($0);

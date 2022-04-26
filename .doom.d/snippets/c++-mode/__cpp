@@ -1,0 +1,9 @@
+/*
+ * Copyright (c) 2022 Andreas Pohl
+ *
+ * Author: Andreas Pohl
+ */
+
+#include "`(file-name-nondirectory (file-name-sans-extension (buffer-file-name)))`.hpp"
+
+$0
