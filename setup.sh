@@ -9,4 +9,4 @@ ln -sf $(pwd)/.zshrc $HOME/
 ln -sf $(pwd)/.bashrc $HOME/
 ln -sf $HOME/.zshrc $HOME/.profile
 ln -sf $(pwd)/.clang-format $HOME/
-ln -sf $(pwd)/.doom.d/snippets $HOME/
+ln -sf $(pwd)/.doom.d $HOME/
