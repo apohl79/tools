@@ -1,7 +1,10 @@
 #!/bin/sh
+scriptname=$0
+dir=$(readlink $0|sed "s,/$scriptname,,")
+if [ -z $dir ]; then
+    dir=$(pwd)
+fi
 cd $HOME
-scriptname=$(basename $0)
-dir=$(readlink -f $0|sed "s,/$scriptname,,")
 if [ ! -d $HOME/bin ]; then
     mkdir $HOME/bin
 fi
