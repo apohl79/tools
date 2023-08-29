@@ -3,7 +3,7 @@
 if [ -z "$WORK_SESSION" ]; then
     #export SSH_AUTH_SOCK=$HOME/.yubiagent/sock
     if [ -e $HOME/.ssh/id_rsa ]; then
-        ssh-add -K
+        ssh-add --apple-use-keychain
     fi
 fi
 
@@ -18,7 +18,7 @@ fi
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
 # Path to your oh-my-zsh installation.
-export ZSH="$HOME/.oh-my-zsh"
+export ZSH="/Users/apohl/.oh-my-zsh"
 
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time oh-my-zsh is loaded, in which case,
@@ -98,7 +98,7 @@ export PATH=$HOME/bin:$HOME/bin/tools/sshtools:$HOME/bin/tools:$HOME/.sshsession
 export LANG=C
 export EDITOR=emacs
 
-if [ -x "$(which brew)" ]; then
+if [ -n "$(which brew)" ]; then
     export HOMEBREW_NO_EMOJI=1
     export HOMEBREW_NO_AUTO_UPDATE=1
     export PATH=$(brew --prefix)/opt/coreutils/libexec/gnubin:$PATH

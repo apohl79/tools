@@ -1,10 +1,13 @@
-export PATH=$HOME/bin:$HOME/bin/tools/sshtools:$HOME/bin/tools:$HOME/.sshsessions:$HOME/android/tools:$HOME/android/adt/sdk/tools:$HOME/android/adt/sdk/platform-tools:/usr/local/bin:/usr/local/sbin:/opt/433ctrl/scripts:$PATH
+export PATH=$HOME/bin:$HOME/bin/tools/sshtools:$HOME/bin/tools:$HOME/.sshsessions:/usr/local/bin:/usr/local/sbin:/opt/433ctrl/scripts:$PATH
 
 IS_TTY=1
 if [ -n "$(which tty)" ]; then
     tty -s
     IS_TTY=$?
 fi
+
+#echo "IS_TTY = $IS_TTY"
+#echo "BASH_VERSION = $BASH_VERSION"
 
 # Check if running bash
 if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
@@ -34,12 +37,21 @@ if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
     . $HOME/tools/git-prompt.sh
 
     # Use colors anywhere else
-    if [ $(id -u) == 0 ]; then
-        PS1_BASE='\[\033[02;31m\]\u\[\033[02;35m\]@\[\033[00m\]\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;30m\]\w\[\033[00m\]'
+    if [ -n "$INSIDE_EMACS" ]; then
+        export INSIDE_EMACS
+        if [ $(id -u) == 0 ]; then
+            PS1_BASE='\[\033[02;31m\]\u\[\033[02;35m\]@\[\033[00m\]\[\033[01;34m\]\h\[\033[00m\]:\W'
+        else
+            PS1_BASE='\[\033[02;33m\]\u\[\033[02;35m\]@\[\033[00m\]\[\033[01;34m\]\h\[\033[00m\]:\W'
+        fi
     else
-        PS1_BASE='\[\033[02;33m\]\u\[\033[02;35m\]@\[\033[00m\]\[\033[01;34m\]\h\[\033[00m\]:\[\033[01;30m\]\w\[\033[00m\]'
+        if [ $(id -u) == 0 ]; then
+            PS1_BASE='\001\033[02;31m\002\u\001\033[02;35m\002@\001\033[00m\002\001\033[01;34m\002\h\001\033[00m\002:\001\033[01;30m\002\w\001\033[00m\002'
+        else
+            PS1_BASE='\001\033[02;33m\002\u\001\033[02;35m\002@\001\033[00m\002\001\033[01;34m\002\h\001\033[00m\002:\001\033[01;30m\002\w\001\033[00m\002'
+        fi
     fi
-    PS1=$PS1_BASE'$ '
+    PS1="$PS1_OATH$PS1_BASE$ "
 
     # OS X home brew found, my dev box
     if [ -n "$(which brew)" ]; then
@@ -47,6 +59,7 @@ if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
             . $(brew --prefix)/etc/bash_completion
         fi
         export HOMEBREW_NO_EMOJI=1
+        export HOMEBREW_NO_AUTO_UPDATE=1
         export PATH=$(brew --prefix)/opt/coreutils/libexec/gnubin:$PATH
         export MANPATH=$(brew --prefix)/opt/coreutils/libexec/gnuman:$MANPATH
         export XML_CATALOG_FILES=/usr/local/etc/xml/catalog
@@ -54,11 +67,15 @@ if [ $IS_TTY == 0 ] && [ -n "$BASH_VERSION" ]; then
         # Colorfull prompt with git support
         GIT_PS1_SHOWDIRTYSTATE=1
         GIT_PS1_SHOWCOLORHINTS=1
-        PROMPT_COMMAND='__git_ps1 "\[\e]0;\h: \w\a\]$PS1_BASE" "\\\$ "'
+        #PROMPT_COMMAND='__git_ps1 "\[\e]0;\h: \w\a\]$PS1_BASE" "\\\$ "'
 
         # SSH agent, required from 10.12 on
-        if [ -e $HOME/.ssh/id_rsa ]; then
-            ssh-add -K
+        # PS1_OATH defined via vzm-env in .bashrc_local
+        if [ -z "$PS1_OATH" ]; then
+            #export SSH_AUTH_SOCK=$HOME/.yubiagent/sock
+            if [ -e $HOME/.ssh/id_rsa ]; then
+                ssh-add -K
+            fi
         fi
     else
         # Bash completion
