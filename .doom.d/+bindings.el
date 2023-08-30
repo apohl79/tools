@@ -8,6 +8,7 @@
       "s-." #'xref-find-definitions
       "s-," #'xref-pop-marker-stack
       "C-c C-c" #'vterm-send-C-c
+      "C-c RET" #'recompile
       "s-w" nil
       "M-s-<up>" #'comint-previous-input
       "M-s-<down>" #'comint-next-input

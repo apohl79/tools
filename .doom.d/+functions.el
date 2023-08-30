@@ -97,7 +97,7 @@
 called with a =C-0= prefix arg, releases the previously set
 window and reverts to the default window selection behaviour. Default is a
 one-time dedication, use =C-u= for unlimited."
-  (interactive "p")
+  (interactive)
   (setq dedicated-other-window (selected-window))
   (message "window dedicated"))
 
@@ -125,31 +125,35 @@ selected. If none is selected, revert to the default behaviour."
 (defun my-setup-ide ()
   "My IDE setup."
   (interactive)
+  ;(ace-window 0)
   (savehist-save)
-  (ace-window 0)
-  (dedicate-window)
-  (split-window-below -15) ; bottom terminal
+  ;(split-window-below -15) ; bottom terminal
   (split-window-right) ; second editor
-  (other-window 2)
+  ;(other-window 2)
   ;(split-window-right)
   ;(switch-to-buffer (concat "*compilation*<" (projectile-project-name) ">"))
   ;(compilation-setup t)
   ;(compilation-mode)
-  (setq compilation-scroll-output 'next-error)
-  (setq compilation-skip-threshold 2)
+  ;(setq compilation-scroll-output 'next-error)
+  ;(setq compilation-skip-threshold 2)
   ;(other-window 1)
   ;(comint-run "lldb")
-  (switch-to-buffer "*vterm*")
-  (vterm)
-  (treemacs)
+  ;(switch-to-buffer "*vterm*")
+  ;(vterm)
+  ;(treemacs)
+  ;(treemacs-display-current-project-exclusively)
+  (treemacs-add-and-display-current-project-exclusively)
+  (treemacs-project-follow-mode 1)
+  (treemacs-follow-mode 1)
   (other-window 1)
+  (dedicate-window)
+  (bury-successful-compilation-turn-on)
   )
 
 (defun my-setup-ide-small ()
   "My IDE setup for smalle screens."
   (interactive)
   (savehist-save)
-  (ace-window 0)
   (dedicate-window)
   ;(split-window-below -15) ; bottom terminal
   ;(split-window-right) ; second editor
@@ -164,8 +168,11 @@ selected. If none is selected, revert to the default behaviour."
   ;(comint-run "lldb")
   ;(switch-to-buffer "*vterm*")
   ;(vterm)
-  (treemacs)
+  ;(treemacs)
+  (treemacs-add-and-display-current-project-exclusively)
+  (treemacs-follow-mode 1)
   (other-window 1)
+  (bury-successful-compilation-turn-on)
   )
 
 (defun my-setup-ide-nocompile ()
@@ -183,3 +190,9 @@ selected. If none is selected, revert to the default behaviour."
   (select-window (get-buffer-window (concat "*compilation*<" (projectile-project-name) ">")))
   (+ivy/compile)
   )
+
+(defun my-reload-dir-locals-for-current-buffer ()
+  "reload dir locals for the current buffer"
+  (interactive)
+  (let ((enable-local-variables :all))
+    (hack-dir-local-variables-non-file-buffer)))

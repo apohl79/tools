@@ -69,12 +69,17 @@
 (setq confirm-kill-emacs nil)
 
 ;; make sure we get asked to accept non-safe local variables from .dir-locals.el files
-(setq enable-local-variables t)
+;(setq enable-local-variables t)
+(setq enable-local-variables :all)
 
+
+(setq lsp-disabled-clients '(ccls))
 (setq lsp-idle-delay 0.9)
 (setq lsp-restart 'auto-restart)
 (setq lsp-ui-doc-enable nil)
 ;(setq lsp-log-io t)
+;(setq lsp-file-watch-threshold nil)
+;(setq lsp-enable-file-watchers nil)
 
 ;; no flycheck for now
 ;(setq lsp-diagnostics-provider :none)
@@ -88,6 +93,7 @@
 ;;        (for AG that is App.cpp)
 ;;        -> make sure that this command contains all needed include dirs
 ;(setq lsp-clients-clangd-executable "/Library/Developer/CommandLineTools/usr/bin/clangd")
+
 (setq lsp-clients-clangd-executable "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clangd")
 (setq lsp-clients-clangd-args '("-log=error" "--background-index" "--clang-tidy" "--completion-style=bundled" "--header-insertion=never" "--recovery-ast" "--pretty"))
 
@@ -112,7 +118,7 @@
             ;                (expand-file-name "~/audio/AudioGridder/JUCE/modules")
             ;                (expand-file-name "~/audio/ag-deps-macos-x86_64/include")
             ;                ))
-            (setq flycheck-clang-language-standard "c++14")
+            (setq flycheck-clang-language-standard "c++17")
             ))
 
 (after! company
@@ -159,6 +165,7 @@
                 ("\\.\\([pP][Llm]\\|al\\)$" . cperl-mode)
                 ("\\.pod$"                  . cperl-mode)
                 ("\\.puml$"                 . plantuml-mode)
+                ("\\.ino$"                  . c++-mode)
                 ) auto-mode-alist))
 
 ;; Deactivating, as projectile has this feature too...
@@ -223,3 +230,9 @@
 ;  (awesome-tab-mode t)
 ;  (setq awesome-tab-display-sticky-function-name t)
 ;  (setq awesome-tab-height 100))
+
+;; Auto-hide compilation biffer
+(use-package! bury-successful-compilation)
+;(use-package! bury-successful-compilation
+;  :ensure t
+;  :bind ("C-c C-m" . recompile))
