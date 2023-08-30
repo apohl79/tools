@@ -73,5 +73,6 @@ if [ "$(uname)" == "Darwin" ]; then
     fi
 
     echo "installing environment..."
-    brew install cmake conan@1 clang-format jenv alfred contexts deepl hammerspoon keepassxc menumeters owncloud signal brave-browser cryptomator fuse-t iterm2 mailspring oracle-jdk rectangle spotify
+    brew install cmake conan@1 clang-format jenv libtool oracle-jdk alfred contexts deepl hammerspoon keepassxc menumeters \
+        owncloud signal brave-browser cryptomator fuse-t iterm2 mailspring rectangle spotify
 fi
