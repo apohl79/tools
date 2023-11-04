@@ -98,7 +98,7 @@ export PATH=$HOME/bin:$HOME/bin/tools/sshtools:$HOME/bin/tools:$HOME/.sshsession
 export LANG=C
 export EDITOR=emacs
 
-if [ -n "$(which brew)" ]; then
+if which brew; then
     export HOMEBREW_NO_EMOJI=1
     export HOMEBREW_NO_AUTO_UPDATE=1
     export PATH=$(brew --prefix)/opt/coreutils/libexec/gnubin:$PATH
