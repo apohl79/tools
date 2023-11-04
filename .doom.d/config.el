@@ -97,6 +97,10 @@
 (setq lsp-clients-clangd-executable "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clangd")
 (setq lsp-clients-clangd-args '("-log=error" "--background-index" "--clang-tidy" "--completion-style=bundled" "--header-insertion=never" "--recovery-ast" "--pretty"))
 
+(setq lsp-pylsp-plugins-flake8-ignore "E128,E261,E265,E302,E401,E501,E713,E741")
+(setq lsp-pylsp-plugins-pydocstyle-enabled nil)
+(setq lsp-pylsp-plugins-mccabe-threshold 40)
+
 (set-file-template! "\\.hpp$" :trigger "__hpp" :mode 'c++-mode)
 (set-file-template! "\\.cpp$" :trigger "__cpp" :mode 'c++-mode)
 (set-file-template! "syncdna.*\\.hpp$" :trigger "sdna_hpp" :mode 'c++-mode)
