@@ -47,10 +47,10 @@ read DOOM
 if [ "$DOOM" = "1" ]; then
     link "doom" $dir/.doom.d $HOME/.config/doom
 else
-    link "emacs" $dir/.emacs $HOME/
+    link "emacs" $dir/.emacs $HOME/.emacs
 fi
 
-if [ "$(uname)" == "Darwin" ]; then
+if [ "$(uname)" = "Darwin" ]; then
     if ! /usr/bin/which -s brew; then
         echo "installing homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -75,6 +75,6 @@ if [ "$(uname)" == "Darwin" ]; then
     echo "installing environment..."
     brew install cmake python3 conan@1 clang-format jenv libtool oracle-jdk alfred contexts deepl hammerspoon keepassxc menumeters \
         owncloud signal brave-browser cryptomator fuse-t iterm2 mailspring rectangle spotify htop packages tor-browser dos2unix \
-        ilok-license-manager mosquitto arduino-ide utm cliclick
+        ilok-license-manager mosquitto arduino-ide utm cliclick balenaetcher
     pip3 install python-lsp-server paho-mqtt
 fi
