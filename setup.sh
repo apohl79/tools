@@ -51,13 +51,13 @@ else
 fi
 
 if [ "$(uname)" = "Darwin" ]; then
-    if ! /usr/bin/which -s brew; then
+    if ! which -s brew; then
         echo "installing homebrew..."
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
     fi
 
     if [ "$DOOM" = "1" ]; then
-        if ! /usr/bin/which -s emacs; then
+        if ! which -s emacs; then
             echo "installing emacs..."
             brew tap railwaycat/emacsmacport
             brew install emacs-mac --with-starter
