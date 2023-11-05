@@ -28,6 +28,7 @@ fi
 
 if [ ! -e $HOME/.oh-my-zsh/oh-my-zsh.sh ]; then
     rm -rf $HOME/.oh-my-zsh
+    rm -rf /etc/oh-my-zsh
     echo "installing oh-my-zsh..."
     export RUNZSH=no
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
