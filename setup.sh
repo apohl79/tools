@@ -26,7 +26,7 @@ if [ ! -d $HOME/bin ]; then
     mkdir $HOME/bin
 fi
 
-if [ ! -e $HOME/.oh-my-zsh ]; then
+if [ ! -e $HOME/.oh-my-zsh/oh-my-zsh.sh ]; then
     echo "installing oh-my-zsh..."
     export RUNZSH=no
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
