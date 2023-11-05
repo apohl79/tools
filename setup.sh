@@ -32,6 +32,8 @@ if [ ! -e $HOME/.oh-my-zsh ]; then
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
     echo "installing powerlevel10k..."
     git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k
+else
+    echo "skipping oh-my-zsh"
 fi
 
 link "tools" $dir $HOME/bin/tools
