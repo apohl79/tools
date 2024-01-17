@@ -49,6 +49,9 @@ echo " 1) doom"
 echo " 2) light"
 read DOOM
 if [ "$DOOM" = "1" ]; then
+    if [ ! -d $HOME/.config ]; then
+        mkdir $HOME/.config
+    fi
     link "doom" $dir/.doom.d $HOME/.config/doom
 else
     link "emacs" $dir/.emacs $HOME/.emacs
