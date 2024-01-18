@@ -67,11 +67,11 @@ if [ "$(uname)" = "Darwin" ]; then
         if ! which -s emacs; then
             echo "installing emacs..."
             brew tap railwaycat/emacsmacport
-            brew install emacs-mac --with-starter
+            brew install emacs-mac --with-starter --with-native-compilation
         fi
         if [ ! -e $HOME/.config/emacs ]; then
             echo "installing doom emacs..."
-            brew install git ripgrep coreutils fd
+            brew install git ripgrep coreutils fd fontconfig shellcheck isort pipenv markdown jq
             git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
             export PATH=/opt/homebrew/bin:$PATH
             $HOME/.config/emacs/bin/doom install
@@ -80,8 +80,41 @@ if [ "$(uname)" = "Darwin" ]; then
     fi
 
     echo "installing environment..."
-    brew install cmake python3 conan@1 clang-format jenv libtool oracle-jdk alfred contexts deepl hammerspoon keepassxc menumeters \
-        owncloud signal brave-browser cryptomator iterm2 mailspring rectangle spotify htop packages tor-browser dos2unix \
-        ilok-license-manager mosquitto arduino-ide utm cliclick balenaetcher pyright
-    pip3 install python-lsp-server paho-mqtt
+    brew install cmake || true
+    brew install python3 || true
+    brew install conan@1 || true
+    brew install clang-format || true
+    brew install llvm || true
+    brew install jenv || true
+    brew install libtool || true
+    brew install oracle-jdk || true
+    brew install alfred || true
+    brew install contexts || true
+    brew install deepl || true
+    brew install hammerspoon || true
+    brew install keepassxc || true
+    brew install menumeters || true
+    brew install owncloud || true
+    brew install signal || true
+    brew install whatsapp || true
+    brew install brave-browser || true
+    brew install cryptomator || true
+    brew install iterm2 || true
+    brew install mailspring || true
+    brew install rectangle || true
+    brew install spotify || true
+    brew install htop || true
+    brew install packages || true
+    brew install tor-browser || true
+    brew install dos2unix || true
+    brew install ilok-license-manager || true
+    brew install mosquitto || true
+    brew install arduino-ide || true
+    brew install utm || true
+    brew install cliclick || true
+    brew install balenaetcher || true
+    brew install pyright || true
+    brew install gh || true
+
+    pip3 install paho-mqtt || true
 fi
