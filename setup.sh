@@ -81,7 +81,7 @@ if [ "$(uname)" = "Darwin" ]; then
 
     echo "installing environment..."
     brew install cmake python3 conan@1 clang-format jenv libtool oracle-jdk alfred contexts deepl hammerspoon keepassxc menumeters \
-        owncloud signal brave-browser cryptomator fuse-t iterm2 mailspring rectangle spotify htop packages tor-browser dos2unix \
-        ilok-license-manager mosquitto arduino-ide utm cliclick balenaetcher
+        owncloud signal brave-browser cryptomator iterm2 mailspring rectangle spotify htop packages tor-browser dos2unix \
+        ilok-license-manager mosquitto arduino-ide utm cliclick balenaetcher pyright
     pip3 install python-lsp-server paho-mqtt
 fi
