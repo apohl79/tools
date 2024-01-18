@@ -16,6 +16,8 @@
 
 ;; Start emacs maximized
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
+;; bring the window to front
+(add-hook! 'window-setup-hook (x-focus-frame nil))
 
 ;; Prevents the unstyled mode-line flash at startup
 (setq-default mode-line-format nil)
