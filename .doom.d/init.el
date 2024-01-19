@@ -16,6 +16,8 @@
 
 ;; Start emacs maximized
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
+;; no title bar
+(add-to-list 'default-frame-alist '(undecorated . t))
 ;; bring the window to front
 (add-hook! 'window-setup-hook (x-focus-frame nil))
 

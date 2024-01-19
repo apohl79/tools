@@ -67,7 +67,8 @@ if [ "$(uname)" = "Darwin" ]; then
         if ! which -s emacs; then
             echo "installing emacs..."
             brew tap railwaycat/emacsmacport
-            brew install emacs-mac --with-starter --with-native-compilation
+            brew install emacs-mac --with-starter --with-native-compilation --with-natural-title-bar
+            defaults write org.gnu.Emacs TransparentTitleBar DARK
         fi
         if [ ! -e $HOME/.config/emacs ]; then
             echo "installing doom emacs..."
@@ -114,6 +115,7 @@ if [ "$(uname)" = "Darwin" ]; then
     brew install cliclick || true
     brew install balenaetcher || true
     brew install pyright || true
+    brew install drawio || true
     brew install gh || true
 
     pip3 install paho-mqtt || true
