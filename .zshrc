@@ -94,7 +94,6 @@ source $ZSH/oh-my-zsh.sh
 # User configuration
 unsetopt share_history
 
-export PATH=$HOME/bin:$HOME/bin/tools/sshtools:$HOME/bin/tools:$HOME/.sshsessions:/usr/local/bin:/usr/local/sbin:/opt/433ctrl/scripts:$PATH
 export LANG=C
 export EDITOR=emacs
 
@@ -106,6 +105,8 @@ if [ -x /opt/homebrew/bin/brew ]; then
     export MANPATH=$(brew --prefix)/opt/coreutils/libexec/gnuman:$MANPATH
     export XML_CATALOG_FILES=/usr/local/etc/xml/catalog
 fi
+
+export PATH=$HOME/bin:$HOME/bin/tools/ccscript:$HOME/bin/tools:/usr/local/bin:/usr/local/sbin:$PATH
 
 alias ll='ls -la --color=auto'
 

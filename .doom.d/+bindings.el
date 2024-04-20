@@ -14,6 +14,10 @@
       "M-s-<down>" #'comint-next-input
       "<s-wheel-down>" #'enlarge-window-horizontally
       "<s-wheel-up>" #'shrink-window-horizontally
+      "C-c C-e n" #'flycheck-next-error
+      "C-c C-e p" #'flycheck-previous-error
+      "C-s-+" #'doom/increase-font-size
+      "C-s--" #'doom/decrease-font-size
       )
 
 ;; Walk between the windows
