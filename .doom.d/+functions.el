@@ -145,6 +145,7 @@ selected. If none is selected, revert to the default behaviour."
   (treemacs-add-and-display-current-project-exclusively)
   (treemacs-project-follow-mode 1)
   (treemacs-follow-mode 1)
+  (treemacs--set-width 45)
   (other-window 1)
   (dedicate-window)
   (bury-successful-compilation-turn-on)

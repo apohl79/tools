@@ -68,3 +68,5 @@
 ;; buffer selection cia <cmd>+<left click> in c++
 (global-set-key [s-mouse-1] 'mouse-buffer-menu)
 
+;; use more convinient smerge key bindings
+(setq smerge-command-prefix "\C-cm")
