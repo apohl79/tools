@@ -1,0 +1,5 @@
+# -*- mode: snippet -*-
+# name: unique_lock
+# key: ulk
+# --
+std::unique_lock<std::mutex> lock($0);
