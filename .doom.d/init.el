@@ -19,7 +19,8 @@
 ;; no title bar
 (add-to-list 'default-frame-alist '(undecorated . t))
 ;; bring the window to front
-(add-hook! 'window-setup-hook (x-focus-frame nil))
+;(add-hook! 'window-setup-hook (x-focus-frame nil))
+(add-hook! 'window-setup-hook (select-frame-set-input-focus (selected-frame)))
 
 ;; Prevents the unstyled mode-line flash at startup
 (setq-default mode-line-format nil)

@@ -143,12 +143,12 @@ selected. If none is selected, revert to the default behaviour."
   ;(treemacs)
   ;(treemacs-display-current-project-exclusively)
   (treemacs-add-and-display-current-project-exclusively)
-  (treemacs-project-follow-mode 1)
+  ;(treemacs-project-follow-mode 1)
   (treemacs-follow-mode 1)
-  (treemacs--set-width 45)
+  ;(treemacs--set-width 45)
   (other-window 1)
   (dedicate-window)
-  (bury-successful-compilation-turn-on)
+  ;(bury-successful-compilation-turn-on)
   )
 
 (defun my-setup-ide-small ()
@@ -171,9 +171,11 @@ selected. If none is selected, revert to the default behaviour."
   ;(vterm)
   ;(treemacs)
   (treemacs-add-and-display-current-project-exclusively)
+  ;(treemacs-project-follow-mode 1)
   (treemacs-follow-mode 1)
+  ;(treemacs--set-width 45)
   (other-window 1)
-  (bury-successful-compilation-turn-on)
+  ;(bury-successful-compilation-turn-on)
   )
 
 (defun my-setup-ide-nocompile ()
@@ -197,3 +199,46 @@ selected. If none is selected, revert to the default behaviour."
   (interactive)
   (let ((enable-local-variables :all))
     (hack-dir-local-variables-non-file-buffer)))
+
+;; Auto hide the compilation buffer
+;; based on: https://stackoverflow.com/questions/11043004/emacs-compile-buffer-auto-close
+(add-hook 'compilation-start-hook 'compilation-started)
+(add-hook 'compilation-finish-functions 'hide-compile-buffer-if-successful)
+
+(defcustom auto-hide-compile-buffer-delay 1
+    "Time in seconds before auto hiding compile buffer."
+    :group 'compilation
+    :type 'number
+  )
+
+(defun hide-compile-buffer-if-successful (buffer string)
+    (setq compilation-total-time (time-subtract nil compilation-start-time))
+    (setq time-str (concat " (Time: " (format-time-string "%s.%3N" compilation-total-time) "s)"))
+
+    (if
+      (with-current-buffer buffer
+        (setq warnings (eval compilation-num-warnings-found))
+        (setq warnings-str (concat " (Warnings: " (number-to-string warnings) ")"))
+        (setq errors (eval compilation-num-errors-found))
+        (setq errors-str (concat " (Errors: " (number-to-string errors) ")"))
+
+        (if (and (eq errors 0) (string-prefix-p "finished" string)) nil t)
+      )
+
+      ;;If Errors or non-zero exit code then
+      (message (concat "Compiled with Errors" warnings-str errors-str time-str))
+
+      ;;If Compiled Successfully or with Warnings then
+      (progn
+        (bury-buffer buffer)
+        (run-with-timer auto-hide-compile-buffer-delay nil 'delete-window (get-buffer-window buffer 'visible))
+        (message (concat "Compiled Successfully" warnings-str errors-str time-str))
+      )
+    )
+  )
+
+  (make-variable-buffer-local 'compilation-start-time)
+
+  (defun compilation-started (proc)
+    (setq compilation-start-time (current-time))
+  )

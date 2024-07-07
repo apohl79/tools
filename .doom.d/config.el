@@ -95,12 +95,13 @@
 ;(setq lsp-clients-clangd-executable "/Library/Developer/CommandLineTools/usr/bin/clangd")
 
 (setq lsp-clients-clangd-executable "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clangd")
-(setq lsp-clients-clangd-args '("-log=error" "--background-index" "--clang-tidy" "--completion-style=bundled" "--header-insertion=never" "--recovery-ast" "--pretty"))
+(setq lsp-clients-clangd-args '("--log=error" "--background-index" "--clang-tidy" "--completion-style=bundled" "--header-insertion=never" "--pretty"))
 
 (setq lsp-pylsp-plugins-flake8-ignore "E128,E261,E265,E302,E401,E501,E713,E741")
 (setq lsp-pylsp-plugins-pydocstyle-enabled nil)
 (setq lsp-pylsp-plugins-mccabe-threshold 40)
 
+;; Set up default file templates based on the project
 (set-file-template! "\\.hpp$" :trigger "__hpp" :mode 'c++-mode)
 (set-file-template! "\\.cpp$" :trigger "__cpp" :mode 'c++-mode)
 (set-file-template! "syncdna.*\\.hpp$" :trigger "sdna_hpp" :mode 'c++-mode)
@@ -195,7 +196,7 @@
 (setq mouse-buffer-menu-mode-mult 1)
 
 ;; enable LLDB support
-(use-package! realgud-lldb)
+;(use-package! realgud-lldb)
 
 ;; compilation buffer: autosave and stop at the first error and skip warnings
 (setq compilation-scroll-output 'next-error)
@@ -221,14 +222,14 @@
       ))))
 
 ; some tab customization: don't kill my buffers view by double clicking a tab
-(after! centaur-tabs
-  (centaur-tabs-enable-buffer-alphabetical-reordering)
-  (setq centaur-tabs-adjust-buffer-order t)
-  (setq centaur-tabs-set-bar 'over)
-  (define-key centaur-tabs-mode-map (vector centaur-tabs-display-line 'double-mouse-1) nil))
+;(after! centaur-tabs
+;  (centaur-tabs-enable-buffer-alphabetical-reordering)
+;  (setq centaur-tabs-adjust-buffer-order t)
+;  (setq centaur-tabs-set-bar 'over)
+;  (define-key centaur-tabs-mode-map (vector centaur-tabs-display-line 'double-mouse-1) nil))
 
 ; use an alternative tabs package from the one doom provides...
-(load! "awesome-tab")
+;(load! "awesome-tab")
 ;(use-package! awesome-tab
 ;  :config
 ;  (awesome-tab-mode t)
@@ -236,7 +237,18 @@
 ;  (setq awesome-tab-height 100))
 
 ;; Auto-hide compilation biffer
-(use-package! bury-successful-compilation)
+;(use-package! bury-successful-compilation)
 ;(use-package! bury-successful-compilation
 ;  :ensure t
 ;  :bind ("C-c C-m" . recompile))
+
+(setq treemacs-width 45)
+
+;; project name as frame title (window name in macOS)
+(setq frame-title-format
+    '(""
+      "%b"
+      (:eval
+       (let ((project-name (projectile-project-name)))
+         (unless (string= "-" project-name)
+           (format " in [%s]" project-name))))))

@@ -5,6 +5,7 @@
 
 (map! "s-1" #'treemacs
       "s-2" #'treemacs-tag-follow-mode
+      "s-3" #'treemacs-project-follow-mode
       "s-." #'xref-find-definitions
       "s-," #'xref-pop-marker-stack
       "C-c C-c" #'vterm-send-C-c
