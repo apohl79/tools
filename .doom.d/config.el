@@ -252,3 +252,15 @@
        (let ((project-name (projectile-project-name)))
          (unless (string= "-" project-name)
            (format " in [%s]" project-name))))))
+
+;; DAP-MODE
+(setq dap-auto-configure-mode t)
+(setq dap-lldb-debug-program "/opt/homebrew/opt/llvm/bin/lldb-dap")
+;(setq dap-gdb-lldb-path "/usr/bin/lldb")
+(require 'dap-cpptools)
+;; Enabling only some features
+;(setq dap-auto-configure-features '(sessions locals controls tooltip))
+
+;; MAGIT
+(after! magit
+  (setq git-commit-summary-max-length 120))

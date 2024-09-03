@@ -8,7 +8,7 @@
 
 ;; To install SOME-PACKAGE from MELPA, ELPA or emacsmirror:
 ;(package! some-package)
-(package! realgud-lldb)
+;(package! realgud-lldb)
 (package! vterm-toggle)
 (package! protobuf-mode)
 (package! platformio-mode)

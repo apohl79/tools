@@ -1,11 +1,15 @@
 local wezterm = require 'wezterm'
 local config = wezterm.config_builder()
 
+--config.use_ime = false
+config.use_dead_keys = false
 config.color_scheme = 'Andromeda'
 config.window_decorations = "RESIZE"
 config.use_fancy_tab_bar = false
 config.tab_max_width = 32
 config.colors = {
+  selection_fg = 'black',
+  selection_bg = '#f0faa0',
   tab_bar = {
     background = '#1a1e27',
     active_tab = {
@@ -25,6 +29,12 @@ config.colors = {
 
 local act = wezterm.action
 config.keys = {
+  -- tilde hack as it does not work w/o deadkeys enabled
+  {
+    key = "n",
+    mods = "OPT",
+    action = act { SendString = "~" },
+  },
   -- remove keys I need in emacs
   {
     key = '_',
