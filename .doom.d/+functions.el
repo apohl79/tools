@@ -247,3 +247,28 @@ selected. If none is selected, revert to the default behaviour."
   "Reload the last session with `doom/quickload-session` passing `t`."
   (interactive)
   (doom/quickload-session t))
+
+(defun remove-treemacs-image-icons ()
+  "Replace all image (png/svg) icons in treemacs with font based icons."
+  ;; Replace all special dir icons
+  (treemacs-create-icon :icon (propertize "		" 'face 'treemacs-nerd-icons-file-face)
+                        :extensions ("src-closed" "test-closed" "tmp-closed" "temp-closed" "build-closed"
+                                     "bin-closed" "git-closed" "github-closed" "public-closed" "private-closed"
+                                     "screenshot-closed" "icons-closed" "readme-closed" "docs-closed"))
+  (treemacs-create-icon :icon (propertize "		" 'face 'treemacs-nerd-icons-file-face)
+                        :extensions ("src-open" "test-open" "tmp-open" "temp-open" "build-open" "bin-open"
+                                     "git-open" "github-open" "public-open" "private-open" "screenshot-open"
+                                     "icons-open" "readme-open" "docs-open"))
+  ;; Set some script/config icons
+  (treemacs-create-icon :icon (propertize " 	󱆃	" 'face 'treemacs-nerd-icons-file-face)
+                        :extensions ("zshrc" "bash" "bash_profile" "bash_login" "bash_aliases" "profile"))
+  ;; Run over all theme icons and replace the remaining image icons with the fallback file icon.
+  (let ((icons (treemacs-theme->gui-icons treemacs--current-theme))
+        (def-icon (gethash 'fallback (treemacs-theme->gui-icons treemacs--current-theme))))
+    (maphash
+     (lambda (k v)
+       (pp (get-text-property 0 'display v))
+       (when (imagep (get-text-property 0 'display v))
+         (puthash k def-icon icons)
+         ))
+     icons)))

@@ -59,27 +59,8 @@
 (after! treemacs
   (setq treemacs-width 45)
   (treemacs-follow-mode 1)
-  ;; The treemacs png icons are not rendered properly, so we replace them with default icons from the font
-  (treemacs-create-icon :icon (propertize "		" 'face 'treemacs-nerd-icons-file-face)
-                        :extensions ("src-closed" "test-closed" "tmp-closed" "temp-closed" "build-closed"
-                                     "bin-closed" "git-closed" "github-closed" "public-closed" "private-closed"
-                                     "screenshot-closed" "icons-closed" "readme-closed" "docs-closed"))
-  (treemacs-create-icon :icon (propertize "		" 'face 'treemacs-nerd-icons-file-face)
-                        :extensions ("src-open" "test-open" "tmp-open" "temp-open" "build-open" "bin-open"
-                                     "git-open" "github-open" "public-open" "private-open" "screenshot-open"
-                                     "icons-open" "readme-open" "docs-open"))
-  (treemacs-create-icon :icon (propertize " 	󱆃	" 'face 'treemacs-nerd-icons-file-face)
-                        :extensions ("zshrc" "bash" "bash_profile" "bash_login" "bash_aliases" "profile"))
-  ;; Now replace all remaining icons that are images with the fallback file icon
-  (let ((icons (treemacs-theme->gui-icons treemacs--current-theme))
-        (def-icon (gethash 'fallback (treemacs-theme->gui-icons treemacs--current-theme))))
-    (maphash
-     (lambda (k v)
-       (when (imagep (get-text-property 0 'display v))
-         (puthash k def-icon icons)
-         ))
-     icons)
-   ))
+  ;; HACK: run this at the end of the doom initialitation as not all icons are defind yet
+  (add-hook! 'doom-init-ui-hook #'remove-treemacs-image-icons))
 
 ;;
 ;; GENERAL DEFAULTS
