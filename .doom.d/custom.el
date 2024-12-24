@@ -24,7 +24,7 @@
      (eval seq-local lsp-clients-clangd-executable "/disabled")
      (eval setq-local ccls-executable "/usr/local/bin/ccls")
      (eval setq-local flycheck-clang-include-path
-           (list))))
+      (list))))
  '(window-min-height 8)
  '(window-min-width 40))
 (custom-set-faces

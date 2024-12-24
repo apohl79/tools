@@ -8,11 +8,16 @@
 
 ;; To install SOME-PACKAGE from MELPA, ELPA or emacsmirror:
 ;(package! some-package)
-;(package! realgud-lldb)
 (package! vterm-toggle)
 (package! protobuf-mode)
 (package! platformio-mode)
-(package! bury-successful-compilation)
+
+(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
+;(package! treemacs-nerd-icons)
+;(package! all-the-icons)
+
+(package! gptel)
+(package! elysium)
 
 ;; To install a package directly from a remote git repo, you must specify a
 ;; `:recipe'. You'll find documentation on what `:recipe' accepts here:

@@ -17,8 +17,13 @@
       "<s-wheel-up>" #'shrink-window-horizontally
       "C-c C-e n" #'flycheck-next-error
       "C-c C-e p" #'flycheck-previous-error
-      "C-s-+" #'doom/increase-font-size
-      "C-s--" #'doom/decrease-font-size
+      "s-*" #'doom/increase-font-size
+      "s-_" #'doom/decrease-font-size
+      "C-c w Q" #'my-quickload-session
+      "C-e q" #'elysium-query
+      "C-e w" #'elysium-toggle-window
+      "C-e d" #'elysium-discard-all-suggested-changes
+      "C-e a" #'elysium-keep-all-suggested-changes
       )
 
 ;; Walk between the windows
@@ -71,3 +76,7 @@
 
 ;; use more convinient smerge key bindings
 (setq smerge-command-prefix "\C-cm")
+
+; redo
+(after! undo-fu
+  (map! :map undo-fu-mode-map "C-?" #'undo-fu-only-redo))

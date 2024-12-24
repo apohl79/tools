@@ -242,3 +242,8 @@ selected. If none is selected, revert to the default behaviour."
   (defun compilation-started (proc)
     (setq compilation-start-time (current-time))
   )
+
+(defun my-quickload-session ()
+  "Reload the last session with `doom/quickload-session` passing `t`."
+  (interactive)
+  (doom/quickload-session t))
