@@ -1,6 +1,12 @@
 local wezterm = require 'wezterm'
 local config = wezterm.config_builder()
 
+config.set_environment_variables = {
+  TERMINFO_DIRS = '~/.terminfo',
+}
+
+config.term = 'wezterm'
+
 --config.use_ime = false
 config.use_dead_keys = false
 config.color_scheme = 'Andromeda'
