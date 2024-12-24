@@ -59,7 +59,7 @@
 (after! treemacs
   (setq treemacs-width 45)
   (treemacs-follow-mode 1)
-  ;; HACK: run this at the end of the doom initialitation as not all icons are defind yet
+  ;; HACK: run this at the end of the doom initialization as not all icons are defind yet
   (add-hook! 'doom-init-ui-hook #'remove-treemacs-image-icons))
 
 ;;
