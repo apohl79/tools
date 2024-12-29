@@ -122,7 +122,7 @@ if [ "$(uname)" = "Darwin" ]; then
     brew install drawio || true
     brew install gh || true
     brew install nvm || true
-    brew install font-iosevka-comfy || true
+    brew install font-iosevka-comfy font-roboto || true
 
     pip3 install paho-mqtt || true
 fi

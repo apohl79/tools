@@ -19,7 +19,7 @@
 ;;
 
 (defvar my-fixed-font "Iosevka Comfy")
-(defvar my-variable-font "Iosevka Comfy Duo")
+(defvar my-variable-font "Roboto")
 
 (setq doom-font
       (font-spec :family my-fixed-font :size 13)
@@ -43,6 +43,7 @@
 (after! treemacs
   (setq treemacs-width 45)
   (treemacs-follow-mode 1)
+  (treemacs-project-follow-mode 1)
   ;; treemacs png/svg special icons don't look great, so we patch the icon set
   (add-hook 'treemacs-mode-hook 'remove-treemacs-image-icons))
 
@@ -69,11 +70,15 @@
 
 (use-package! org-modern
   :after org
-  :hook (org-mode . (global-org-modern-mode variable-pitch-mode))
+  :hook (org-mode . global-org-modern-mode)
   :config
   ;org-modern-symbol
   (setq org-modern-star 'replace
         org-modern-label-border 0.3))
+
+(use-package! mixed-pitch
+  :after org
+  :hook (org-mode . mixed-pitch-mode))
 
 (after! org-modern-faces
   (set-face-attribute 'org-modern-symbol nil :family my-fixed-font))
