@@ -21,13 +21,13 @@ link_force() {
 if [ -z $dir ]; then
     dir=$(pwd)
 fi
-cd $HOME
-if [ ! -d $HOME/bin ]; then
-    mkdir $HOME/bin
+cd "$HOME" || exit
+if [ ! -d "$HOME/bin" ]; then
+    mkdir "$HOME/bin"
 fi
 
-if [ ! -e $HOME/.oh-my-zsh/oh-my-zsh.sh ]; then
-    rm -rf $HOME/.oh-my-zsh
+if [ ! -e "$HOME/.oh-my-zsh/oh-my-zsh.sh" ]; then
+    rm -rf "$HOME/.oh-my-zsh"
     rm -rf /etc/oh-my-zsh
     echo "installing oh-my-zsh..."
     export RUNZSH=no
@@ -38,23 +38,23 @@ else
     echo "skipping oh-my-zsh"
 fi
 
-link "tools" $dir $HOME/bin/tools
-link_force "zsh" $dir/.zshrc $HOME/.zshrc
-link_force "powerlevel10k" $dir/.p10k.zsh $HOME/.p10k.zsh
-link_force "profile" $HOME/.zshrc $HOME/.profile
-link "clang-format" $dir/.clang-format $HOME/.clang-format
+link "tools" "$dir" "$HOME/bin/tools"
+link_force "zsh" "$dir/.zshrc" "$HOME/.zshrc"
+link_force "powerlevel10k" "$dir/.p10k.zsh" "$HOME/.p10k.zsh"
+link_force "profile" "$HOME/.zshrc" "$HOME/.profile"
+link "clang-format" "$dir/.clang-format" "$HOME/.clang-format"
 
 echo "choose emacs setup:"
 echo " 1) doom"
 echo " 2) light"
 read DOOM
 if [ "$DOOM" = "1" ]; then
-    if [ ! -d $HOME/.config ]; then
-        mkdir $HOME/.config
+    if [ ! -d "$HOME/.config" ]; then
+        mkdir "$HOME/.config"
     fi
-    link "doom" $dir/.doom.d $HOME/.config/doom
+    link "doom" "$dir/.doom.d" "$HOME/.config/doom"
 else
-    link "emacs" $dir/.emacs $HOME/.emacs
+    link "emacs" "$dir/.emacs" "$HOME/.emacs"
 fi
 
 if [ "$(uname)" = "Darwin" ]; then
@@ -70,26 +70,30 @@ if [ "$(uname)" = "Darwin" ]; then
             brew install emacs-mac --with-starter --with-native-compilation --with-natural-title-bar
             defaults write org.gnu.Emacs TransparentTitleBar DARK
         fi
-        if [ ! -e $HOME/.config/emacs ]; then
+        if [ ! -e "$HOME/.config/emacs" ]; then
             echo "installing doom emacs..."
-            brew install git ripgrep coreutils fd fontconfig shellcheck isort pipenv markdown jq
+            brew install git ripgrep coreutils fd fontconfig shellcheck isort pipenv markdown jq hunspell
             git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
-            export PATH=/opt/homebrew/bin:$PATH
-            $HOME/.config/emacs/bin/doom install
-            $HOME/.config/emacs/bin/doom sync
+            export PATH=/opt/homebrew/bin:"$PATH"
+            "$HOME/.config/emacs/bin/doom" install
+            "$HOME/.config/emacs/bin/doom" sync
+            echo "installing dictionaries..."
+            wget -nc https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.aff -O ~/Library/Spelling/de_DE_frami.aff
+            wget -nc https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.dic -O ~/Library/Spelling/de_DE_frami.dic
+            wget -nc wget https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.aff -O ~/Library/Spelling/en_US.aff
+            wget -nc wget https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.dic -O ~/Library/Spelling/en_US.dic
         fi
     fi
 
     echo "installing environment..."
     brew install cmake || true
     brew install python3 || true
-    brew install conan@1 || true
     brew install clang-format || true
     brew install llvm || true
     brew install jenv || true
     brew install libtool || true
     brew install oracle-jdk || true
-    brew install alfred || true
+    brew install raycast || true
     brew install contexts || true
     brew install deepl || true
     brew install hammerspoon || true
@@ -100,7 +104,7 @@ if [ "$(uname)" = "Darwin" ]; then
     brew install whatsapp || true
     brew install brave-browser || true
     brew install cryptomator || true
-    brew install iterm2 || true
+    brew install wezterm || true
     brew install mailspring || true
     brew install rectangle || true
     brew install spotify || true
@@ -117,6 +121,8 @@ if [ "$(uname)" = "Darwin" ]; then
     brew install pyright || true
     brew install drawio || true
     brew install gh || true
+    brew install nvm || true
+    brew install font-iosevka-comfy || true
 
     pip3 install paho-mqtt || true
 fi
