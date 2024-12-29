@@ -13,11 +13,11 @@
 (package! platformio-mode)
 
 (package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
-;(package! treemacs-nerd-icons)
-;(package! all-the-icons)
 
 (package! gptel)
 (package! elysium)
+
+(package! org-modern)
 
 ;; To install a package directly from a remote git repo, you must specify a
 ;; `:recipe'. You'll find documentation on what `:recipe' accepts here:

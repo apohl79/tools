@@ -1,66 +1,71 @@
 ;;; +bindings.el -*- lexical-binding: t; -*-
 
-(map! "C-z" nil)
+(undefine-key! "C-z" "s-w")
 (setq doom-localleader-alt-key "C-z")
 
-(map! "s-1" #'treemacs
-      "s-2" #'treemacs-tag-follow-mode
-      "s-3" #'treemacs-project-follow-mode
-      "s-." #'xref-find-definitions
-      "s-," #'xref-pop-marker-stack
-      "C-c C-c" #'vterm-send-C-c
-      "C-c RET" #'recompile
-      "s-w" nil
-      "M-s-<up>" #'comint-previous-input
-      "M-s-<down>" #'comint-next-input
-      "<s-wheel-down>" #'enlarge-window-horizontally
-      "<s-wheel-up>" #'shrink-window-horizontally
-      "C-c C-e n" #'flycheck-next-error
-      "C-c C-e p" #'flycheck-previous-error
-      "s-*" #'doom/increase-font-size
-      "s-_" #'doom/decrease-font-size
-      "C-c w Q" #'my-quickload-session
-      "C-e q" #'elysium-query
-      "C-e w" #'elysium-toggle-window
-      "C-e d" #'elysium-discard-all-suggested-changes
-      "C-e a" #'elysium-keep-all-suggested-changes
-      )
-
-;; Walk between the windows
-(defun my-previous-window ()
-  "Previous window"
-  (interactive)
-  (other-window -1))
-(global-set-key "\C-xp" 'my-previous-window)
-(global-set-key "\C-xn" 'other-window)
-
-;; Key bindings
-(global-set-key [M-left] 'hide-subtree)
-(global-set-key [M-right] 'show-children)
-(global-set-key [M-up] 'hide-other)
-(global-set-key [M-down] 'show-all)
-(global-set-key [home] 'beginning-of-line)
-(global-set-key [end] 'end-of-line)
-(global-set-key "\C-xre" 'replace-regexp)
-(global-set-key "\C-xcp" 'match-paren)
-(global-set-key [C-return] 'newline-and-indent)
-(global-set-key "\C-cx" 'dabbrev-expand)
-(global-set-key "\C-cb" 'revert-buffer)
-(global-set-key "\C-cu" 'upcase-region)
-(global-set-key "\C-cd" 'downcase-region)
-(global-set-key "\C-cf" 'find-file-at-point)
-(global-set-key (kbd "C-c C-a") 'auto-fill-mode)
-(global-set-key "\C-cj" 'set-justification-left)
-(global-set-key "\M-g" 'goto-line)
-
-;; leaving emacs without saving current buffer
-(defun save-and-killbuf ()
-  "save current buffer and quit"
-  (interactive)
-  ( if ( not buffer-read-only )
-      (save-buffer) )
-  (kill-this-buffer))
-(global-set-key "\C-x\C-y" 'save-and-killbuf)
+(map!
+ ;; treemacs
+ "s-1" #'treemacs
+ "s-2" #'treemacs-tag-follow-mode
+ "s-3" #'treemacs-project-follow-mode
+ ;; navigation
+ "C-x p" #'my-previous-window
+ "C-x n" #'other-window
+ "M-<left>" #'outline-hide-subtree
+ "M-<right>" #'outline-show-children
+ "M-<up>" #'outline-hide-other
+ "M-<down>" #'outline-show-all
+ "<home>" #'beginning-of-line
+ "<end>" #'end-of-line
+ "C-x r e" #'replace-regexp
+ "C-x c p" #'match-paren
+ "C-c x" #'dabbrev-expand
+ "C-c b" #'revert-buffer
+ "C-c u" #'upcase-region
+ "C-c d" #'downcase-region
+ "C-c f" #'find-file-at-point
+ "C-c C-a" #'auto-fill-mode
+ "C-c j" #'set-justification-left
+ "M-g" #'goto-line
+ "C-x C-y" #'save-and-killbuf
+ ;; code navigation
+ "s-." #'xref-find-definitions
+ "s-," #'xref-go-back
+ (:prefix ("C-c C-e" . "flycheck")
+          "n" #'flycheck-next-error
+          "p" #'flycheck-previous-error)
+ ;"C-<return>" #'newline-and-indent
+ ;; buffers and font
+ "<s-wheel-down>" #'enlarge-window-horizontally
+ "<s-wheel-up>" #'shrink-window-horizontally
+ "s-*" #'doom/increase-font-size
+ "s-_" #'doom/decrease-font-size
+ ;; gptel/elysium
+ (:prefix ("C-q e" . "elysium")
+          "e" #'elysium-query
+          "w" #'elysium-toggle-window
+          "d" #'elysium-discard-all-suggested-changes)
+ "C-q w" #'gptel
+ "C-q RET" #'gptel-send
+ "C-q s" #'gptel-system-prompt
+ (:prefix ("C-q a" . "add")
+          "r" #'gptel-add
+          "f" #'gptel-add-file)
+ ;; miscellaneous
+ "M-s <up>" #'comint-previous-input
+ "M-s <down>" #'comint-next-input
+ "C-c w Q" #'my-quickload-session
+ ;; mode specific
+ :map (c++-mode-map c-mode-map)
+ "C-c RET" #'recompile
+ :map gptel-mode-map
+ "C-c RET" #'gptel-menu
+ "C-<return>" #'gptel-send
+ "C-<up>" #'gptel-beginning-of-response
+ "C-<down>" #'gptel-end-of-response
+ :map vterm-mode-map
+ "C-v C-c" #'vterm-send-C-c
+ )
 
 (after! treemacs
   (treemacs-define-RET-action 'file-node-closed #'treemacs-visit-node-ace)

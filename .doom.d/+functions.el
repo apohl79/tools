@@ -8,9 +8,19 @@
     (indent-region (point-min) (point-max) nil)
     (untabify (point-min) (point-max))))
 
-;; keep flycheck discabled for now as it seems broken....
-;(defun my-keep-flycheck-off () (flycheck-mode -1))
-;(add-hook 'c++-mode-hook #'my-keep-flycheck-off)
+;; leaving emacs without saving current buffer
+(defun save-and-killbuf ()
+  "save current buffer and quit"
+  (interactive)
+  ( if ( not buffer-read-only )
+      (save-buffer) )
+  (kill-this-buffer))
+
+;; Walk between the windows
+(defun my-previous-window ()
+  "Previous window"
+  (interactive)
+  (other-window -1))
 
 ;; indent via clang-format
 (load! "clang-format")
@@ -66,139 +76,10 @@
 (setq-default ff-other-file-alist 'my-cpp-other-file-alist)
 
 ;; disable company for bash
-(defun my-adjust-org-company-backends ()
-  (remove-hook 'after-change-major-mode-hook '+company-init-backends-h)
-  (setq-local company-backends nil))
-(add-hook! sh-mode (my-adjust-org-company-backends))
-
-;; window selection for search links, error messages, help etc
-;; https://e17i.github.io/articles-emacs-display-1/
-(defvar dedicated-other-window nil)
-(defvar dedication-count)
-
-;(defun dedicate-window (arg)
-;  "Dedicate the currently selected window as 'other' window. When
-;called with a =C-0= prefix arg, releases the previously set
-;window and reverts to the default window selection behaviour. Default is a
-;one-time dedication, use =C-u= for unlimited."
-;  (interactive "p")
-;  (setq dedicated-other-window
-;        (if (eq arg 0)
-;            nil
-;          (selected-window)))
-;  (setq dedication-count
-;        (if (eq 4 arg) nil arg))
-;  (if dedicated-other-window
-;      (message "window dedicated")
-;    (message "dedication removed")))
-
-(defun dedicate-window ()
-  "Dedicate the currently selected window as 'other' window. When
-called with a =C-0= prefix arg, releases the previously set
-window and reverts to the default window selection behaviour. Default is a
-one-time dedication, use =C-u= for unlimited."
-  (interactive)
-  (setq dedicated-other-window (selected-window))
-  (message "window dedicated"))
-
-(defun window-update-buffer (buffer window type alist)
-  "display buffer in window, recording type then apply height"
-  (if (window--display-buffer buffer window type alist)
-      (window-apply-height-fnc window alist)))
-
-(defun window-apply-height-fnc (window alist)
-  "rudimentary alist parser just accepting a height fnc for now.."
-  (let ((height (cdr (assq 'window-height alist))))
-    (if (functionp height)
-        (ignore-errors (funcall height window)))
-    window))
-
-(defun display-buffer-dedicated-window (buffer alist)
-  "Display pop-up-buffer in the dedicated other window, if one is
-selected. If none is selected, revert to the default behaviour."
-  (if (and dedicated-other-window
-           (window-live-p dedicated-other-window))
-      (prog1
-          (window-update-buffer buffer dedicated-other-window 'reuse alist)
-        )))
-
-(defun my-setup-ide ()
-  "My IDE setup."
-  (interactive)
-  ;(ace-window 0)
-  (savehist-save)
-  ;(split-window-below -15) ; bottom terminal
-  (split-window-right) ; second editor
-  ;(other-window 2)
-  ;(split-window-right)
-  ;(switch-to-buffer (concat "*compilation*<" (projectile-project-name) ">"))
-  ;(compilation-setup t)
-  ;(compilation-mode)
-  ;(setq compilation-scroll-output 'next-error)
-  ;(setq compilation-skip-threshold 2)
-  ;(other-window 1)
-  ;(comint-run "lldb")
-  ;(switch-to-buffer "*vterm*")
-  ;(vterm)
-  ;(treemacs)
-  ;(treemacs-display-current-project-exclusively)
-  (treemacs-add-and-display-current-project-exclusively)
-  ;(treemacs-project-follow-mode 1)
-  (treemacs-follow-mode 1)
-  ;(treemacs--set-width 45)
-  (other-window 1)
-  (dedicate-window)
-  ;(bury-successful-compilation-turn-on)
-  )
-
-(defun my-setup-ide-small ()
-  "My IDE setup for smalle screens."
-  (interactive)
-  (savehist-save)
-  (dedicate-window)
-  ;(split-window-below -15) ; bottom terminal
-  ;(split-window-right) ; second editor
-  ;(other-window 2)
-  ;(split-window-right)
-  ;(switch-to-buffer (concat "*compilation*<" (projectile-project-name) ">"))
-  ;(compilation-setup t)
-  ;(compilation-mode)
-  (setq compilation-scroll-output 'next-error)
-  (setq compilation-skip-threshold 2)
-  ;(other-window 1)
-  ;(comint-run "lldb")
-  ;(switch-to-buffer "*vterm*")
-  ;(vterm)
-  ;(treemacs)
-  (treemacs-add-and-display-current-project-exclusively)
-  ;(treemacs-project-follow-mode 1)
-  (treemacs-follow-mode 1)
-  ;(treemacs--set-width 45)
-  (other-window 1)
-  ;(bury-successful-compilation-turn-on)
-  )
-
-(defun my-setup-ide-nocompile ()
-  "My IDE work setup."
-  (interactive)
-  (ace-window 0)
-  (dedicate-window (nth 1 (window-list)))
-  (treemacs)
-  )
-
-(defun my-compile ()
-  "My compile command"
-  (interactive)
-  (dedicate-window (nth 1 (window-list)))
-  (select-window (get-buffer-window (concat "*compilation*<" (projectile-project-name) ">")))
-  (+ivy/compile)
-  )
-
-(defun my-reload-dir-locals-for-current-buffer ()
-  "reload dir locals for the current buffer"
-  (interactive)
-  (let ((enable-local-variables :all))
-    (hack-dir-local-variables-non-file-buffer)))
+;;; (defun my-adjust-org-company-backends ()
+;;;   (remove-hook 'after-change-major-mode-hook '+company-init-backends-h)
+;;;   (setq-local company-backends nil))
+;;; (add-hook! sh-mode (my-adjust-org-company-backends))
 
 ;; Auto hide the compilation buffer
 ;; based on: https://stackoverflow.com/questions/11043004/emacs-compile-buffer-auto-close
@@ -208,40 +89,34 @@ selected. If none is selected, revert to the default behaviour."
 (defcustom auto-hide-compile-buffer-delay 1
     "Time in seconds before auto hiding compile buffer."
     :group 'compilation
-    :type 'number
-  )
+    :type 'number)
 
 (defun hide-compile-buffer-if-successful (buffer string)
-    (setq compilation-total-time (time-subtract nil compilation-start-time))
-    (setq time-str (concat " (Time: " (format-time-string "%s.%3N" compilation-total-time) "s)"))
+  (setq compilation-total-time (time-subtract nil compilation-start-time))
+  (setq time-str (concat " (Time: " (format-time-string "%s.%3N" compilation-total-time) "s)"))
 
-    (if
+  (if
       (with-current-buffer buffer
         (setq warnings (eval compilation-num-warnings-found))
         (setq warnings-str (concat " (Warnings: " (number-to-string warnings) ")"))
         (setq errors (eval compilation-num-errors-found))
         (setq errors-str (concat " (Errors: " (number-to-string errors) ")"))
 
-        (if (and (eq errors 0) (string-prefix-p "finished" string)) nil t)
-      )
+        (if (and (eq errors 0) (string-prefix-p "finished" string)) nil t))
 
-      ;;If Errors or non-zero exit code then
+      ;; If errors or non-zero exit code
       (message (concat "Compiled with Errors" warnings-str errors-str time-str))
 
-      ;;If Compiled Successfully or with Warnings then
-      (progn
-        (bury-buffer buffer)
-        (run-with-timer auto-hide-compile-buffer-delay nil 'delete-window (get-buffer-window buffer 'visible))
-        (message (concat "Compiled Successfully" warnings-str errors-str time-str))
-      )
-    )
-  )
+    ;; If compiled successfully or with warnings
+    (progn
+      (bury-buffer buffer)
+      (run-with-timer auto-hide-compile-buffer-delay nil 'delete-window (get-buffer-window buffer 'visible))
+      (message (concat "Compiled Successfully" warnings-str errors-str time-str)))))
 
-  (make-variable-buffer-local 'compilation-start-time)
+(make-variable-buffer-local 'compilation-start-time)
 
-  (defun compilation-started (proc)
-    (setq compilation-start-time (current-time))
-  )
+(defun compilation-started (proc)
+  (setq compilation-start-time (current-time)))
 
 (defun my-quickload-session ()
   "Reload the last session with `doom/quickload-session` passing `t`."
@@ -267,7 +142,6 @@ selected. If none is selected, revert to the default behaviour."
         (def-icon (gethash 'fallback (treemacs-theme->gui-icons treemacs--current-theme))))
     (maphash
      (lambda (k v)
-       (pp (get-text-property 0 'display v))
        (when (imagep (get-text-property 0 'display v))
          (puthash k def-icon icons)
          ))

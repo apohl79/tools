@@ -15,12 +15,13 @@
 ;;      directory (for easy access to its source code).
 
 ;; Start emacs maximized
-(add-to-list 'default-frame-alist '(fullscreen . maximized))
+;(add-to-list 'default-frame-alist '(fullscreen . maximized))
 ;; no title bar
-(add-to-list 'default-frame-alist '(undecorated . t))
+;(add-to-list 'default-frame-alist '(undecorated . t))
+
 ;; bring the window to front
 ;(add-hook! 'window-setup-hook (x-focus-frame nil))
-(add-hook! 'window-setup-hook (select-frame-set-input-focus (selected-frame)))
+;(add-hook! 'window-setup-hook (select-frame-set-input-focus (selected-frame)))
 
 ;; Prevents the unstyled mode-line flash at startup
 (setq-default mode-line-format nil)
@@ -137,7 +138,7 @@
        ;;(dart +flutter)   ; paint ui and not much else
        ;;elixir            ; erlang done right
        ;;elm               ; care for a cup of TEA?
-       emacs-lisp        ; drown in parentheses
+       emacs-lisp          ; drown in parentheses
        ;;erlang            ; an elegant language for a more civilized age
        ;;ess               ; emacs speaks statistics
        ;;faust             ; dsp, but you get to keep your soul

@@ -14,43 +14,27 @@
 (load! "+functions")
 (load! "+bindings")
 
-
 ;;
 ;; THEME
 ;;
 
-;; Doom exposes five (optional) variables for controlling fonts in Doom. Here
-;; are the three important ones:
-;;
-;; + `doom-font'
-;; + `doom-variable-pitch-font'
-;; + `doom-big-font' -- used for `doom-big-font-mode'; use this for
-;;   presentations or streaming.
-;;
-;; They all accept either a font-spec, font string ("Input Mono-12"), or xlfd
-;; font string. You generally only need these two:
-;(setq doom-font (font-spec :family "monospace" :size 12 :weight 'semi-light)
-;      doom-variable-pitch-font (font-spec :family "sans" :size 13))
-;(setq doom-font (font-spec :family "FiraCode Nerd Font" :size 12)
-;      ;;doom-variable-pitch-font (font-spec :family "ETBembo" :size 18)
-;      doom-variable-pitch-font (font-spec :family "Alegreya" :size 12))
+(defvar my-fixed-font "Iosevka Comfy")
+(defvar my-variable-font "Iosevka Comfy Duo")
 
-;; There are two ways to load a theme. Both assume the theme is installed and
-;; available. You can either set `doom-theme' or manually load a theme with the
-;; `load-theme' function. This is the default:
+(setq doom-font
+      (font-spec :family my-fixed-font :size 13)
+      doom-variable-pitch-font
+      (font-spec :family my-variable-font :size 13))
+
 ;(setq doom-theme 'doom-one)
 (setq doom-theme 'doom-city-lights)
-
-;(plist-put (alist-get "Reload last session" +doom-dashboard-menu-sections nil nil 'equal)
-;           :action doom/quickload-session)
-
-;; If you use `org' and don't want your org files in the default location below,
-;; change `org-directory'. It must be set before org loads!
-;(setq org-directory "~/org/")
 
 ;; This determines the style of line numbers in effect. If set to `nil', line
 ;; numbers are disabled. For relative line numbers, set this to `relative'.
 (setq display-line-numbers-type t)
+;; Always fixed font even in variable-pitch-mode
+(set-face-attribute 'line-number nil :font my-fixed-font)
+(set-face-attribute 'line-number-current-line nil :font my-fixed-font)
 
 ;; More colors in treesitter
 (setq treesit-font-lock-level 4)
@@ -59,8 +43,50 @@
 (after! treemacs
   (setq treemacs-width 45)
   (treemacs-follow-mode 1)
-  ;; HACK: run this at the end of the doom initialization as not all icons are defind yet
-  (add-hook! 'doom-init-ui-hook #'remove-treemacs-image-icons))
+  ;; treemacs png/svg special icons don't look great, so we patch the icon set
+  (add-hook 'treemacs-mode-hook 'remove-treemacs-image-icons))
+
+;; Org mode looks
+(after! org-mode
+  (setq org-support-shift-select t
+        org-replace-disputed-keys t))
+
+(after! org-faces
+  ;; Resize headings
+  (dolist (face '((org-level-1 . 1.1)
+                  (org-level-2 . 1.1)
+                  (org-level-3 . 1.1)
+                  (org-level-4 . 1.1)
+                  (org-level-5 . 1.1)
+                  (org-level-6 . 1.1)
+                  (org-level-7 . 1.1)
+                  (org-level-8 . 1.1)))
+    (set-face-attribute (car face) nil
+                        :font my-variable-font
+                        :height (cdr face)))
+  ;; Make the document title a bit bigger
+  (set-face-attribute 'org-document-title nil :font my-variable-font :weight 'bold :height 1.3 :underline t))
+
+(use-package! org-modern
+  :after org
+  :hook (org-mode . (global-org-modern-mode variable-pitch-mode))
+  :config
+  ;org-modern-symbol
+  (setq org-modern-star 'replace
+        org-modern-label-border 0.3))
+
+(after! org-modern-faces
+  (set-face-attribute 'org-modern-symbol nil :family my-fixed-font))
+
+;; Maximize at startup and fix title-bar height
+(add-hook 'doom-init-ui-hook
+  (lambda ()
+    ;; enable/disable toolbar mode to set the proper (minimal) titlebar height (macOS)
+    (tool-bar-mode 1)
+    (tool-bar-mode 0)
+    ;; maximize emacs w/o setting a frame property to keep normal macos window management working
+    (set-frame-position (selected-frame) 0 0)
+    (set-frame-size (selected-frame) (- (display-pixel-width) 16) (display-pixel-height) t)))
 
 ;;
 ;; GENERAL DEFAULTS
@@ -91,16 +117,31 @@
 (setq mouse-buffer-menu-mode-mult 1)
 
 ;; Set the project name as frame title (window name in macOS)
-(setq frame-title-format
-    '(""
-      "%b"
-      (:eval
-       (let ((project-name (projectile-project-name)))
-         (unless (string= "-" project-name)
-           (format " in [%s]" project-name))))))
+(setq frame-title-format '("" "%b" (:eval
+                                    (let ((project-name (projectile-project-name)))
+                                      (unless (string= "-" project-name)
+                                        (format " in [%s]" project-name))))))
 
 ;; Hide commands in M-x which do not apply to the current mode.
 (setq read-extended-command-predicate #'command-completion-default-include-p)
+
+;; If you use `org' and don't want your org files in the default location below,
+;; change `org-directory'. It must be set before org loads!
+(setq org-directory "~/Library/Mobile Documents/iCloud~com~appsonthemove~beorg/Documents/org/"
+      org-support-shift-select t
+      org-replace-disputed-keys t
+      org-startup-indented t
+      org-pretty-entities t
+      org-use-sub-superscripts "{}"
+      org-hide-emphasis-markers t
+      org-startup-with-inline-images t
+      org-image-actual-width '(300))
+
+;(plist-put (alist-get "Reload last session" +doom-dashboard-menu-sections nil nil 'equal)
+;           :action doom/quickload-session)
+
+;; Spellchecker
+(setq ispell-program-name "hunspell")
 
 ;; Restore last session automatically
 (add-hook! 'window-setup-hook #'my-quickload-session)
@@ -113,32 +154,27 @@
 ;; an alternative to the standard typescript lsp
 ;; npm install -g @vtsls/language-server
 (use-package! lsp-mode
+  :defer t
   :config
-  (setq lsp-disabled-clients '(ccls))
-  (setq lsp-idle-delay 0.9)
-  (setq lsp-restart 'auto-restart)
-  (setq lsp-ui-doc-enable nil)
-  ;(setq lsp-log-io t)
-  ;(setq lsp-file-watch-threshold nil)
-  ;(setq lsp-enable-file-watchers nil)
-  ;; disable flycheck
-  ;(setq lsp-diagnostics-provider :none)
-  ;; Use xcode's clangd
-  ;(setq lsp-clients-clangd-executable
-  ;      "/Library/Developer/CommandLineTools/usr/bin/clangd")
-  ;(setq lsp-clients-clangd-executable
-  ;      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clangd")
-  (setq lsp-clients-clangd-args '("--log=error"
+  (setq lsp-disabled-clients '(ccls)
+        lsp-idle-delay 0.9
+        lsp-restart 'auto-restart
+        lsp-ui-doc-enable nil
+        ;; Use xcode's clangd
+        ;lsp-clients-clangd-executable "/Library/Developer/CommandLineTools/usr/bin/clangd"
+        lsp-clients-clangd-args '("--log=error"
                                   "--background-index"
                                   "--clang-tidy"
                                   "--completion-style=detailed"
                                   "--header-insertion=never"
-                                  "--pretty"))
-  (setq lsp-pylsp-plugins-flake8-ignore "E128,E261,E265,E302,E401,E501,E713,E741")
-  (setq lsp-pylsp-plugins-pydocstyle-enabled nil)
-  (setq lsp-pylsp-plugins-mccabe-threshold 40)
-  (setq lsp-tailwindcss-add-on-mode t)
+                                  "--pretty")
+        ;; Disable some pygthon warnings
+        lsp-pylsp-plugins-flake8-ignore "E128,E261,E265,E302,E401,E501,E713,E741"
+        lsp-pylsp-plugins-pydocstyle-enabled nil
+        lsp-pylsp-plugins-mccabe-threshold 40
+        lsp-tailwindcss-add-on-mode t)
 
+  ;; Use an alternative typescript lsp, install via npm
   (lsp-register-client
    (make-lsp-client
     :new-connection (lsp-stdio-connection
@@ -151,14 +187,12 @@
 (add-hook 'typescript-mode-hook
           (lambda ()
             (setq-local lsp-enabled-clients '(eslint tailwindcss vtsls))
-            (lsp-deferred)
-            ))
+            (lsp-deferred)))
 
 ;; set flycheck cpp standard
 (add-hook 'c++-mode-hook
           (lambda ()
-            (setq flycheck-clang-language-standard "c++17")
-            ))
+            (setq flycheck-clang-language-standard "c++17")))
 
 (setq company-lsp-enable-snippet t)
 (after! company
@@ -222,10 +256,11 @@
 (set-file-template! "AudioGridder.*\\.cpp$" :trigger "ag_cpp" :mode 'c++-mode)
 
 ;; compilation buffer: autosave and stop at the first error and skip warnings
-(setq compilation-scroll-output 'next-error)
-(setq compilation-skip-threshold 2)
-;; do not save before compilation
-;(setq compilation-save-buffers-predicate 'ignore)
+(setq compilation-scroll-output 'next-error
+      compilation-skip-threshold 2
+      ;; do not save before compilation
+      ;compilation-save-buffers-predicate 'ignore
+      )
 
 (set-default 'truncate-lines nil)
 
@@ -235,19 +270,11 @@
 
 ;; Corfu (completion)
 (after! corfu
-  (setq corfu-auto t)
-  (setq corfu-cycle t)
-  (setq corfu-quit-no-match 'separator)
-  (setq corfu-preselect 'prompt)
-  (setq corfu-preview-current nil))
-
-;; DAP-MODE
-;(setq dap-auto-configure-mode t)
-;(setq dap-lldb-debug-program "/opt/homebrew/opt/llvm/bin/lldb-dap")
-;(setq dap-gdb-lldb-path "/usr/bin/lldb")
-;(require 'dap-cpptools)
-;; Enabling only some features
-;(setq dap-auto-configure-features '(sessions locals controls tooltip))
+  (setq corfu-auto t
+        corfu-cycle t
+        corfu-quit-no-match 'separator
+        corfu-preselect 'prompt
+        corfu-preview-current nil))
 
 ;; Load dap-mode
 (use-package! dap-mode
@@ -268,29 +295,43 @@
           :request "launch"
           :name "C++ LLDB::Run"
           :program "${workspaceFolder}/"
-          :cwd nil))
-  )
+          :cwd nil)))
 
 (use-package! elysium
+  :defer t
   :custom
   (elysium-window-size 0.33)       ; The elysium buffer will be 1/3 your screen
   (elysium-window-style 'vertical) ; Can be customized to horizontal)
-  :config
   ; enable smerge-mode explicitely
-  (add-hook 'elysium-apply-changes-hook #'smerge-mode))
+  ;(add-hook! 'elysium-apply-changes-hook #'smerge-mode)
+  :hook (elysium-apply-changes . smerge-mode))
 
 (use-package! gptel
+  :defer t
   :custom
   (gptel-model 'claude-3-5-sonnet-20241022)
   :config
+  (setq gptel-default-mode 'org-mode)
+
+  ;; Integrations
   (defun read-file-contents (file-path)
     "Read the contents of FILE-PATH and return it as a string."
     (with-temp-buffer
       (insert-file-contents file-path)
       (buffer-string)))
-  (defun gptel-api-key ()
-    (read-file-contents "~/.claude.key"))
+
+  ;; OpenAI
+  (setq! gptel-api-key (read-file-contents "~/.gptel/chatgpt.key"))
+
+  ;; Google
+  (defun gptel-gemini-api-key ()
+    (read-file-contents "~/.gptel/gemini.key"))
+  (gptel-make-gemini "Gemini" :stream t
+                     :key #'gptel-gemini-api-key)
+
+  ;; Anthropic (default)
+  (defun gptel-claude-api-key ()
+    (read-file-contents "~/.gptel/claude.key"))
   (setq gptel-backend
-        (gptel-make-anthropic "Claude"
-                              :stream t
-                              :key #'gptel-api-key)))
+        (gptel-make-anthropic "Claude" :stream t
+                              :key #'gptel-claude-api-key)))
