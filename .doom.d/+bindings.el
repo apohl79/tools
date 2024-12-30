@@ -31,9 +31,6 @@
  ;; code navigation
  "s-." #'xref-find-definitions
  "s-," #'xref-go-back
- (:prefix ("C-c C-e" . "flycheck")
-          "n" #'flycheck-next-error
-          "p" #'flycheck-previous-error)
  ;"C-<return>" #'newline-and-indent
  ;; buffers and font
  "<s-wheel-down>" #'enlarge-window-horizontally
@@ -41,16 +38,15 @@
  "s-*" #'doom/increase-font-size
  "s-_" #'doom/decrease-font-size
  ;; gptel/elysium
- (:prefix ("C-q e" . "elysium")
-          "e" #'elysium-query
-          "w" #'elysium-toggle-window
-          "d" #'elysium-discard-all-suggested-changes)
- "C-q w" #'gptel
- "C-q RET" #'gptel-send
- "C-q s" #'gptel-system-prompt
- (:prefix ("C-q a" . "add")
-          "r" #'gptel-add
-          "f" #'gptel-add-file)
+ (:leader :prefix ("C-s" . "LLM")
+          (:prefix ("e" . "elysium")
+                   "e" #'elysium-query
+                   "w" #'elysium-toggle-window
+                   "d" #'elysium-discard-all-suggested-changes)
+          "w" #'gptel
+          (:prefix ("a" . "add")
+                   "r" #'gptel-add
+                   "f" #'gptel-add-file))
  ;; miscellaneous
  "M-s <up>" #'comint-previous-input
  "M-s <down>" #'comint-next-input
