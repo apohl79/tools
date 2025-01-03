@@ -11,13 +11,13 @@
 (package! vterm-toggle)
 (package! protobuf-mode)
 (package! platformio-mode)
-
-(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
-
 (package! gptel)
 (package! elysium)
-
 (package! org-modern)
+(package! guess-language)
+(package! consult-omni :recipe (:host github :repo "armindarvish/consult-omni"))
+(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
+
 
 ;; To install a package directly from a remote git repo, you must specify a
 ;; `:recipe'. You'll find documentation on what `:recipe' accepts here:

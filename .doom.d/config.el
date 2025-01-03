@@ -26,6 +26,8 @@
       doom-variable-pitch-font
       (font-spec :family my-variable-font :size 13))
 
+(setq doom-font-increment 1)
+
 ;(setq doom-theme 'doom-one)
 (setq doom-theme 'doom-city-lights)
 
@@ -45,7 +47,7 @@
   (treemacs-follow-mode 1)
   (treemacs-project-follow-mode 1)
   ;; treemacs png/svg special icons don't look great, so we patch the icon set
-  (add-hook 'treemacs-mode-hook 'remove-treemacs-image-icons))
+  (add-hook 'treemacs-mode-hook 'my-update-treemacs-icons))
 
 ;; Org mode looks
 (after! org-mode
@@ -70,7 +72,10 @@
 
 (use-package! org-modern
   :after org
-  :hook (org-mode . global-org-modern-mode)
+  :hook ((org-mode . global-org-modern-mode)
+         (org-mode . (lambda ()
+                       ;; increase line spacing a little
+                       (setq-local default-text-properties '(line-spacing 0.1 line-height 1.1)))))
   :config
   ;org-modern-symbol
   (setq org-modern-star 'replace
@@ -156,6 +161,36 @@
 ;; CODING - LSP, CODE COMPLETION etc
 ;;
 
+(setq company-lsp-enable-snippet t)
+(after! company
+  (setq company-idle-delay 0.1
+        company-minimum-prefix-length 1))
+
+;; Disable dabbrev & ispell completion in org-mode
+(after! company
+  (set-company-backend! 'org-mode
+    '(:separate company-capf company-yasnippet)))
+
+;; Corfu (completion)
+(after! corfu
+  (setq corfu-auto t
+        corfu-cycle t
+        corfu-quit-no-match 'separator
+        corfu-preselect 'prompt
+        corfu-preview-current nil))
+
+(yas-global-mode 1)
+
+;; compilation buffer: autosave and stop at the first error and skip warnings
+(setq compilation-scroll-output 'next-error
+      compilation-skip-threshold 2)
+
+(set-default 'truncate-lines nil)
+
+;; MAGIT
+(after! magit
+  (setq git-commit-summary-max-length 120))
+
 ;; an alternative to the standard typescript lsp
 ;; npm install -g @vtsls/language-server
 (use-package! lsp-mode
@@ -198,13 +233,6 @@
 (add-hook 'c++-mode-hook
           (lambda ()
             (setq flycheck-clang-language-standard "c++17")))
-
-(setq company-lsp-enable-snippet t)
-(after! company
-  (setq company-idle-delay 0.1
-        company-minimum-prefix-length 1))
-
-(yas-global-mode 1)
 
 ;; Automatically use the right modes by file extension
 (setq auto-mode-alist
@@ -260,27 +288,6 @@
 (set-file-template! "AudioGridder.*\\.hpp$" :trigger "ag_hpp" :mode 'c++-mode)
 (set-file-template! "AudioGridder.*\\.cpp$" :trigger "ag_cpp" :mode 'c++-mode)
 
-;; compilation buffer: autosave and stop at the first error and skip warnings
-(setq compilation-scroll-output 'next-error
-      compilation-skip-threshold 2
-      ;; do not save before compilation
-      ;compilation-save-buffers-predicate 'ignore
-      )
-
-(set-default 'truncate-lines nil)
-
-;; MAGIT
-(after! magit
-  (setq git-commit-summary-max-length 120))
-
-;; Corfu (completion)
-(after! corfu
-  (setq corfu-auto t
-        corfu-cycle t
-        corfu-quit-no-match 'separator
-        corfu-preselect 'prompt
-        corfu-preview-current nil))
-
 ;; Load dap-mode
 (use-package! dap-mode
   :after lsp-mode
@@ -305,11 +312,10 @@
 (use-package! elysium
   :defer t
   :custom
-  (elysium-window-size 0.33)       ; The elysium buffer will be 1/3 your screen
-  (elysium-window-style 'vertical) ; Can be customized to horizontal)
+  (elysium-window-size 0.45)
+  (elysium-window-style 'vertical)
   ; enable smerge-mode explicitely
-  ;(add-hook! 'elysium-apply-changes-hook #'smerge-mode)
-  :hook (elysium-apply-changes . smerge-mode))
+  :hook (elysium-apply-changes . smerge-start-session))
 
 (use-package! gptel
   :defer t
@@ -340,3 +346,25 @@
   (setq gptel-backend
         (gptel-make-anthropic "Claude" :stream t
                               :key #'gptel-claude-api-key)))
+
+(use-package! guess-language
+  :after org
+  :hook (org-mode . guess-language-mode)
+  :config
+  (setq guess-language-languages '(en de)
+        guess-language-langcodes
+        '((en . ("en_US" "English" "🇺🇸" "English"))
+          (de . ("de_DE_frami" "German" "🇩🇪" "German")))))
+
+;(use-package! consult-omni
+;  :after consult
+;  :config
+;  ;; Load Sources Core code
+;  (require 'consult-omni-sources)
+;  ;; Load Embark Actions
+;  (require 'consult-omni-embark)
+;  ;; Only load brave-auto-suggest source
+;  ;(require 'consult-omni-brave-autosuggest)
+;  (consult-omni-sources-load-modules)
+;  ;;; Set your shorthand favorite interactive command
+;  (setq consult-omni-default-interactive-command #'consult-omni-brave-autosuggest))

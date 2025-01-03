@@ -123,17 +123,22 @@
   (interactive)
   (doom/quickload-session t))
 
-(defun remove-treemacs-image-icons ()
+(defun my-update-treemacs-icons ()
   "Replace all image (png/svg) icons in treemacs with font based icons."
   ;; Replace all special dir icons
   (treemacs-create-icon :icon (propertize "		" 'face 'treemacs-nerd-icons-file-face)
-                        :extensions ("src-closed" "test-closed" "tmp-closed" "temp-closed" "build-closed"
-                                     "bin-closed" "git-closed" "github-closed" "public-closed" "private-closed"
-                                     "screenshot-closed" "icons-closed" "readme-closed" "docs-closed"))
+                        :extensions ("test-closed" "tmp-closed" "temp-closed" "build-closed" "bin-closed" "git-closed"
+                                     "github-closed" "public-closed" "private-closed" "screenshot-closed" "icons-closed"
+                                     "readme-closed" "docs-closed"))
   (treemacs-create-icon :icon (propertize "		" 'face 'treemacs-nerd-icons-file-face)
-                        :extensions ("src-open" "test-open" "tmp-open" "temp-open" "build-open" "bin-open"
-                                     "git-open" "github-open" "public-open" "private-open" "screenshot-open"
-                                     "icons-open" "readme-open" "docs-open"))
+                        :extensions ("test-open" "tmp-open" "temp-open" "build-open" "bin-open" "git-open" "github-open"
+                                     "public-open" "private-open" "screenshot-open" "icons-open" "readme-open" "docs-open"))
+  (treemacs-create-icon :icon (propertize "		" 'face 'nerd-icons-dred) :extensions ("src-closed" "electron-closed"))
+  (treemacs-create-icon :icon (propertize "		" 'face 'nerd-icons-dred) :extensions ("src-open" "electron-open"))
+  (treemacs-create-icon :icon (propertize "		" 'face 'nerd-icons-dyellow) :extensions ("scripts-closed"))
+  (treemacs-create-icon :icon (propertize "		" 'face 'nerd-icons-dyellow) :extensions ("scripts-open"))
+  (treemacs-create-icon :icon (propertize "		" 'face 'nerd-icons-dgreen) :extensions ("tests-closed"))
+  (treemacs-create-icon :icon (propertize "		" 'face 'nerd-icons-dgreen) :extensions ("tests-open"))
   ;; Set some script/config icons
   (treemacs-create-icon :icon (propertize " 	󱆃	" 'face 'treemacs-nerd-icons-file-face)
                         :extensions ("zshrc" "bash" "bash_profile" "bash_login" "bash_aliases" "profile"))

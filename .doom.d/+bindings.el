@@ -1,6 +1,6 @@
 ;;; +bindings.el -*- lexical-binding: t; -*-
 
-(undefine-key! "C-z" "s-w")
+(undefine-key! "C-z" "s-w" "s-+" "s--")
 (setq doom-localleader-alt-key "C-z")
 
 (map!
@@ -31,7 +31,6 @@
  ;; code navigation
  "s-." #'xref-find-definitions
  "s-," #'xref-go-back
- ;"C-<return>" #'newline-and-indent
  ;; buffers and font
  "<s-wheel-down>" #'enlarge-window-horizontally
  "<s-wheel-up>" #'shrink-window-horizontally
@@ -42,6 +41,7 @@
           (:prefix ("e" . "elysium")
                    "e" #'elysium-query
                    "w" #'elysium-toggle-window
+                   "a" #'elysium-apply-code-changes
                    "d" #'elysium-discard-all-suggested-changes)
           "w" #'gptel
           (:prefix ("a" . "add")
