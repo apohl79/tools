@@ -34,7 +34,7 @@
 
        :completion
        ;corfu
-       company
+       ;company
        vertico
        ;;company           ; the ultimate code completion backend
        ;;helm              ; the *other* search engine for love and life
@@ -96,8 +96,8 @@
        vterm               ; the best terminal emulation in Emacs
 
        :checkers
-       syntax              ; tasing you for every semicolon you forget
-       (spell +flyspell)   ; tasing you for misspelling mispelling
+       (syntax +flymake)   ; tasing you for every semicolon you forget
+       ;(spell +flyspell)  ; tasing you for misspelling mispelling
        ;;grammar           ; tasing grammar mistake every you make
 
        :tools
@@ -128,7 +128,8 @@
 
        :lang
        ;;agda              ; types of types of types of types...
-       (cc +lsp)           ; C/C++/Obj-C madness
+       ;(cc +lsp)           ; C/C++/Obj-C madness
+       cc
        ;;clojure           ; java with a lisp
        ;;common-lisp       ; if you've seen one lisp, you've seen them all
        ;;coq               ; proofs-as-programs
@@ -151,7 +152,9 @@
        ;;idris             ; a language you can depend on
        json              ; At least it ain't XML
        ;;(java +meghanada) ; the poster child for carpal tunnel syndrome
-       (javascript +lsp)   ; all(hope(abandon(ye(who(enter(here))))))
+       java
+       ;(javascript +lsp)   ; all(hope(abandon(ye(who(enter(here))))))
+       javascript
        ;;julia             ; a better, faster MATLAB
        ;;kotlin            ; a better, slicker Java(Script)
        ;;latex             ; writing papers in Emacs has never been so fun
@@ -167,7 +170,8 @@
        ;;php               ; perl's insecure younger brother
        plantuml            ; diagrams for confusing people more
        ;;purescript        ; javascript, but functional
-       (python +lsp)       ; beautiful is better than ugly
+       ;(python +lsp)       ; beautiful is better than ugly
+       python
        ;;qt                ; the 'cutest' gui framework ever
        ;;racket            ; a DSL for DSLs
        ;;raku              ; the artist formerly known as perl6
@@ -177,16 +181,18 @@
        ;;rust              ; Fe2O3.unwrap().unwrap().unwrap().unwrap()
        ;;scala             ; java, but good
        ;;scheme            ; a fully conniving family of lisps
-       (sh +lsp)           ; she sells {ba,z,fi}sh shells on the C xor
+       ;(sh +lsp)           ; she sells {ba,z,fi}sh shells on the C xor
+       sh
        ;;sml
        ;;solidity          ; do you need a blockchain? No.
        ;;swift             ; who asked for emoji variables?
        ;;terra             ; Earth and Moon in alignment for performance.
        ;;web               ; the tubes
-       (yaml +lsp)         ; JSON, but readable
+       ;(yaml +lsp)         ; JSON, but readable
+       yaml
 
        :email
-       ;;(mu4e +gmail)
+       (mu4e +org)
        ;;notmuch
        ;;(wanderlust +gmail)
 

@@ -14,10 +14,23 @@
 (package! gptel)
 (package! elysium)
 (package! org-modern)
-(package! guess-language)
+(package! jinx)
 (package! consult-omni :recipe (:host github :repo "armindarvish/consult-omni"))
 (package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
 
+(package! lsp-bridge
+  :recipe (:host github
+           :repo "manateelazycat/lsp-bridge"
+           :branch "master"
+           :files ("*.el" "*.py" "acm" "core" "langserver" "multiserver" "resources")
+           :build (:not compile)))
+(package! flymake-bridge :recipe (:host github :repo "liuyinz/flymake-bridge"))
+
+;(package! org :pin "071c6e986c424d2e496be7d0815d6e9cd83ae4e6") ;; 9.6.30
+(package! mu4e-views :recipe (:host github :repo "lordpretzel/mu4e-views"))
+
+(package! svg-lib)
+(package! svg-tag-mode :recipe (:host github :repo "rougier/svg-tag-mode"))
 
 ;; To install a package directly from a remote git repo, you must specify a
 ;; `:recipe'. You'll find documentation on what `:recipe' accepts here:

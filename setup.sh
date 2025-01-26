@@ -66,13 +66,19 @@ if [ "$(uname)" = "Darwin" ]; then
     if [ "$DOOM" = "1" ]; then
         if ! which -s emacs; then
             echo "installing emacs..."
+            brew install jansson libxml2 tree-sitter imagemagick librsvg python3
+            # lsp-bridge deps
+            pip3 install epc orjson sexpdata six setuptools paramiko rapidfuzz watchdog packaging
+            # language servers
+            npm install -g yaml-language-server
+            # emacs
             brew tap railwaycat/emacsmacport
-            brew install emacs-mac --with-starter --with-native-compilation --with-natural-title-bar
+            brew install emacs-mac --with-starter --with-native-compilation --with-natural-title-bar --with-imagemagick --with-librsvg --with-xwidgets --with-glib
             defaults write org.gnu.Emacs TransparentTitleBar DARK
         fi
         if [ ! -e "$HOME/.config/emacs" ]; then
             echo "installing doom emacs..."
-            brew install git ripgrep coreutils fd fontconfig shellcheck isort pipenv markdown jq hunspell
+            brew install git ripgrep coreutils fd fontconfig shellcheck isort pipenv markdown jq hunspell enchant
             git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
             export PATH=/opt/homebrew/bin:"$PATH"
             "$HOME/.config/emacs/bin/doom" install
@@ -118,7 +124,7 @@ if [ "$(uname)" = "Darwin" ]; then
     brew install utm || true
     brew install cliclick || true
     brew install balenaetcher || true
-    brew install pyright || true
+    brew install basedpyright ruff || true
     brew install drawio || true
     brew install gh || true
     brew install nvm || true

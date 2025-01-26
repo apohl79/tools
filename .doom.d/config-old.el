@@ -1,173 +1,21 @@
-(load! "+functions")
+;;; $DOOMDIR/config.el -*- lexical-binding: t; -*-
 
+;; Place your private configuration here! Remember, you do not need to run 'doom
+;; sync' after modifying this file!
+
+;; Some functionality uses this to identify you, e.g. GPG configuration, email
+;; clients, file templates and snippets.
 (setq user-full-name "Andreas Pohl"
       user-mail-address "pohl@e47.org")
 
-;; Maximize emacs w/o setting a frame property to keep normal macOS window management working
-(add-hook 'doom-init-ui-hook
-  (lambda ()
-    (set-frame-position (selected-frame) 0 0)
-    (set-frame-size (selected-frame) (- (display-pixel-width) 16) (display-pixel-height) t)))
+;(setq debug-on-error t)
 
-;; Restore last session automatically
-(add-hook! 'window-setup-hook #'my-quickload-session)
+(load! "+functions")
+(load! "+bindings")
 
-;; Make all "yes or no" prompts show "y or n" instead
-(fset 'yes-or-no-p 'y-or-n-p)
-
-;; Auto refresh buffers
-(global-auto-revert-mode 1)
-
-;; Disable the quit question
-(setq confirm-kill-emacs nil)
-
-;; Make sure we get asked to accept non-safe local variables from .dir-locals.el files
-(setq enable-local-variables :all)
-
-;; "ctrl - left click" buffer menu: increase number of items shown.
-;; Set max length of this list. default 20. see next.
-(setq mouse-buffer-menu-maxlen 30)
-
-;; set # buffer in a mode before grouping begins. takes precedence over previous
-;; set to 1 to always group by mode. default 4
-(setq mouse-buffer-menu-mode-mult 1)
-
-;; Hide commands in M-x which do not apply to the current mode.
-(setq read-extended-command-predicate #'command-completion-default-include-p)
-
-;; Do not truncate lines but wrap them into the next line
-(set-default 'truncate-lines nil)
-
-(setq org-directory "~/Library/Mobile Documents/iCloud~com~appsonthemove~beorg/Documents/org/"
-      org-support-shift-select t
-      org-replace-disputed-keys t
-      org-startup-indented t
-      org-pretty-entities t
-      org-use-sub-superscripts "{}"
-      org-hide-emphasis-markers t
-      org-startup-with-inline-images t
-      org-image-actual-width '(300))
-
-(use-package! jinx
-  :hook ((org-mode . jinx-mode)
-         (prog-mode . jinx-mode))
-  :config
-  (setq jinx-languages "en_US de_DE_frami"
-        jinx-delay 1.0)
-  ; no spell checking in strings
-  (add-to-list 'jinx-exclude-faces '(prog-mode font-lock-string-face)))
-
-(after! vertico-multiform ;; if using vertico
-  (add-to-list 'vertico-multiform-categories
-               '(jinx (vertico-grid-annotate . 25))))
-
-(undefine-key! "C-z" "s-w" "s-+" "s--")
-(setq doom-localleader-alt-key "C-z")
-
-(map!
- ;; treemacs
- "s-1" #'treemacs
- "s-2" #'treemacs-tag-follow-mode
- "s-3" #'treemacs-project-follow-mode
- ;; navigation
- "C-x p" #'my-previous-window
- "C-x n" #'other-window
- "M-<left>" #'outline-hide-subtree
- "M-<right>" #'outline-show-children
- "M-<up>" #'outline-hide-other
- "M-<down>" #'outline-show-all
- "<home>" #'beginning-of-line
- "<end>" #'end-of-line
- "C-x r e" #'replace-regexp
- "C-x c p" #'my-match-paren
- "C-c x" #'dabbrev-expand
- "C-c b" #'revert-buffer
- "C-c u" #'upcase-region
- "C-c d" #'downcase-region
- "C-c f" #'find-file-at-point
- "C-c C-a" #'auto-fill-mode
- "C-c j" #'set-justification-left
- "M-g" #'goto-line
- "C-x C-y" #'my-save-and-killbuf
- ;; code navigation
- "s-." #'xref-find-definitions
- "s-," #'xref-go-back
- ;; buffers and font
- "<s-wheel-down>" #'enlarge-window-horizontally
- "<s-wheel-up>" #'shrink-window-horizontally
- "s-*" #'doom/increase-font-size
- "s-_" #'doom/decrease-font-size
- ;; gptel/elysium
- (:leader :prefix ("C-s" . "LLM")
-          (:prefix ("e" . "elysium")
-                   "e" #'elysium-query
-                   "w" #'elysium-toggle-window
-                   "a" #'elysium-apply-code-changes
-                   "d" #'elysium-discard-all-suggested-changes)
-          "w" #'gptel
-          (:prefix ("a" . "add")
-                   "r" #'gptel-add
-                   "f" #'gptel-add-file))
- ;; lsp-bridge
- (:leader :prefix ("c" . "code")
-          :desc "LSP Code actions"      "a"   #'lsp-bridge-code-action
-          :desc "LSP Rename"            "r"   #'lsp-bridge-rename
-          :desc "Find References"       "i"   #'lsp-bridge-find-references
-          :desc "Find Definition"       "j"   #'lsp-bridge-find-def
-          :desc "Find Implementation"   "J"   #'lsp-bridge-find-impl)
- ;; miscellaneous
- "M-s <up>" #'comint-previous-input
- "M-s <down>" #'comint-next-input
- "C-c w Q" #'my-quickload-session
- ;; mode specific
- :map (c++-mode-map c-mode-map cmake-mode-map)
- "C-c RET" #'recompile
- :map (c++-mode-map c-mode-map)
- "s-." #'lsp-bridge-peek
- "s-," #'lsp-bridge-peek-jump-back
- :map lsp-bridge-peek-keymap
- "s-." #'lsp-bridge-peek-jump
- "RET" #'lsp-bridge-peek-jump
- "<up>" #'lsp-bridge-peek-list-prev-line
- "<down>" #'lsp-bridge-peek-list-next-line
- :map gptel-mode-map
- "C-c RET" #'gptel-menu
- "C-<return>" #'gptel-send
- "C-<up>" #'gptel-beginning-of-response
- "C-<down>" #'gptel-end-of-response
- :map vterm-mode-map
- "C-c C-c" #'vterm-send-C-c
- :map mu4e-headers-mode-map
- "." #'mu4e-view-raw-message
- "<up>" #'mu4e-headers-prev
- "<down>" #'mu4e-headers-next
- "v" #'mu4e-views-mu4e-select-view-msg-method
- "M-n" #'mu4e-views-cursor-msg-view-window-down
- "M-p" #'mu4e-views-cursor-msg-view-window-up
- "f" #'mu4e-views-toggle-auto-view-selected-message
- "i" #'mu4e-views-mu4e-view-as-nonblocked-html
- :map org-msg-edit-mode-map
- "C-c C-c" #'my-org-msg-ctrl-c-ctrl-c
- )
-
-(after! treemacs
-  (treemacs-define-RET-action 'file-node-closed #'treemacs-visit-node-ace)
-  (treemacs-define-RET-action 'file-node-open #'treemacs-visit-node-ace)
-  (define-key treemacs-mode-map [s-mouse-1] #'treemacs-visit-node-ace))
-
-;; Switch between header and implementation, replace projectile version as this one here works outside of projects
-(add-hook 'c-initialization-hook
-          (lambda () (define-key c-mode-base-map (kbd "C-c p a") 'ff-get-other-file)))
-
-;; buffer selection cia <cmd>+<left click> in c++
-(global-set-key [s-mouse-1] 'mouse-buffer-menu)
-
-;; use more convinient smerge key bindings
-(setq smerge-command-prefix "\C-cm")
-
-; redo
-(after! undo-fu
-  (map! :map undo-fu-mode-map "C-?" #'undo-fu-only-redo))
+;; -------------------------------------------------------------------------------------------------
+;; EMAIL
+;; -------------------------------------------------------------------------------------------------
 
 (use-package! mu4e
   ;; Fix the setup of org-msg for mu4e
@@ -193,7 +41,6 @@
         send-mail-function #'smtpmail-send-it
         message-sendmail-f-is-evil t
         message-sendmail-extra-arguments '("--read-envelope-from")
-
         message-send-mail-function #'message-send-mail-with-sendmail
 
         ; receive setup, see ~/.mbsyncrc
@@ -233,7 +80,9 @@
         mu4e-views-auto-view-selected-message t)
   (mu4e-views-mu4e-use-view-msg-method "html")) ;; select the default
 
-(setq doom-theme 'doom-city-lights)
+;; -------------------------------------------------------------------------------------------------
+;; THEME
+;; -------------------------------------------------------------------------------------------------
 
 (defvar my-fixed-font "Iosevka Comfy")
 (defvar my-variable-font "Roboto")
@@ -243,29 +92,22 @@
       doom-variable-pitch-font
       (font-spec :family my-variable-font :size 13))
 
-;; zoom in/out steps
 (setq doom-font-increment 1)
+
+;(setq doom-theme 'doom-one)
+(setq doom-theme 'doom-city-lights)
 
 ;; This determines the style of line numbers in effect. If set to `nil', line
 ;; numbers are disabled. For relative line numbers, set this to `relative'.
 (setq display-line-numbers-type t)
-
 ;; Always fixed font even in variable-pitch-mode
 (set-face-attribute 'line-number nil :font my-fixed-font)
 (set-face-attribute 'line-number-current-line nil :font my-fixed-font)
 
-;; Set the project name as frame title (window name in macOS)
-(setq frame-title-format '("" "%b" (:eval
-                                    (let ((project-name (projectile-project-name)))
-                                      (unless (string= "-" project-name)
-                                        (format " in [%s]" project-name))))))
+;; More colors in treesitter
+(setq treesit-font-lock-level 4)
 
-(add-hook 'doom-init-ui-hook
-  (lambda ()
-    ;; Enable/disable toolbar mode to set the proper (minimal) titlebar height (macOS)
-    (tool-bar-mode 1)
-    (tool-bar-mode 0)))
-
+;; Treemacs tweaks
 (after! treemacs
   (setq treemacs-width 45)
   (treemacs-follow-mode 1)
@@ -274,6 +116,7 @@
   ;; treemacs png/svg special icons don't look great, so we patch the icon set
   (add-hook 'treemacs-mode-hook 'my-update-treemacs-icons))
 
+;; Org mode looks
 (after! org-mode
   (setq org-support-shift-select t
         org-replace-disputed-keys t))
@@ -312,34 +155,128 @@
   :after org
   :hook (org-mode . mixed-pitch-mode))
 
-;; Snippets
+;; Maximize at startup and fix title-bar height
+(add-hook 'doom-init-ui-hook
+  (lambda ()
+    ;; enable/disable toolbar mode to set the proper (minimal) titlebar height (macOS)
+    (tool-bar-mode 1)
+    (tool-bar-mode 0)
+    ;; maximize emacs w/o setting a frame property to keep normal macos window management working
+    (set-frame-position (selected-frame) 0 0)
+    (set-frame-size (selected-frame) (- (display-pixel-width) 16) (display-pixel-height) t)))
+
+
+;; -------------------------------------------------------------------------------------------------
+;; GENERAL DEFAULTS
+;; -------------------------------------------------------------------------------------------------
+
+;; Make all "yes or no" prompts show "y or n" instead
+(fset 'yes-or-no-p 'y-or-n-p)
+
+;; auto save
+;(setq auto-save-default t
+;      make-backup-files t)
+
+;; Auto refresh buffers
+(global-auto-revert-mode 1)
+
+;; Disable the quit question
+(setq confirm-kill-emacs nil)
+
+;; make sure we get asked to accept non-safe local variables from .dir-locals.el files
+;(setq enable-local-variables t)
+(setq enable-local-variables :all)
+
+;; "ctrl - left click" buffer menu: increase number of items shown
+;; set max length of this list. default 20. see next.
+(setq mouse-buffer-menu-maxlen 30)
+;; set # buffer in a mode before grouping begins. takes precedence over previous
+;; set to 1 to always group by mode. default 4
+(setq mouse-buffer-menu-mode-mult 1)
+
+;; Set the project name as frame title (window name in macOS)
+(setq frame-title-format '("" "%b" (:eval
+                                    (let ((project-name (projectile-project-name)))
+                                      (unless (string= "-" project-name)
+                                        (format " in [%s]" project-name))))))
+
+;; Hide commands in M-x which do not apply to the current mode.
+(setq read-extended-command-predicate #'command-completion-default-include-p)
+
+;; If you use `org' and don't want your org files in the default location below,
+;; change `org-directory'. It must be set before org loads!
+(setq org-directory "~/Library/Mobile Documents/iCloud~com~appsonthemove~beorg/Documents/org/"
+      org-support-shift-select t
+      org-replace-disputed-keys t
+      org-startup-indented t
+      org-pretty-entities t
+      org-use-sub-superscripts "{}"
+      org-hide-emphasis-markers t
+      org-startup-with-inline-images t
+      org-image-actual-width '(300))
+
+;; Spellchecker
+(use-package! jinx
+  :hook ((org-mode . jinx-mode)
+         (prog-mode . jinx-mode))
+  :config
+  (setq jinx-languages "en_US de_DE_frami"
+        jinx-delay 1.0)
+  ; no spell checking in strings
+  (add-to-list 'jinx-exclude-faces '(prog-mode font-lock-string-face)))
+
+(after! vertico-multiform ;; if using vertico
+  (add-to-list 'vertico-multiform-categories
+               '(jinx (vertico-grid-annotate . 25))))
+
+(set-default 'truncate-lines nil)
+
+;(use-package! consult-omni
+;  :after consult
+;  :config
+;  ;; Load Sources Core code
+;  (require 'consult-omni-sources)
+;  ;; Load Embark Actions
+;  (require 'consult-omni-embark)
+;  ;; Only load brave-auto-suggest source
+;  ;(require 'consult-omni-brave-autosuggest)
+;  (consult-omni-sources-load-modules)
+;  ;;; Set your shorthand favorite interactive command
+;  (setq consult-omni-default-interactive-command #'consult-omni-brave-autosuggest))
+
+;; Dashboard menu
+;(plist-put (alist-get "Reload last session" +doom-dashboard-menu-sections nil nil 'equal)
+;           :action doom/quickload-session)
+
+;; Restore last session automatically
+(add-hook! 'window-setup-hook #'my-quickload-session)
+
+
+;; -------------------------------------------------------------------------------------------------
+;; CODING - LSP, CODE COMPLETION etc
+;; -------------------------------------------------------------------------------------------------
+
+;; (setq company-lsp-enable-snippet t)
+;; (after! company
+;;   (setq company-idle-delay 0.1
+;;         company-minimum-prefix-length 1))
+;;
+;; ;; Disable dabbrev & ispell completion in org-mode
+;; (after! company
+;;   (set-company-backend! 'org-mode
+;;     '(:separate company-capf company-yasnippet)))
+
 (yas-global-mode 1)
 
-;; Compilation buffer: stop at the first error and skip warnings
+;; Compilation buffer: autosave and stop at the first error and skip warnings
 (setq compilation-scroll-output 'next-error
       compilation-skip-threshold 2)
-
-(defvar my-cpp-other-file-alist
-  '(("\\.cpp\\'" (".h" ".hpp" ".ipp"))
-    ("\\.ipp\\'" (".hpp" ".cpp"))
-    ("\\.hpp\\'" (".ipp" ".cpp"))
-    ("\\.cxx\\'" (".hxx" ".ixx"))
-    ("\\.ixx\\'" (".cxx" ".hxx"))
-    ("\\.hxx\\'" (".ixx" ".cxx"))
-    ("\\.cc\\'" (".h" ".hh"))
-    ("\\.mm\\'" (".h"))
-    ("\\.c\\'" (".h"))
-    ("\\.h\\'" (".cpp" ".cc" ".cxx" ".c" ".mm"))))
-
-(setq-default ff-other-file-alist 'my-cpp-other-file-alist)
-
-(add-hook 'c-mode-common-hook 'my-clang-format-indent)
-(add-hook 'c++-mode-hook 'my-clang-format-indent)
 
 ;; Make the git summary line longer
 (after! magit
   (setq git-commit-summary-max-length 120))
 
+;; LSP support and code completion
 (use-package! lsp-bridge
   :config
   (setq lsp-bridge-enable-log nil
@@ -359,6 +296,53 @@
 ;; Disable flymake for elisp
 (add-hook 'emacs-lisp-mode-hook (lambda () (flymake-mode -1)))
 
+;; (use-package! lsp-mode
+;;   :defer t
+;;   :config
+;;   (setq lsp-disabled-clients '(ccls)
+;;         lsp-idle-delay 0.9
+;;         lsp-restart 'auto-restart
+;;         lsp-ui-doc-enable nil
+;;         ;; Use xcode's clangd
+;;         ;lsp-clients-clangd-executable "/Library/Developer/CommandLineTools/usr/bin/clangd"
+;;         lsp-clients-clangd-args '("--log=error"
+;;                                   "--background-index"
+;;                                   "--clang-tidy"
+;;                                   "--completion-style=detailed"
+;;                                   "--header-insertion=never"
+;;                                   "--pretty")
+;;         ;; Disable some pygthon warnings
+;;         lsp-pylsp-plugins-flake8-ignore "E128,E261,E265,E302,E401,E501,E713,E741"
+;;         lsp-pylsp-plugins-pydocstyle-enabled nil
+;;         lsp-pylsp-plugins-mccabe-threshold 40
+;;         lsp-tailwindcss-add-on-mode t)
+;;
+;;   ;; Use an alternative typescript lsp, install via npm
+;;   ;; npm install -g @vtsls/language-server
+;;   ;(lsp-register-client
+;;   ; (make-lsp-client
+;;   ;  :new-connection (lsp-stdio-connection
+;;   ;                   (lambda ()
+;;   ;                     `("node" ,(expand-file-name "~/.nvm/versions/node/v20.12.2/bin/vtsls") "--stdio")))
+;;   ;  :priority -1
+;;   ;  :major-modes '(typescript-mode)
+;;   ;  :server-id 'vtsls))
+;;   )
+
+;;(add-hook 'typescript-mode-hook
+;;          (lambda ()
+;;            ;(setq-local lsp-enabled-clients '(eslint tailwindcss ts-ls))
+;;            (setq-local lsp-enabled-clients '(ts-ls eslint))
+;;            (lsp-deferred)))
+
+;; Set flycheck cpp standard
+;(add-hook 'c++-mode-hook
+;          (lambda ()
+;            (setq flycheck-clang-language-standard "c++17")))
+
+;(add-hook! prog-mode #'flymake-mode)
+
+;; Automatically use the right modes by file extension
 (setq auto-mode-alist
       (append '(("\\.app$"                  . c++-mode)
                 ("\\.bat$"                  . rexx-mode)        ; to edit batchfiles
@@ -399,6 +383,7 @@
                 ("\\.tsx$"                  . typescript-mode)
                 ) auto-mode-alist))
 
+;; Disable tree-sitter modes
 (add-to-list 'major-mode-remap-alist '(js-ts-mode . js-mode))
 (add-to-list 'major-mode-remap-alist '(typescript-ts-mode . typescript-mode))
 (add-to-list 'major-mode-remap-alist '(tsx-ts-mode . typescript-mode))
@@ -411,42 +396,38 @@
 (set-file-template! "AudioGridder.*\\.hpp$" :trigger "ag_hpp" :mode 'c++-mode)
 (set-file-template! "AudioGridder.*\\.cpp$" :trigger "ag_cpp" :mode 'c++-mode)
 
-(advice-add 'mwheel-scroll :after #'my-scroll-mouse-handler)
+;; Load dap-mode
+(use-package! dap-mode
+  :after lsp-mode
+  :config
+  (dap-auto-configure-mode)
+  ;; Enable dap-ui mode for a better experience
+  (dap-ui-mode)
+  (dap-ui-controls-mode 1)
 
-(defcustom auto-hide-compile-buffer-delay 1
-    "Time in seconds before auto hiding compile buffer."
-    :group 'compilation
-    :type 'number)
+  (require 'dap-codelldb)
+  (dap-codelldb-setup)
 
-(defun my-hide-compile-buffer-if-successful (buffer string)
-  (setq compilation-total-time (time-subtract nil compilation-start-time))
-  (setq time-str (concat " (Time: " (format-time-string "%s.%3N" compilation-total-time) "s)"))
+  ;; Register a default debug template for C++ projects
+  (dap-register-debug-template
+    "C++ LLDB::Run"
+    (list :type "lldb"
+          :request "launch"
+          :name "C++ LLDB::Run"
+          :program "${workspaceFolder}/"
+          :cwd nil)))
 
-  (if
-      (with-current-buffer buffer
-        (setq warnings (eval compilation-num-warnings-found))
-        (setq warnings-str (concat " (Warnings: " (number-to-string warnings) ")"))
-        (setq errors (eval compilation-num-errors-found))
-        (setq errors-str (concat " (Errors: " (number-to-string errors) ")"))
+;; Enable vterm-copy-mode automatically when scrolling up
+;(advice-add 'set-window-vscroll :after
+;            (defun my-vterm-toggle-scroll (&rest _)
+;              (when (eq major-mode 'vterm-mode)
+;                (if (> (window-end) (buffer-size))
+;                    (when vterm-copy-mode (vterm-copy-mode-done nil))
+;                  (vterm-copy-mode 1)))))
 
-        (if (and (eq errors 0) (string-prefix-p "finished" string)) nil t))
-
-      ;; If errors or non-zero exit code
-      (message (concat "Compiled with Errors" warnings-str errors-str time-str))
-
-    ;; If compiled successfully or with warnings
-    (progn
-      (bury-buffer buffer)
-      (run-with-timer auto-hide-compile-buffer-delay nil 'delete-window (get-buffer-window buffer 'visible))
-      (message (concat "Compiled Successfully" warnings-str errors-str time-str)))))
-
-(make-variable-buffer-local 'compilation-start-time)
-
-(defun my-compilation-started (proc)
-  (setq compilation-start-time (current-time)))
-
-(add-hook 'compilation-start-hook 'my-compilation-started)
-(add-hook 'compilation-finish-functions 'my-hide-compile-buffer-if-successful)
+;; -------------------------------------------------------------------------------------------------
+;; LLM SETUP
+;; -------------------------------------------------------------------------------------------------
 
 (use-package! elysium
   :defer t

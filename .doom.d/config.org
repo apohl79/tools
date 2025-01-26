@@ -1,3 +1,12 @@
+#+title: Doom Emacs Configuration
+
+#+STARTUP: overview
+
+Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/restart~.
+
+* General
+
+#+begin_src emacs-lisp :tangle yes
 (load! "+functions")
 
 (setq user-full-name "Andreas Pohl"
@@ -11,7 +20,11 @@
 
 ;; Restore last session automatically
 (add-hook! 'window-setup-hook #'my-quickload-session)
+#+end_src
 
+** General behavior
+
+#+begin_src emacs-lisp :tangle yes
 ;; Make all "yes or no" prompts show "y or n" instead
 (fset 'yes-or-no-p 'y-or-n-p)
 
@@ -37,7 +50,11 @@
 
 ;; Do not truncate lines but wrap them into the next line
 (set-default 'truncate-lines nil)
+#+end_src
 
+** Org
+
+#+begin_src emacs-lisp :tangle yes
 (setq org-directory "~/Library/Mobile Documents/iCloud~com~appsonthemove~beorg/Documents/org/"
       org-support-shift-select t
       org-replace-disputed-keys t
@@ -47,7 +64,11 @@
       org-hide-emphasis-markers t
       org-startup-with-inline-images t
       org-image-actual-width '(300))
+#+end_src
 
+** Spellchecker
+
+#+begin_src emacs-lisp :tangle yes
 (use-package! jinx
   :hook ((org-mode . jinx-mode)
          (prog-mode . jinx-mode))
@@ -60,7 +81,11 @@
 (after! vertico-multiform ;; if using vertico
   (add-to-list 'vertico-multiform-categories
                '(jinx (vertico-grid-annotate . 25))))
+#+end_src
 
+* Key Bindings
+
+#+begin_src emacs-lisp :tangle yes
 (undefine-key! "C-z" "s-w" "s-+" "s--")
 (setq doom-localleader-alt-key "C-z")
 
@@ -168,7 +193,13 @@
 ; redo
 (after! undo-fu
   (map! :map undo-fu-mode-map "C-?" #'undo-fu-only-redo))
+#+end_src
 
+* Email
+
+I'm using mu4e and org-msg coming with doom. Unfortunately org-msg needs some fixing to work properly.
+
+#+begin_src emacs-lisp :tangle yes
 (use-package! mu4e
   ;; Fix the setup of org-msg for mu4e
   :init (add-hook 'org-msg-mode-hook
@@ -232,9 +263,19 @@
         ;; automatically open messages when moving in the headers view
         mu4e-views-auto-view-selected-message t)
   (mu4e-views-mu4e-use-view-msg-method "html")) ;; select the default
+#+end_src
 
+* Looks
+
+** Theme
+
+#+begin_src emacs-lisp :tangle yes
 (setq doom-theme 'doom-city-lights)
+#+end_src
 
+** Font
+
+#+begin_src emacs-lisp :tangle yes
 (defvar my-fixed-font "Iosevka Comfy")
 (defvar my-variable-font "Roboto")
 
@@ -245,7 +286,11 @@
 
 ;; zoom in/out steps
 (setq doom-font-increment 1)
+#+end_src
 
+** Line  numbers
+
+#+begin_src emacs-lisp :tangle yes
 ;; This determines the style of line numbers in effect. If set to `nil', line
 ;; numbers are disabled. For relative line numbers, set this to `relative'.
 (setq display-line-numbers-type t)
@@ -253,7 +298,11 @@
 ;; Always fixed font even in variable-pitch-mode
 (set-face-attribute 'line-number nil :font my-fixed-font)
 (set-face-attribute 'line-number-current-line nil :font my-fixed-font)
+#+end_src
 
+** Titlebar
+
+#+begin_src emacs-lisp :tangle yes
 ;; Set the project name as frame title (window name in macOS)
 (setq frame-title-format '("" "%b" (:eval
                                     (let ((project-name (projectile-project-name)))
@@ -265,7 +314,11 @@
     ;; Enable/disable toolbar mode to set the proper (minimal) titlebar height (macOS)
     (tool-bar-mode 1)
     (tool-bar-mode 0)))
+#+end_src
 
+** Treemacs
+
+#+begin_src emacs-lisp :tangle yes
 (after! treemacs
   (setq treemacs-width 45)
   (treemacs-follow-mode 1)
@@ -273,7 +326,11 @@
   (set-face-attribute 'treemacs-root-face nil :height 1.0)
   ;; treemacs png/svg special icons don't look great, so we patch the icon set
   (add-hook 'treemacs-mode-hook 'my-update-treemacs-icons))
+#+end_src
 
+** Org
+
+#+begin_src emacs-lisp :tangle yes
 (after! org-mode
   (setq org-support-shift-select t
         org-replace-disputed-keys t))
@@ -311,14 +368,38 @@
 (use-package! mixed-pitch
   :after org
   :hook (org-mode . mixed-pitch-mode))
+#+end_src
 
+** Tags
+
+Not compatible with org-mode / org-modern.
+
+#+begin_src emacs-lisp :tangle no
+(use-package! svg-tag-mode
+  :defer t
+  :config
+  (setq svg-tag-tags
+      '(("TODO" . ((lambda (tag) (svg-tag-make "TODO"))))
+        ("FIXME" . ((lambda (tag) (svg-tag-make "FIXME")))))
+  ))
+#+end_src
+
+* Coding
+
+** General coding settings
+
+#+begin_src emacs-lisp :tangle yes
 ;; Snippets
 (yas-global-mode 1)
 
 ;; Compilation buffer: stop at the first error and skip warnings
 (setq compilation-scroll-output 'next-error
       compilation-skip-threshold 2)
+#+end_src
 
+Setup mappings to switch between C++ headers and implementation files.
+
+#+begin_src emacs-lisp :tangle yes
 (defvar my-cpp-other-file-alist
   '(("\\.cpp\\'" (".h" ".hpp" ".ipp"))
     ("\\.ipp\\'" (".hpp" ".cpp"))
@@ -332,14 +413,26 @@
     ("\\.h\\'" (".cpp" ".cc" ".cxx" ".c" ".mm"))))
 
 (setq-default ff-other-file-alist 'my-cpp-other-file-alist)
+#+end_src
 
+Setup C++ custom indention via ~clang-format~.
+
+#+begin_src emacs-lisp :tangle yes
 (add-hook 'c-mode-common-hook 'my-clang-format-indent)
 (add-hook 'c++-mode-hook 'my-clang-format-indent)
+#+end_src
 
+** Git
+
+#+begin_src emacs-lisp :tangle yes
 ;; Make the git summary line longer
 (after! magit
   (setq git-commit-summary-max-length 120))
+#+end_src
 
+** Code completion and linting
+
+#+begin_src emacs-lisp :tangle yes
 (use-package! lsp-bridge
   :config
   (setq lsp-bridge-enable-log nil
@@ -358,7 +451,53 @@
 
 ;; Disable flymake for elisp
 (add-hook 'emacs-lisp-mode-hook (lambda () (flymake-mode -1)))
+#+end_src
 
+** Debugging
+
+FIXME: This does not work properly yet.
+
+#+begin_src emacs-lisp :tangle no
+(use-package! dap-mode
+  :after lsp-mode
+  :config
+
+  (require 'dap-cpptools)
+  (dap-cpptools-setup)
+
+  ;(setq dap-lldb-debug-program '("/opt/homebrew/opt/llvm/bin/lldb-dap"))
+
+  ;(dap-auto-configure-mode)
+  ;; Enable dap-ui mode for a better experience
+  ;(dap-ui-mode)
+  ;(dap-ui-controls-mode 1)
+
+  ;(require 'dap-codelldb)
+  ;(dap-codelldb-setup)
+
+  ;; Register a default debug template for C++ projects
+  ;;(dap-register-debug-template
+  ;;  "C++ LLDB::Run"
+  ;;  (list :type "lldb"
+  ;;        :request "launch"
+  ;;        :name "C++ LLDB::Run"
+  ;;        :program "${workspaceFolder}/"
+  ;;        :cwd nil))
+  (dap-register-debug-template
+   "cpptools::Run Configuration MediaServer"
+   (list :type "cppdbg"
+         :request "launch"
+         :name "cpptools::Run Configuration"
+         :MIMode "gdb"
+         :miDebuggerPath "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap"
+         :program "/Users/andreas/audio/syncdna-v1/mediaserver/build-dev/bin/sdna-mediaserver"
+         :cwd "/Users/andreas/audio/syncdna-v1/mediaserver/build-dev/bin/"))
+    )
+#+end_src
+
+** Mode mapping
+
+#+begin_src emacs-lisp :tangle yes
 (setq auto-mode-alist
       (append '(("\\.app$"                  . c++-mode)
                 ("\\.bat$"                  . rexx-mode)        ; to edit batchfiles
@@ -398,11 +537,23 @@
                 ("\\.ts$"                   . typescript-mode)
                 ("\\.tsx$"                  . typescript-mode)
                 ) auto-mode-alist))
+#+end_src
 
+** Tree-Sitter
+
+Tree-sitter was not usable the last time I tried, so just disable it for now.
+
+#+begin_src emacs-lisp :tangle yes
 (add-to-list 'major-mode-remap-alist '(js-ts-mode . js-mode))
 (add-to-list 'major-mode-remap-alist '(typescript-ts-mode . typescript-mode))
 (add-to-list 'major-mode-remap-alist '(tsx-ts-mode . typescript-mode))
+#+end_src
 
+** Templates
+
+TODO: This needs some checking. After some changes I did (or the emacs 29 upgrade) this seemed broken.
+
+#+begin_src emacs-lisp :tangle yes
 ;; Set up default file templates based on the project
 (set-file-template! "\\.hpp$" :trigger "__hpp" :mode 'c++-mode)
 (set-file-template! "\\.cpp$" :trigger "__cpp" :mode 'c++-mode)
@@ -410,9 +561,23 @@
 (set-file-template! "syncdna.*\\.cpp$" :trigger "sdna_cpp" :mode 'c++-mode)
 (set-file-template! "AudioGridder.*\\.hpp$" :trigger "ag_hpp" :mode 'c++-mode)
 (set-file-template! "AudioGridder.*\\.cpp$" :trigger "ag_cpp" :mode 'c++-mode)
+#+end_src
 
+** Terminal
+
+Enable/disable vterm-copy-mode automatically when scrolling up/down via mouse.
+
+#+begin_src emacs-lisp :tangle yes
 (advice-add 'mwheel-scroll :after #'my-scroll-mouse-handler)
+#+end_src
 
+** Compilation buffer
+
+Automatically hide the compilation buffer when successful. Keep it open otherwise.
+
+This is based on: https://stackoverflow.com/questions/11043004/emacs-compile-buffer-auto-close
+
+#+begin_src emacs-lisp :tangle yes
 (defcustom auto-hide-compile-buffer-delay 1
     "Time in seconds before auto hiding compile buffer."
     :group 'compilation
@@ -447,7 +612,15 @@
 
 (add-hook 'compilation-start-hook 'my-compilation-started)
 (add-hook 'compilation-finish-functions 'my-hide-compile-buffer-if-successful)
+#+end_src
 
+* AI Assistant (LLM)
+
+** Elysium
+
+Elysium is working similar to avante.nvim or cursor.ai or windsurf. Not as great yet, but usable. We are enabling smerge manually, as elysium does not do this properly.
+
+#+begin_src emacs-lisp :tangle yes
 (use-package! elysium
   :defer t
   :custom
@@ -455,7 +628,13 @@
   (elysium-window-style 'vertical)
   ; enable smerge-mode explicitely
   :hook (elysium-apply-changes . smerge-start-session))
+#+end_src
 
+** Gptel
+
+Gptel is the LLM main module also used by elysium. I'm mostly using claude by anthropic for coding, so we make it the default. All API keys got into =~/.gptel/=.
+
+#+begin_src emacs-lisp :tangle yes
 (use-package! gptel
   :defer t
   :custom
@@ -485,3 +664,4 @@
   (setq gptel-backend
         (gptel-make-anthropic "Claude" :stream t
                               :key #'gptel-claude-api-key)))
+#+end_src
