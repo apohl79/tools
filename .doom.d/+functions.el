@@ -1,5 +1,11 @@
 ;;; +functions.el -*- lexical-binding: t; -*-
 
+(defun my-read-file (file-path)
+  "Read the contents of FILE-PATH and return it as a string."
+  (with-temp-buffer
+    (insert-file-contents file-path)
+    (buffer-string)))
+
 (defun my-indent-buffer ()
   "Indents an entire buffer using the default intenting scheme."
   (interactive)
@@ -159,3 +165,36 @@ to the end of the buffer."
         (when vterm-copy-mode (vterm-copy-mode-done nil))
       ;; not the end of the buffer, turn copy mode on when in vterm-mode
       (when (eq major-mode 'vterm-mode) (vterm-copy-mode 1)))))
+
+;; Compilation buffer
+(defcustom auto-hide-compile-buffer-delay 1
+    "Time in seconds before auto hiding compile buffer."
+    :group 'compilation
+    :type 'number)
+
+(defun my-hide-compile-buffer-if-successful (buffer string)
+  (setq compilation-total-time (time-subtract nil compilation-start-time))
+  (setq time-str (concat " (Time: " (format-time-string "%s.%3N" compilation-total-time) "s)"))
+
+  (if
+      (with-current-buffer buffer
+        (setq warnings (eval compilation-num-warnings-found))
+        (setq warnings-str (concat " (Warnings: " (number-to-string warnings) ")"))
+        (setq errors (eval compilation-num-errors-found))
+        (setq errors-str (concat " (Errors: " (number-to-string errors) ")"))
+
+        (if (and (eq errors 0) (string-prefix-p "finished" string)) nil t))
+
+      ;; If errors or non-zero exit code
+      (message (concat "Compiled with Errors" warnings-str errors-str time-str))
+
+    ;; If compiled successfully or with warnings
+    (progn
+      (bury-buffer buffer)
+      (run-with-timer auto-hide-compile-buffer-delay nil 'delete-window (get-buffer-window buffer 'visible))
+      (message (concat "Compiled Successfully" warnings-str errors-str time-str)))))
+
+(make-variable-buffer-local 'compilation-start-time)
+
+(defun my-compilation-started (proc)
+  (setq compilation-start-time (current-time)))

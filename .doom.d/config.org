@@ -578,38 +578,6 @@ Automatically hide the compilation buffer when successful. Keep it open otherwis
 This is based on: https://stackoverflow.com/questions/11043004/emacs-compile-buffer-auto-close
 
 #+begin_src emacs-lisp :tangle yes
-(defcustom auto-hide-compile-buffer-delay 1
-    "Time in seconds before auto hiding compile buffer."
-    :group 'compilation
-    :type 'number)
-
-(defun my-hide-compile-buffer-if-successful (buffer string)
-  (setq compilation-total-time (time-subtract nil compilation-start-time))
-  (setq time-str (concat " (Time: " (format-time-string "%s.%3N" compilation-total-time) "s)"))
-
-  (if
-      (with-current-buffer buffer
-        (setq warnings (eval compilation-num-warnings-found))
-        (setq warnings-str (concat " (Warnings: " (number-to-string warnings) ")"))
-        (setq errors (eval compilation-num-errors-found))
-        (setq errors-str (concat " (Errors: " (number-to-string errors) ")"))
-
-        (if (and (eq errors 0) (string-prefix-p "finished" string)) nil t))
-
-      ;; If errors or non-zero exit code
-      (message (concat "Compiled with Errors" warnings-str errors-str time-str))
-
-    ;; If compiled successfully or with warnings
-    (progn
-      (bury-buffer buffer)
-      (run-with-timer auto-hide-compile-buffer-delay nil 'delete-window (get-buffer-window buffer 'visible))
-      (message (concat "Compiled Successfully" warnings-str errors-str time-str)))))
-
-(make-variable-buffer-local 'compilation-start-time)
-
-(defun my-compilation-started (proc)
-  (setq compilation-start-time (current-time)))
-
 (add-hook 'compilation-start-hook 'my-compilation-started)
 (add-hook 'compilation-finish-functions 'my-hide-compile-buffer-if-successful)
 #+end_src
@@ -642,25 +610,18 @@ Gptel is the LLM main module also used by elysium. I'm mostly using claude by an
   :config
   (setq gptel-default-mode 'org-mode)
 
-  ;; Integrations
-  (defun read-file-contents (file-path)
-    "Read the contents of FILE-PATH and return it as a string."
-    (with-temp-buffer
-      (insert-file-contents file-path)
-      (buffer-string)))
-
   ;; OpenAI
-  (setq! gptel-api-key (read-file-contents "~/.gptel/chatgpt.key"))
+  (setq! gptel-api-key (my-read-file "~/.gptel/chatgpt.key"))
 
   ;; Google
   (defun gptel-gemini-api-key ()
-    (read-file-contents "~/.gptel/gemini.key"))
+    (my-read-file "~/.gptel/gemini.key"))
   (gptel-make-gemini "Gemini" :stream t
                      :key #'gptel-gemini-api-key)
 
   ;; Anthropic (default)
   (defun gptel-claude-api-key ()
-    (read-file-contents "~/.gptel/claude.key"))
+    (my-read-file "~/.gptel/claude.key"))
   (setq gptel-backend
         (gptel-make-anthropic "Claude" :stream t
                               :key #'gptel-claude-api-key)))
