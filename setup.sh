@@ -47,14 +47,17 @@ link "clang-format" "$dir/.clang-format" "$HOME/.clang-format"
 echo "choose emacs setup:"
 echo " 1) doom"
 echo " 2) light"
+echo " 3) skip"
 read DOOM
 if [ "$DOOM" = "1" ]; then
     if [ ! -d "$HOME/.config" ]; then
         mkdir "$HOME/.config"
     fi
     link "doom" "$dir/.doom.d" "$HOME/.config/doom"
-else
+elif [ "$DOOM" = "2" ]; then
     link "emacs" "$dir/.emacs" "$HOME/.emacs"
+else
+    echo "skipping emacs"
 fi
 
 if [ "$(uname)" = "Darwin" ]; then
@@ -64,12 +67,17 @@ if [ "$(uname)" = "Darwin" ]; then
     fi
 
     if [ "$DOOM" = "1" ]; then
+        brew install nvm || true
+        nvm install 20
+        nvm use 20
+
         if ! which -s emacs; then
             echo "installing emacs..."
             brew install jansson libxml2 tree-sitter imagemagick librsvg python3
             # lsp-bridge deps
             pip3 install epc orjson sexpdata six setuptools paramiko rapidfuzz watchdog packaging
             # language servers
+            brew install basedpyright ruff || true
             npm install -g yaml-language-server
             # emacs
             brew tap railwaycat/emacsmacport
@@ -78,7 +86,7 @@ if [ "$(uname)" = "Darwin" ]; then
         fi
         if [ ! -e "$HOME/.config/emacs" ]; then
             echo "installing doom emacs..."
-            brew install git ripgrep coreutils fd fontconfig shellcheck isort pipenv markdown jq hunspell enchant
+            brew install git ripgrep coreutils fd fontconfig font-iosevka-comfy font-roboto shellcheck isort pipenv markdown jq hunspell enchant
             git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
             export PATH=/opt/homebrew/bin:"$PATH"
             "$HOME/.config/emacs/bin/doom" install
@@ -91,44 +99,25 @@ if [ "$(uname)" = "Darwin" ]; then
         fi
     fi
 
-    echo "installing environment..."
-    brew install cmake || true
-    brew install python3 || true
-    brew install clang-format || true
-    brew install llvm || true
-    brew install jenv || true
-    brew install libtool || true
-    brew install oracle-jdk || true
-    brew install raycast || true
-    brew install contexts || true
-    brew install deepl || true
-    brew install hammerspoon || true
-    brew install keepassxc || true
-    brew install menumeters || true
-    brew install owncloud || true
-    brew install signal || true
-    brew install whatsapp || true
-    brew install brave-browser || true
-    brew install cryptomator || true
-    brew install wezterm || true
-    brew install mailspring || true
-    brew install rectangle || true
-    brew install spotify || true
-    brew install htop || true
-    brew install packages || true
-    brew install tor-browser || true
-    brew install dos2unix || true
-    brew install ilok-license-manager || true
-    brew install mosquitto || true
-    brew install arduino-ide || true
-    brew install utm || true
-    brew install cliclick || true
-    brew install balenaetcher || true
-    brew install basedpyright ruff || true
-    brew install drawio || true
-    brew install gh || true
-    brew install nvm || true
-    brew install font-iosevka-comfy font-roboto || true
+    echo -n "install dev ennvironment and tools? [Y/n]: "
+    read INST
 
-    pip3 install paho-mqtt || true
+    if [ -z "$INST" ] || [ "$INST" = "y" ] || [ "$INST" != "Y" ]; then
+        echo "installing environment..."
+        brew install owncloud keepassxc cryptomator || true
+        brew install wezterm llvm clang-format cmake python3 libtool gh nvm htop packages dos2unix mosquitto || true
+        brew install oracle-jdk jenv || true
+        brew install rectangle raycast contexts hammerspoon menumeters deepl || true
+        brew install signal whatsapp || true
+        brew install arc brave-browser tor-browser || true
+        npm install -g @georgesg/arc-cli
+        brew install mailspring || true
+        brew install spotify || true
+        brew install ilok-license-manager || true
+        brew install balenaetcher || true
+        brew install arduino-ide || true
+        brew install utm || true
+        brew install cliclick || true
+        pip3 install paho-mqtt || true
+    fi
 fi
