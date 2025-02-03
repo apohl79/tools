@@ -38,6 +38,9 @@
 ;; Do not truncate lines but wrap them into the next line
 (set-default 'truncate-lines nil)
 
+;; Desired line length
+(setq-default fill-column 120)
+
 (setq org-directory "~/Library/Mobile Documents/iCloud~com~appsonthemove~beorg/Documents/org/"
       org-support-shift-select t
       org-replace-disputed-keys t
@@ -55,7 +58,7 @@
   (setq jinx-languages "en_US de_DE_frami"
         jinx-delay 1.0)
   ; no spell checking in strings
-  (add-to-list 'jinx-exclude-faces '(prog-mode font-lock-string-face)))
+  (add-to-list 'jinx-exclude-faces '(prog-mode font-lock-string-face font-lock-comment-face)))
 
 (after! vertico-multiform ;; if using vertico
   (add-to-list 'vertico-multiform-categories
@@ -122,7 +125,7 @@
  ;; mode specific
  :map (c++-mode-map c-mode-map cmake-mode-map)
  "C-c RET" #'recompile
- :map (c++-mode-map c-mode-map)
+ :map (c++-mode-map c-mode-map typescript-mode-map js-mode-map)
  "s-." #'lsp-bridge-peek
  "s-," #'lsp-bridge-peek-jump-back
  :map lsp-bridge-peek-keymap
@@ -231,7 +234,11 @@
         mu4e-views-next-previous-message-behaviour 'stick-to-current-window
         ;; automatically open messages when moving in the headers view
         mu4e-views-auto-view-selected-message t)
-  (mu4e-views-mu4e-use-view-msg-method "html")) ;; select the default
+  (mu4e-views-mu4e-use-view-msg-method "gnus")) ;; select the default
+
+(setq browse-url-browser-function 'browse-url-generic
+      browse-url-generic-program "arc-cli"
+      browse-url-generic-args '("new-little-arc"))
 
 (setq doom-theme 'doom-city-lights)
 
@@ -312,9 +319,6 @@
   :after org
   :hook (org-mode . mixed-pitch-mode))
 
-;; Snippets
-(yas-global-mode 1)
-
 ;; Compilation buffer: stop at the first error and skip warnings
 (setq compilation-scroll-output 'next-error
       compilation-skip-threshold 2)
@@ -328,6 +332,7 @@
     ("\\.hxx\\'" (".ixx" ".cxx"))
     ("\\.cc\\'" (".h" ".hh"))
     ("\\.mm\\'" (".h"))
+    ("\\.m\\'" (".h"))
     ("\\.c\\'" (".h"))
     ("\\.h\\'" (".cpp" ".cc" ".cxx" ".c" ".mm"))))
 
@@ -340,15 +345,48 @@
 (after! magit
   (setq git-commit-summary-max-length 120))
 
+(use-package! yasnippet
+  :ensure t
+  :config
+  (yas-global-mode 1))
+
+(use-package! orderless
+  :ensure t
+  :custom
+  (completion-styles '(orderless basic))
+  (completion-category-overrides '((file (styles basic partial-completion)))))
+
 (use-package! lsp-bridge
   :config
   (setq lsp-bridge-enable-log nil
         lsp-bridge-enable-mode-line t
         lsp-bridge-enable-completion-in-string t
         lsp-bridge-enable-hover-diagnostic t
-        lsp-bridge-enable-search-words nil
+        lsp-bridge-enable-org-babel t
         acm-enable-tabnine t
-        acm-backend-yas-candidate-min-length 2)
+        acm-enable-capf t
+        acm-candidate-match-function 'orderless-flex
+        acm-backend-lsp-match-mode 'prefix)
+  ;; enable objective c by default
+  (append lsp-bridge-default-mode-hooks '(objc-mode))
+  ;; When jumping to a definition out of a peek window, I want to leave peek mode
+  ;; BUT I also want to be able to jump back. This restores jump back info after
+  ;; leaving peek mode.
+  (advice-add 'lsp-bridge-peek-jump :after
+              (lambda ()
+                (let ((jump-backup lsp-bridge-peek-file-and-pos-before-jump))
+                  (message "*** lsp-bridge-peek-jump")
+                  (lsp-bridge-peek-mode -1)
+                  (setq lsp-bridge-peek-file-and-pos-before-jump jump-backup))))
+  (advice-add 'lsp-bridge-peek-jump-back :before
+              (lambda ()
+                (message "*** lsp-bridge-peek-jump-back")
+                (let ((file (nth 0 lsp-bridge-peek-file-and-pos-before-jump))
+                      (pos  (nth 0 lsp-bridge-peek-file-and-pos-before-jump)))
+                  (find-file file)
+                  ;(goto-char (acm-backend-lsp-position-to-point pos))
+                  )
+                (lsp-bridge-peek-mode -1)))
   (my-enable-global-lsp-bridge-mode))
 
 ;; Enable the lsp-bridge flymake backend
@@ -411,39 +449,12 @@
 (set-file-template! "AudioGridder.*\\.hpp$" :trigger "ag_hpp" :mode 'c++-mode)
 (set-file-template! "AudioGridder.*\\.cpp$" :trigger "ag_cpp" :mode 'c++-mode)
 
+(add-hook 'find-file-hook
+          (lambda ()
+            (when (and (= (buffer-size) 0))
+              (+file-templates/apply))))
+
 (advice-add 'mwheel-scroll :after #'my-scroll-mouse-handler)
-
-(defcustom auto-hide-compile-buffer-delay 1
-    "Time in seconds before auto hiding compile buffer."
-    :group 'compilation
-    :type 'number)
-
-(defun my-hide-compile-buffer-if-successful (buffer string)
-  (setq compilation-total-time (time-subtract nil compilation-start-time))
-  (setq time-str (concat " (Time: " (format-time-string "%s.%3N" compilation-total-time) "s)"))
-
-  (if
-      (with-current-buffer buffer
-        (setq warnings (eval compilation-num-warnings-found))
-        (setq warnings-str (concat " (Warnings: " (number-to-string warnings) ")"))
-        (setq errors (eval compilation-num-errors-found))
-        (setq errors-str (concat " (Errors: " (number-to-string errors) ")"))
-
-        (if (and (eq errors 0) (string-prefix-p "finished" string)) nil t))
-
-      ;; If errors or non-zero exit code
-      (message (concat "Compiled with Errors" warnings-str errors-str time-str))
-
-    ;; If compiled successfully or with warnings
-    (progn
-      (bury-buffer buffer)
-      (run-with-timer auto-hide-compile-buffer-delay nil 'delete-window (get-buffer-window buffer 'visible))
-      (message (concat "Compiled Successfully" warnings-str errors-str time-str)))))
-
-(make-variable-buffer-local 'compilation-start-time)
-
-(defun my-compilation-started (proc)
-  (setq compilation-start-time (current-time)))
 
 (add-hook 'compilation-start-hook 'my-compilation-started)
 (add-hook 'compilation-finish-functions 'my-hide-compile-buffer-if-successful)
@@ -463,25 +474,18 @@
   :config
   (setq gptel-default-mode 'org-mode)
 
-  ;; Integrations
-  (defun read-file-contents (file-path)
-    "Read the contents of FILE-PATH and return it as a string."
-    (with-temp-buffer
-      (insert-file-contents file-path)
-      (buffer-string)))
-
   ;; OpenAI
-  (setq! gptel-api-key (read-file-contents "~/.gptel/chatgpt.key"))
+  (setq! gptel-api-key (my-read-file "~/.gptel/chatgpt.key"))
 
   ;; Google
   (defun gptel-gemini-api-key ()
-    (read-file-contents "~/.gptel/gemini.key"))
+    (my-read-file "~/.gptel/gemini.key"))
   (gptel-make-gemini "Gemini" :stream t
                      :key #'gptel-gemini-api-key)
 
   ;; Anthropic (default)
   (defun gptel-claude-api-key ()
-    (read-file-contents "~/.gptel/claude.key"))
+    (my-read-file "~/.gptel/claude.key"))
   (setq gptel-backend
         (gptel-make-anthropic "Claude" :stream t
                               :key #'gptel-claude-api-key)))
