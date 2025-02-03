@@ -102,7 +102,7 @@ if [ "$(uname)" = "Darwin" ]; then
     echo -n "install dev ennvironment and tools? [Y/n]: "
     read INST
 
-    if [ -z "$INST" ] || [ "$INST" = "y" ] || [ "$INST" != "Y" ]; then
+    if [ -z "$INST" ] || [ "$INST" = "y" ] || [ "$INST" = "Y" ]; then
         echo "installing environment..."
         brew install owncloud keepassxc cryptomator || true
         brew install wezterm llvm clang-format cmake python3 libtool gh nvm htop packages dos2unix mosquitto || true
