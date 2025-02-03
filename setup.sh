@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 scriptname=$0
 dir=$(readlink $0|sed "s,/$scriptname,,")
 
