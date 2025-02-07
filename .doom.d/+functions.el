@@ -115,6 +115,24 @@
                                    lsp-bridge-user-multiserver-dir confdir))
                      (lsp-bridge-mode 1)))))
 
+
+;; Customize peek mode jumping so it works similar to xref jumping
+(defvar my-last-file '())
+(defvar my-last-pos '())
+(defun my-lsp-bridge-pre-peek-jump ()
+  "Store the position before executing a peek jump to jump back later."
+  (push (buffer-file-name) my-last-file)
+  (push (point) my-last-pos))
+(defun my-lsp-bridge-post-peek-jump ()
+  "Disable peek mode after a jump."
+  (lsp-bridge-peek-mode -1))
+(defun my-lsp-bridge-peek-jump-back ()
+  "Custom function to return to the previous position of a peek jump."
+  (when (not (null my-last-pos))
+    (find-file (pop my-last-file))
+    (goto-char (pop my-last-pos)))
+  (lsp-bridge-peek-mode -1))
+
 (defun my-message-kill-buffer-no-query ()
   "A version of message-kill-buffer() without any user confirmation which deletes the
  file and a backup"

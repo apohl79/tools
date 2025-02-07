@@ -32,11 +32,8 @@
 ;; set to 1 to always group by mode. default 4
 (setq mouse-buffer-menu-mode-mult 1)
 
-;; Hide commands in M-x which do not apply to the current mode.
-(setq read-extended-command-predicate #'command-completion-default-include-p)
-
 ;; Do not truncate lines but wrap them into the next line
-(set-default 'truncate-lines nil)
+(setq-default truncate-lines nil)
 
 ;; Desired line length
 (setq-default fill-column 120)
@@ -372,21 +369,9 @@
   ;; When jumping to a definition out of a peek window, I want to leave peek mode
   ;; BUT I also want to be able to jump back. This restores jump back info after
   ;; leaving peek mode.
-  (advice-add 'lsp-bridge-peek-jump :after
-              (lambda ()
-                (let ((jump-backup lsp-bridge-peek-file-and-pos-before-jump))
-                  (message "*** lsp-bridge-peek-jump")
-                  (lsp-bridge-peek-mode -1)
-                  (setq lsp-bridge-peek-file-and-pos-before-jump jump-backup))))
-  (advice-add 'lsp-bridge-peek-jump-back :before
-              (lambda ()
-                (message "*** lsp-bridge-peek-jump-back")
-                (let ((file (nth 0 lsp-bridge-peek-file-and-pos-before-jump))
-                      (pos  (nth 0 lsp-bridge-peek-file-and-pos-before-jump)))
-                  (find-file file)
-                  ;(goto-char (acm-backend-lsp-position-to-point pos))
-                  )
-                (lsp-bridge-peek-mode -1)))
+  (advice-add 'lsp-bridge-peek-jump :before #'my-lsp-bridge-pre-peek-jump)
+  (advice-add 'lsp-bridge-peek-jump :after #'my-lsp-bridge-post-peek-jump)
+  (advice-add 'lsp-bridge-peek-jump-back :before #'my-lsp-bridge-peek-jump-back)
   (my-enable-global-lsp-bridge-mode))
 
 ;; Enable the lsp-bridge flymake backend
