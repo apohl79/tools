@@ -1,6 +1,5 @@
 #!/bin/bash
 
-inst="/opt/homebrew/Cellar/jdtls/1.45.0/libexec"
 data="$HOME/.config/emacs/.local/cache/workspace"
 
 if [ ! -d "$data" ]; then
@@ -25,8 +24,8 @@ exec java \
     -Xmx1G \
     -Xms100m \
     -Xlog:disable \
-    -javaagent:"$HOME"/tools/jdtls/lombok-1.18.36.jar \
+    -javaagent:"$HOME/tools/jdtls/lombok-1.18.36.jar" \
     -Daether.dependencyCollector.impl=bf \
-    -jar $inst/plugins/org.eclipse.equinox.launcher_*.jar \
-    -configuration $inst/config_mac \
+    -jar "$HOME/tools/jdtls/plugins"/org.eclipse.equinox.launcher_*.jar \
+    -configuration "$HOME/tools/jdtls/config_mac" \
     -data "$data"

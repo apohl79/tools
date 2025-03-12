@@ -123,5 +123,7 @@ if [ "$(uname)" = "Darwin" ]; then
         brew install jenv openjdk@21 jdtls || true
         jenv add /opt/homebrew/opt/openjdk@21 || true
         jenv global 21 || true
+        link "jdtls/config_mac" "/opt/homebrew/Cellar/jdtls/*/libexec/config_mac" "$HOME/tools/jdtls/config_mac"
+        link "jdtls/plugins" "/opt/homebrew/Cellar/jdtls/*/libexec/plugins" "$HOME/tools/jdtls/plugins"
     fi
 fi
