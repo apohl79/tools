@@ -1,3 +1,5 @@
+(message "*** General")
+
 (load! "+functions")
 
 (setq user-full-name "Andreas Pohl"
@@ -11,6 +13,8 @@
 
 ;; Restore last session automatically
 (add-hook! 'window-setup-hook #'my-quickload-session)
+
+(message "*** General / General behavior")
 
 ;; Make all "yes or no" prompts show "y or n" instead
 (fset 'yes-or-no-p 'y-or-n-p)
@@ -38,6 +42,11 @@
 ;; Desired line length
 (setq-default fill-column 120)
 
+;; File name in the mode line
+(setq doom-modeline-buffer-file-name-style 'truncate-with-project)
+
+(message "*** General / Org")
+
 (setq org-directory "~/Library/Mobile Documents/iCloud~com~appsonthemove~beorg/Documents/org/"
       org-support-shift-select t
       org-replace-disputed-keys t
@@ -47,6 +56,8 @@
       org-hide-emphasis-markers t
       org-startup-with-inline-images t
       org-image-actual-width '(300))
+
+(message "*** General / Spellchecker")
 
 (use-package! jinx
   :hook ((org-mode . jinx-mode)
@@ -60,6 +71,8 @@
 (after! vertico-multiform ;; if using vertico
   (add-to-list 'vertico-multiform-categories
                '(jinx (vertico-grid-annotate . 25))))
+
+(message "*** Key Bindings")
 
 (undefine-key! "C-z" "s-w" "s-+" "s--")
 (setq doom-localleader-alt-key "C-z")
@@ -109,27 +122,27 @@
                    "r" #'gptel-add
                    "f" #'gptel-add-file))
  ;; lsp-bridge
- (:leader :prefix ("c" . "code")
-          :desc "LSP Code actions"      "a"   #'lsp-bridge-code-action
-          :desc "LSP Rename"            "r"   #'lsp-bridge-rename
-          :desc "Find References"       "i"   #'lsp-bridge-find-references
-          :desc "Find Definition"       "j"   #'lsp-bridge-find-def
-          :desc "Find Implementation"   "J"   #'lsp-bridge-find-impl)
+ ;(:leader :prefix ("c" . "code")
+ ;         :desc "LSP Code actions"      "a"   #'lsp-bridge-code-action
+ ;         :desc "LSP Rename"            "r"   #'lsp-bridge-rename
+ ;         :desc "Find References"       "i"   #'lsp-bridge-find-references
+ ;         :desc "Find Definition"       "j"   #'lsp-bridge-find-def
+ ;         :desc "Find Implementation"   "J"   #'lsp-bridge-find-impl)
  ;; miscellaneous
  "M-s <up>" #'comint-previous-input
  "M-s <down>" #'comint-next-input
  "C-c w Q" #'my-quickload-session
  ;; mode specific
- :map (c++-mode-map c-mode-map cmake-mode-map)
+ :map (c++-mode-map c-mode-map cmake-mode-map objc-mode-map)
  "C-c RET" #'recompile
- :map (c++-mode-map c-mode-map typescript-mode-map js-mode-map)
- "s-." #'lsp-bridge-peek
- "s-," #'lsp-bridge-peek-jump-back
- :map lsp-bridge-peek-keymap
- "s-." #'lsp-bridge-peek-jump
- "RET" #'lsp-bridge-peek-jump
- "<up>" #'lsp-bridge-peek-list-prev-line
- "<down>" #'lsp-bridge-peek-list-next-line
+ ;:map (c++-mode-map c-mode-map typescript-mode-map js-mode-map java-mode-map)
+ ;"s-." #'lsp-bridge-peek
+ ;"s-," #'lsp-bridge-peek-jump-back
+ ;:map lsp-bridge-peek-keymap
+ ;"s-." #'lsp-bridge-peek-jump
+ ;"RET" #'lsp-bridge-peek-jump
+ ;"<up>" #'lsp-bridge-peek-list-prev-line
+ ;"<down>" #'lsp-bridge-peek-list-next-line
  :map gptel-mode-map
  "C-c RET" #'gptel-menu
  "C-<return>" #'gptel-send
@@ -169,73 +182,7 @@
 (after! undo-fu
   (map! :map undo-fu-mode-map "C-?" #'undo-fu-only-redo))
 
-(use-package! mu4e
-  ;; Fix the setup of org-msg for mu4e
-  :init (add-hook 'org-msg-mode-hook
-                  (lambda ()
-                    (org-msg-mode-mu4e)
-                    (org-msg-edit-mode-mu4e)
-                    ;; this fixes the problem of not closing the edit buffer properly
-                    (add-hook 'message-sent-hook
-                              (lambda ()
-                                (my-message-kill-buffer-no-query)
-                                (mu4e-compose-post-restore-window-configuration)))))
-  :config
-  (setq mail-user-agent 'mu4e-user-agent ; important for org-msg
-        mu4e-view-show-images t
-        mu4e-compose-signature-auto-include nil
-        mu4e-use-fancy-chars t
-        mu4e-split-view 'vertical
-        mu4e-headers-visible-columns 120
-
-        ; send setup, see ~/.msmtprc
-        sendmail-program (executable-find "msmtp")
-        send-mail-function #'smtpmail-send-it
-        message-sendmail-f-is-evil t
-        message-sendmail-extra-arguments '("--read-envelope-from")
-
-        message-send-mail-function #'message-send-mail-with-sendmail
-
-        ; receive setup, see ~/.mbsyncrc
-        mu4e-get-mail-command "mbsync --config ~/.mbsyncrc e47"
-        mu4e-update-interval 300
-        mu4e-headers-auto-update t
-
-        ; bookmarks
-        mu4e-bookmarks '((:name "Unread"
-                          :query "maildir:/INBOX AND flag:unread"
-                          :key ?i
-                          :favorite t))
-
-        ; dirs
-        mu4e-drafts-folder "/Drafts"
-        mu4e-sent-folder "/Sent"
-        mu4e-trash-folder "/Trash"
-        mu4e-refile-folder "/Archive"
-        mu4e-maildir-shortcuts '((:maildir "/INBOX" :key ?i)
-                                 (:maildir "/Sent" :key ?s)
-                                 (:maildir "/Drafts" :key ?d)
-                                 (:maildir "/Trash" :key ?t)
-                                 (:maildir "/Junk" :key ?j)
-                                 (:maildir "/Spam" :key ?g :hide-unread t))
-
-        ; avoid replying to ourselves
-        mu4e-compose-reply-ignore-address '("no-?reply" "pohl@e47.org")))
-
-(use-package! mu4e-views
-  :defer nil
-  :after mu4e
-  :config
-  (setq mu4e-views-default-view-method "html" ;; make xwidgets default
-        ;; when pressing n and p stay in the current window
-        mu4e-views-next-previous-message-behaviour 'stick-to-current-window
-        ;; automatically open messages when moving in the headers view
-        mu4e-views-auto-view-selected-message t)
-  (mu4e-views-mu4e-use-view-msg-method "gnus")) ;; select the default
-
-(setq browse-url-browser-function 'browse-url-generic
-      browse-url-generic-program "arc-cli"
-      browse-url-generic-args '("new-little-arc"))
+(message "*** Looks")
 
 (setq doom-theme 'doom-city-lights)
 
@@ -316,6 +263,8 @@
   :after org
   :hook (org-mode . mixed-pitch-mode))
 
+(message "*** Coding / General")
+
 ;; Compilation buffer: stop at the first error and skip warnings
 (setq compilation-scroll-output 'next-error
       compilation-skip-threshold 2)
@@ -338,49 +287,119 @@
 (add-hook 'c-mode-common-hook 'my-clang-format-indent)
 (add-hook 'c++-mode-hook 'my-clang-format-indent)
 
+(setq projectile-completion-system 'default)
+
+(message "*** Coding / Git")
+
 ;; Make the git summary line longer
 (after! magit
   (setq git-commit-summary-max-length 120))
 
-(use-package! yasnippet
-  :ensure t
+(message "*** Coding / LSP - lsp-mode")
+(use-package! lsp-mode
+  :defer t
   :config
-  (yas-global-mode 1))
+  (setq lsp-disabled-clients '(ccls)
+        lsp-idle-delay 0.9
+        lsp-restart 'auto-restart
+        lsp-ui-doc-enable nil
+        ;; Use xcode's clangd
+        ;lsp-clients-clangd-executable "/Library/Developer/CommandLineTools/usr/bin/clangd"
+        lsp-clients-clangd-args '("--log=error"
+                                  "--background-index"
+                                  "--clang-tidy"
+                                  "--completion-style=detailed"
+                                  "--header-insertion=never"
+                                  "--pretty")
+        ;; Disable some pygthon warnings
+        lsp-pylsp-plugins-flake8-ignore "E128,E261,E265,E302,E401,E501,E713,E741"
+        lsp-pylsp-plugins-pydocstyle-enabled nil
+        lsp-pylsp-plugins-mccabe-threshold 40
+        ;lsp-tailwindcss-add-on-mode t
+        ;; Java setup
+        lsp-java-server-install-dir "/Users/andreas/tools/jdtls"
+        lsp-java-jdt-ls-prefer-native-command t
+        lsp-java-configuration-update-build-configuration "interactive")
 
-(use-package! orderless
+  ;; Use an alternative typescript lsp, install via npm
+  ;; npm install -g @vtsls/language-server
+  ;(lsp-register-client
+  ; (make-lsp-client
+  ;  :new-connection (lsp-stdio-connection
+  ;                   (lambda ()
+  ;                     `("node" ,(expand-file-name "~/.nvm/versions/node/v20.12.2/bin/vtsls") "--stdio")))
+  ;  :priority -1
+  ;  :major-modes '(typescript-mode)
+  ;  :server-id 'vtsls))
+  )
+
+;; Java LSP configuration is now included directly in the lsp-mode config block
+
+(add-hook 'typescript-mode-hook
+          (lambda ()
+            ;(setq-local lsp-enabled-clients '(eslint tailwindcss ts-ls))
+            (setq-local lsp-enabled-clients '(ts-ls eslint))
+            (lsp-deferred)))
+
+;; Set flycheck cpp standard
+(add-hook 'c++-mode-hook
+          (lambda ()
+            (setq flycheck-clang-language-standard "c++17")))
+
+(message "*** Coding / Debugging")
+
+(use-package! dap-mode
   :ensure t
-  :custom
-  (completion-styles '(orderless basic))
-  (completion-category-overrides '((file (styles basic partial-completion)))))
-
-(use-package! lsp-bridge
+  :after lsp-mode
   :config
-  (setq lsp-bridge-enable-log nil
-        lsp-bridge-enable-mode-line t
-        lsp-bridge-enable-completion-in-string t
-        lsp-bridge-enable-hover-diagnostic t
-        lsp-bridge-enable-org-babel t
-        acm-enable-tabnine t
-        acm-enable-capf t
-        acm-candidate-match-function 'orderless-flex
-        acm-backend-lsp-match-mode 'prefix)
-  ;; enable objective c by default
-  (append lsp-bridge-default-mode-hooks '(objc-mode))
-  ;; When jumping to a definition out of a peek window, I want to leave peek mode
-  ;; BUT I also want to be able to jump back. This restores jump back info after
-  ;; leaving peek mode.
-  (advice-add 'lsp-bridge-peek-jump :before #'my-lsp-bridge-pre-peek-jump)
-  (advice-add 'lsp-bridge-peek-jump :after #'my-lsp-bridge-post-peek-jump)
-  (advice-add 'lsp-bridge-peek-jump-back :before #'my-lsp-bridge-peek-jump-back)
-  (my-enable-global-lsp-bridge-mode))
+  (require 'dap-launch)
+  (require 'dap-java)
+  (require 'dap-lldb)
 
-;; Enable the lsp-bridge flymake backend
-(use-package! flymake-bridge
-  :after flymake
-  :hook (lsp-bridge-mode-hook . flymake-bridge-setup))
+  (setq dap-lldb-debug-program '("/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap"))
 
-;; Disable flymake for elisp
-(add-hook 'emacs-lisp-mode-hook (lambda () (flymake-mode -1)))
+  (dap-mode 1)
+  (dap-ui-mode 1)
+  (dap-ui-controls-mode 1)
+  (dap-tooltip-mode 1)
+  (dap-auto-configure-mode 1)
+
+  ;(require 'dap-codelldb)
+  ;(dap-codelldb-setup)
+
+  ;; Register a default debug template for C++ projects
+  ;;(dap-register-debug-template
+  ;;  "C++ LLDB::Run"
+  ;;  (list :type "lldb"
+  ;;        :request "launch"
+  ;;        :name "C++ LLDB::Run"
+  ;;        :program "${workspaceFolder}/"
+  ;;        :cwd nil))
+  (dap-register-debug-template
+  "lldb-dap ms"
+  (list :type "lldb"
+        :request "launch"
+        :name "lldb-dap ms"
+        :program "${workspaceFolder}/build-dev/bin/sdna-mediaserver"
+        :args nil
+        :cwd nil
+        :stopOnEntry t
+        :preLaunchTask "lldb-dap"
+        :environment nil
+        :debugger-args nil))
+  (dap-register-debug-template
+   "C++ LLDB Debug MS"
+   (list :type "lldb-vscode"
+         :request "launch"
+         :name "C++ LLDB Debug MS"
+         :program "${workspaceFolder}/build-dev/bin/sdna-mediaserver"
+         :args '()
+         :cwd "${workspaceFolder}"
+         :stopAtEntry nil
+         :externalConsole nil))
+  )
+
+(message "*** Coding / Mode Mapping")
 
 (setq auto-mode-alist
       (append '(("\\.app$"                  . c++-mode)
@@ -422,9 +441,13 @@
                 ("\\.tsx$"                  . typescript-mode)
                 ) auto-mode-alist))
 
+(message "*** Coding / Tree-Sitter")
+
 (add-to-list 'major-mode-remap-alist '(js-ts-mode . js-mode))
 (add-to-list 'major-mode-remap-alist '(typescript-ts-mode . typescript-mode))
 (add-to-list 'major-mode-remap-alist '(tsx-ts-mode . typescript-mode))
+
+(message "*** Coding / Templates")
 
 ;; Set up default file templates based on the project
 (set-file-template! "\\.hpp$" :trigger "__hpp" :mode 'c++-mode)
@@ -439,10 +462,16 @@
             (when (and (= (buffer-size) 0))
               (+file-templates/apply))))
 
+(message "*** Coding / Terminal")
+
 (advice-add 'mwheel-scroll :after #'my-scroll-mouse-handler)
+
+(message "*** Coding / Compilation Buffer")
 
 (add-hook 'compilation-start-hook 'my-compilation-started)
 (add-hook 'compilation-finish-functions 'my-hide-compile-buffer-if-successful)
+
+(message "*** LLM")
 
 (use-package! elysium
   :defer t
@@ -455,7 +484,7 @@
 (use-package! gptel
   :defer t
   :custom
-  (gptel-model 'claude-3-5-sonnet-20241022)
+  (gptel-model 'claude-3-7-sonnet-20250219)
   :config
   (setq gptel-default-mode 'org-mode)
 

@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: method
+# key: method
+# --
+${1:ReturnType} ${2:Class}::${3:MethodName}(${4:params}) {
+    $0
+}

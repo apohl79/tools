@@ -119,5 +119,9 @@ if [ "$(uname)" = "Darwin" ]; then
         brew install utm || true
         brew install cliclick || true
         pip3 install paho-mqtt || true
+        # java
+        brew install jenv openjdk@21 jdtls || true
+        jenv add /opt/homebrew/opt/openjdk@21 || true
+        jenv global 21 || true
     fi
 fi

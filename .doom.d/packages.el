@@ -16,15 +16,15 @@
 (package! org-modern)
 (package! jinx)
 (package! consult-omni :recipe (:host github :repo "armindarvish/consult-omni"))
-(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
+;(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
 
-(package! lsp-bridge
-  :recipe (:host github
-           :repo "manateelazycat/lsp-bridge"
-           :branch "master"
-           :files ("*.el" "*.py" "acm" "core" "langserver" "multiserver" "resources")
-           :build (:not compile)))
-(package! flymake-bridge :recipe (:host github :repo "liuyinz/flymake-bridge"))
+;(package! lsp-bridge
+;  :recipe (:host github
+;           :repo "manateelazycat/lsp-bridge"
+;           :branch "master"
+;           :files ("*.el" "*.py" "acm" "core" "langserver" "multiserver" "resources")
+;           :build (:not compile)))
+;(package! flymake-bridge :recipe (:host github :repo "liuyinz/flymake-bridge"))
 
 ;(package! org :pin "071c6e986c424d2e496be7d0815d6e9cd83ae4e6") ;; 9.6.30
 (package! mu4e-views :recipe (:host github :repo "lordpretzel/mu4e-views"))

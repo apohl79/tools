@@ -123,3 +123,7 @@ fi
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+export PATH="/Users/andreas/.codeium/windsurf/bin:$PATH"
+
+#alias git-local-cleanup="git fetch --prune; git for-each-ref --format '%(refname:short) %(upstream:track)' refs/heads | awk '\$2 == \"[gone]\" {print \$1}' | xargs -r git branch -D"
