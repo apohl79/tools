@@ -37,9 +37,9 @@
        company
        vertico
        ;;company           ; the ultimate code completion backend
-       ;;helm              ; the *other* search engine for love and life
-       ;;ido               ; the other *other* search engine...
-       ;;ivy                 ; a search engine for love and life
+       ;helm              ; the *other* search engine for love and life
+       ;ido               ; the other *other* search engine...
+       ;ivy                 ; a search engine for love and life
 
        :ui
        ;;deft              ; notational velocity for Emacs
@@ -155,6 +155,7 @@
        ;;(java +meghanada) ; the poster child for carpal tunnel syndrome
        (java +lsp)
        (javascript +lsp)   ; all(hope(abandon(ye(who(enter(here))))))
+       (typescript +lsp +tsx)
        ;javascript
        ;;julia             ; a better, faster MATLAB
        ;;kotlin            ; a better, slicker Java(Script)

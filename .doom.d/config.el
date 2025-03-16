@@ -82,6 +82,7 @@
  "s-1" #'treemacs
  "s-2" #'treemacs-tag-follow-mode
  "s-3" #'treemacs-project-follow-mode
+
  ;; navigation
  "C-x p" #'my-previous-window
  "C-x n" #'other-window
@@ -102,14 +103,17 @@
  "C-c j" #'set-justification-left
  "M-g" #'goto-line
  "C-x C-y" #'my-save-and-killbuf
+
  ;; code navigation
  "s-." #'xref-find-definitions
  "s-," #'xref-go-back
+
  ;; buffers and font
  "<s-wheel-down>" #'enlarge-window-horizontally
  "<s-wheel-up>" #'shrink-window-horizontally
  "s-*" #'doom/increase-font-size
  "s-_" #'doom/decrease-font-size
+
  ;; gptel/elysium
  (:leader :prefix ("C-s" . "LLM")
           (:prefix ("e" . "elysium")
@@ -128,10 +132,15 @@
  ;         :desc "Find References"       "i"   #'lsp-bridge-find-references
  ;         :desc "Find Definition"       "j"   #'lsp-bridge-find-def
  ;         :desc "Find Implementation"   "J"   #'lsp-bridge-find-impl)
+
+ ;; kubernetes
+ "C-c k" #'kubernetes-overview
+
  ;; miscellaneous
  "M-s <up>" #'comint-previous-input
  "M-s <down>" #'comint-next-input
  "C-c w Q" #'my-quickload-session
+
  ;; mode specific
  :map (c++-mode-map c-mode-map cmake-mode-map objc-mode-map)
  "C-c RET" #'recompile
@@ -181,6 +190,76 @@
 ; redo
 (after! undo-fu
   (map! :map undo-fu-mode-map "C-?" #'undo-fu-only-redo))
+
+(message "*** Email")
+
+(use-package! mu4e
+  ;; Fix the setup of org-msg for mu4e
+  :init (add-hook 'org-msg-mode-hook
+                  (lambda ()
+                    (org-msg-mode-mu4e)
+                    (org-msg-edit-mode-mu4e)
+                    ;; this fixes the problem of not closing the edit buffer properly
+                    (add-hook 'message-sent-hook
+                              (lambda ()
+                                (my-message-kill-buffer-no-query)
+                                (mu4e-compose-post-restore-window-configuration)))))
+  :config
+  (setq mail-user-agent 'mu4e-user-agent ; important for org-msg
+        mu4e-view-show-images t
+        mu4e-compose-signature-auto-include nil
+        mu4e-use-fancy-chars t
+        mu4e-split-view 'vertical
+        mu4e-headers-visible-columns 120
+
+        ; send setup, see ~/.msmtprc
+        sendmail-program (executable-find "msmtp")
+        send-mail-function #'smtpmail-send-it
+        message-sendmail-f-is-evil t
+        message-sendmail-extra-arguments '("--read-envelope-from")
+
+        message-send-mail-function #'message-send-mail-with-sendmail
+
+        ; receive setup, see ~/.mbsyncrc
+        mu4e-get-mail-command "mbsync --config ~/.mbsyncrc e47"
+        mu4e-update-interval 300
+        mu4e-headers-auto-update t
+
+        ; bookmarks
+        mu4e-bookmarks '((:name "Unread"
+                          :query "maildir:/INBOX AND flag:unread"
+                          :key ?i
+                          :favorite t))
+
+        ; dirs
+        mu4e-drafts-folder "/Drafts"
+        mu4e-sent-folder "/Sent"
+        mu4e-trash-folder "/Trash"
+        mu4e-refile-folder "/Archive"
+        mu4e-maildir-shortcuts '((:maildir "/INBOX" :key ?i)
+                                 (:maildir "/Sent" :key ?s)
+                                 (:maildir "/Drafts" :key ?d)
+                                 (:maildir "/Trash" :key ?t)
+                                 (:maildir "/Junk" :key ?j)
+                                 (:maildir "/Spam" :key ?g :hide-unread t))
+
+        ; avoid replying to ourselves
+        mu4e-compose-reply-ignore-address '("no-?reply" "pohl@e47.org")))
+
+(use-package! mu4e-views
+  :defer nil
+  :after mu4e
+  :config
+  (setq mu4e-views-default-view-method "html" ;; make xwidgets default
+        ;; when pressing n and p stay in the current window
+        mu4e-views-next-previous-message-behaviour 'stick-to-current-window
+        ;; automatically open messages when moving in the headers view
+        mu4e-views-auto-view-selected-message t)
+  (mu4e-views-mu4e-use-view-msg-method "gnus")) ;; select the default
+
+(setq browse-url-browser-function 'browse-url-generic
+      browse-url-generic-program "arc-cli"
+      browse-url-generic-args '("new-little-arc"))
 
 (message "*** Looks")
 
@@ -298,6 +377,9 @@
 (message "*** Coding / LSP - lsp-mode")
 (use-package! lsp-mode
   :defer t
+  :hook ((c++-ts-mode . lsp-deferred)
+         (java-ts-mode . lsp-deferred)
+         (python-ts-mode . lsp-deferred))
   :config
   (setq lsp-disabled-clients '(ccls)
         lsp-idle-delay 0.9
@@ -335,21 +417,26 @@
 
 ;; Java LSP configuration is now included directly in the lsp-mode config block
 
-(add-hook 'typescript-mode-hook
+(add-hook 'typescript-ts-mode-hook
+          (lambda ()
+            ;(setq-local lsp-enabled-clients '(eslint tailwindcss ts-ls))
+            (setq-local lsp-enabled-clients '(ts-ls eslint))
+            (lsp-deferred)))
+
+(add-hook 'tsx-ts-mode-hook
           (lambda ()
             ;(setq-local lsp-enabled-clients '(eslint tailwindcss ts-ls))
             (setq-local lsp-enabled-clients '(ts-ls eslint))
             (lsp-deferred)))
 
 ;; Set flycheck cpp standard
-(add-hook 'c++-mode-hook
+(add-hook 'c++-ts-mode-hook
           (lambda ()
             (setq flycheck-clang-language-standard "c++17")))
 
 (message "*** Coding / Debugging")
 
 (use-package! dap-mode
-  :ensure t
   :after lsp-mode
   :config
   (require 'dap-launch)
@@ -402,24 +489,24 @@
 (message "*** Coding / Mode Mapping")
 
 (setq auto-mode-alist
-      (append '(("\\.app$"                  . c++-mode)
+      (append '(("\\.app$"                  . c++-ts-mode)
                 ("\\.bat$"                  . rexx-mode)        ; to edit batchfiles
                 ("\\.bib$"                  . bibtex-mode)      ;
                 ("\\.btm$"                  . rexx-mode)
-                ("\\.C$"                    . c++-mode)
-                ("\\.i$"                    . c++-mode)         ; SWIG: use c++-mode
-                ("\\.cc$"                   . c++-mode)
-                ("\\.cpp$"                  . c++-mode)
-                ("\\.H$"                    . c++-mode)
-                ("\\.h$"                    . c++-mode)
-                ("\\.hi$"                   . c-mode)
-                ("\\.hpp$"                  . c++-mode)
-                ("\\.idl$"                  . c++-mode)
-                ("\\.c$"                    . c-mode)           ; to edit C code
-                ("\\.sqc$"                  . c-mode)           ; NON-Preprocessed C with DB/2 SQL
-                ("\\.rc$"                   . c-mode)           ; Files from rc are also smth like c
-                ("\\.rci$"                  . c-mode)           ; Files from rc are also smth like c
-                ("\\.rcx$"                  . c-mode)           ; Files from rc are also smth like c
+                ("\\.C$"                    . c++-ts-mode)
+                ("\\.i$"                    . c++-ts-mode)         ; SWIG: use c++-mode
+                ("\\.cc$"                   . c++-ts-mode)
+                ("\\.cpp$"                  . c++-ts-mode)
+                ("\\.H$"                    . c++-ts-mode)
+                ("\\.h$"                    . c++-ts-mode)
+                ("\\.hi$"                   . c-ts-mode)
+                ("\\.hpp$"                  . c++-ts-mode)
+                ("\\.idl$"                  . c++-ts-mode)
+                ("\\.c$"                    . c-ts-mode)           ; to edit C code
+                ("\\.sqc$"                  . c-ts-mode)           ; NON-Preprocessed C with DB/2 SQL
+                ("\\.rc$"                   . c-ts-mode)           ; Files from rc are also smth like c
+                ("\\.rci$"                  . c-ts-mode)           ; Files from rc are also smth like c
+                ("\\.rcx$"                  . c-ts-mode)           ; Files from rc are also smth like c
                 ("\\.cmd$"                  . rexx-mode)        ; to edit REXX-Skripte
                 ("\\.c?ps$"                 . postscript-mode)  ; Fuer postscript-files
                 ("\\.tex$"                  . latex-mode)       ; tbd
@@ -427,25 +514,54 @@
                 ("\\.sty$"                  . latex-mode)       ;
                 ("\\.mak$"                  . makefile-mode)
                 ("makefile$"                . makefile-mode)
-                ("\\.java$"                 . java-mode)
-                ("\\.jav$"                  . java-mode)
+                ("\\.java$"                 . java-ts-mode)
+                ("\\.jav$"                  . java-ts-mode)
                 ("\\.py$"                   . python-mode)
-                ("\\.xh$"                   . c++-mode)
-                ("\\.xih$"                  . c++-mode)
+                ("\\.xh$"                   . c++-ts-mode)
+                ("\\.xih$"                  . c++-ts-mode)
                 ("\\.in$"                   . m4-mode)
                 ("\\.\\([pP][Llm]\\|al\\)$" . cperl-mode)
                 ("\\.pod$"                  . cperl-mode)
                 ("\\.puml$"                 . plantuml-mode)
-                ("\\.ino$"                  . c++-mode)
-                ("\\.ts$"                   . typescript-mode)
-                ("\\.tsx$"                  . typescript-mode)
+                ("\\.ino$"                  . c++-ts-mode)
+                ("\\.ts$"                   . typescript-ts-mode)
+                ("\\.tsx$"                  . tsx-ts-mode)
                 ) auto-mode-alist))
 
 (message "*** Coding / Tree-Sitter")
 
-(add-to-list 'major-mode-remap-alist '(js-ts-mode . js-mode))
-(add-to-list 'major-mode-remap-alist '(typescript-ts-mode . typescript-mode))
-(add-to-list 'major-mode-remap-alist '(tsx-ts-mode . typescript-mode))
+;(add-to-list 'major-mode-remap-alist '(js-ts-mode . js-mode))
+;(add-to-list 'major-mode-remap-alist '(typescript-ts-mode . typescript-mode))
+;(add-to-list 'major-mode-remap-alist '(tsx-ts-mode . typescript-mode))
+
+(use-package! treesit
+  :config
+  (setq treesit-language-source-alist
+   '((c "https://github.com/tree-sitter/tree-sitter-c")
+     (cpp "https://github.com/tree-sitter/tree-sitter-cpp")
+     (java "https://github.com/tree-sitter/tree-sitter-java")
+     (javascript "https://github.com/tree-sitter/tree-sitter-javascript")
+     (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
+     (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
+     (json "https://github.com/tree-sitter/tree-sitter-json")
+     (yaml "https://github.com/ikatyang/tree-sitter-yaml")
+     (elisp "https://github.com/Wilfred/tree-sitter-elisp")
+     (python "https://github.com/Wilfred/tree-sitter-python")
+     (bash "https://github.com/tree-sitter/tree-sitter-bash")))
+
+  ;; Map major modes to their tree-sitter equivalents
+  (setq major-mode-remap-alist
+   '((c-mode . c-ts-mode)
+     (c++-mode . c++-ts-mode)
+     (java-mode . java-ts-mode)
+     (js-mode . js-ts-mode)
+     (typescript-mode . typescript-ts-mode)
+     (javascript-mode . js-ts-mode)
+     (json-mode . json-ts-mode)
+     (yaml-mode . yaml-ts-mode)
+     (sh-mode . bash-ts-mode)
+     (emacs-lisp-mode . elisp-ts-mode)))
+)
 
 (message "*** Coding / Templates")
 
@@ -470,6 +586,8 @@
 
 (add-hook 'compilation-start-hook 'my-compilation-started)
 (add-hook 'compilation-finish-functions 'my-hide-compile-buffer-if-successful)
+
+(use-package! kubernetes)
 
 (message "*** LLM")
 

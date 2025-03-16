@@ -73,15 +73,18 @@ if [ "$(uname)" = "Darwin" ]; then
 
         if ! which -s emacs; then
             echo "installing emacs..."
-            brew install jansson libxml2 tree-sitter imagemagick librsvg python3
+            brew install jansson libxml2 tree-sitter imagemagick librsvg python3 glslang mailutils libjpeg
             # lsp-bridge deps
             pip3 install epc orjson sexpdata six setuptools paramiko rapidfuzz watchdog packaging
             # language servers
             brew install basedpyright ruff || true
             npm install -g yaml-language-server
-            # emacs
-            brew tap railwaycat/emacsmacport
-            brew install emacs-mac --with-starter --with-native-compilation --with-natural-title-bar --with-imagemagick --with-librsvg --with-xwidgets --with-glib
+            # emacs-mac
+            #brew tap railwaycat/emacsmacport
+            #brew install emacs-mac --with-starter --with-native-compilation --with-natural-title-bar --with-imagemagick --with-librsvg --with-xwidgets --with-glib
+            # emacs-plus
+            brew tap d12frosted/emacs-plus
+            brew install --with-imagemagick --with-mailutils --with-xwidgets --with-savchenkovaleriy-big-sur-3d-icon emacs-plus@31
             defaults write org.gnu.Emacs TransparentTitleBar DARK
         fi
         if [ ! -e "$HOME/.config/emacs" ]; then
@@ -89,7 +92,7 @@ if [ "$(uname)" = "Darwin" ]; then
             brew install git ripgrep coreutils fd fontconfig font-iosevka-comfy font-roboto shellcheck isort pipenv markdown jq hunspell enchant
             git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
             export PATH=/opt/homebrew/bin:"$PATH"
-            "$HOME/.config/emacs/bin/doom" install
+            "$HOME/.config/emacs/bin/doom" install --force --env --install --fonts --hooks
             "$HOME/.config/emacs/bin/doom" sync
             echo "installing dictionaries..."
             wget -nc https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.aff -O ~/Library/Spelling/de_DE_frami.aff

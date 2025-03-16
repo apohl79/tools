@@ -216,4 +216,3 @@ to the end of the buffer."
 
 (defun my-compilation-started (proc)
   (setq compilation-start-time (current-time)))
-
