@@ -545,7 +545,6 @@
      (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
      (json "https://github.com/tree-sitter/tree-sitter-json")
      (yaml "https://github.com/ikatyang/tree-sitter-yaml")
-     (elisp "https://github.com/Wilfred/tree-sitter-elisp")
      (python "https://github.com/Wilfred/tree-sitter-python")
      (bash "https://github.com/tree-sitter/tree-sitter-bash")))
 
@@ -553,6 +552,7 @@
   (setq major-mode-remap-alist
    '((c-mode . c-ts-mode)
      (c++-mode . c++-ts-mode)
+     (c-or-c++-mode . c-or-c++-ts-mode)
      (java-mode . java-ts-mode)
      (js-mode . js-ts-mode)
      (typescript-mode . typescript-ts-mode)
@@ -560,8 +560,15 @@
      (json-mode . json-ts-mode)
      (yaml-mode . yaml-ts-mode)
      (sh-mode . bash-ts-mode)
-     (emacs-lisp-mode . elisp-ts-mode)))
-)
+     (python-mode . python-ts-mode))))
+
+(use-package! clang-format
+  :config
+  ;(define-key c-ts-mode-map (kbd "TAB") 'my-clang-format-on-indent)
+  (add-hook 'c-ts-base-mode-hook
+            (lambda ()
+              (setq indent-line-function 'my-clang-format-on-indent)
+              (add-hook 'before-save-hook 'my-clang-format-buffer nil 'local))))
 
 (message "*** Coding / Templates")
 

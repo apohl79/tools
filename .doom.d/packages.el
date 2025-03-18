@@ -18,6 +18,8 @@
 (package! consult-omni :recipe (:host github :repo "armindarvish/consult-omni"))
 ;(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
 
+(package! clang-format)
+
 ;(package! lsp-bridge
 ;  :recipe (:host github
 ;           :repo "manateelazycat/lsp-bridge"

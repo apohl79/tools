@@ -18,8 +18,8 @@
 (defun my-save-and-killbuf ()
   "save current buffer and quit"
   (interactive)
-  ( if ( not buffer-read-only )
-      (save-buffer) )
+  (if (not buffer-read-only)
+      (save-buffer))
   (kill-this-buffer))
 
 ;; Walk between the windows
@@ -28,32 +28,56 @@
   (interactive)
   (other-window -1))
 
-;; indent via clang-format
-(load! "clang-format")
-(defun my-clang-format-indent ()
-  (c-set-offset 'substatement-open 0)
-  (c-set-offset 'innamespace 0)
-  (setq tab-width 8)
-  (setq c-basic-offset 4)
-  (outline-minor-mode)
-  ; If clang-format is available, use it and deactivate electric chars
-  (when clang-format-binary-found
-    ;;(setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
-    ;; Auto indent via clang-format
-    (add-hook 'c-special-indent-hook
-              (lambda ()
-                (interactive)
-                (setq my-char-pos (buffer-substring-no-properties (point) (1+ (point))))
-                (let ((beg (if mark-active (region-beginning)
-                             (min (line-beginning-position) (1- (point-max)))))
-                      (end (if mark-active (region-end)
-                             (line-end-position))))
-                  (when (string-match-p "[^ ]" (buffer-substring-no-properties beg end)) ; ignore empty lines
-                    (when (not (equal "}" my-char-pos)) ; allow to move closing }
-                      (when (not (equal ")" my-char-pos)) ; allow to move closing )
-                        (when (not (equal "]" my-char-pos)) ; allow to move closing ]
-                          (clang-format-region beg end))))))))
-    (c-toggle-electric-state -1)))
+;; indent via clang-format in cc-mode
+;(load! "clang-format")
+;(defun my-clang-format-indent ()
+;  (c-set-offset 'substatement-open 0)
+;  (c-set-offset 'innamespace 0)
+;  (setq tab-width 8)
+;  (setq c-basic-offset 4)
+;  (outline-minor-mode)
+;  ; If clang-format is available, use it and deactivate electric chars
+;  (when clang-format-binary-found
+;    ;;(setq clang-format-style "{BasedOnStyle: Google, ColumnLimit: 120, IndentWidth: 4, AccessModifierOffset: -2, DerivePointerAlignment: false}")
+;    ;; Auto indent via clang-format
+;    (add-hook 'c-special-indent-hook
+;              (lambda ()
+;                (interactive)
+;                (setq my-char-pos (buffer-substring-no-properties (point) (1+ (point))))
+;                (let ((beg (if mark-active (region-beginning)
+;                             (min (line-beginning-position) (1- (point-max)))))
+;                      (end (if mark-active (region-end)
+;                             (line-end-position))))
+;                  (when (string-match-p "[^ ]" (buffer-substring-no-properties beg end)) ; ignore empty lines
+;                    (when (not (equal "}" my-char-pos)) ; allow to move closing }
+;                      (when (not (equal ")" my-char-pos)) ; allow to move closing )
+;                        (when (not (equal "]" my-char-pos)) ; allow to move closing ]
+;                          (clang-format-region beg end))))))))
+;    (c-toggle-electric-state -1)))
+
+;; indent via clang-format in c-ts-mode
+(defun my-clang-format-buffer ()
+  "Format the current buffer using clang-format."
+  (interactive)
+  (when (derived-mode-p 'c-ts-mode 'c++-ts-mode)
+    (clang-format-buffer)))
+
+(defun my-clang-format-region (start end)
+  "Format the region from START to END using clang-format."
+  (interactive "r")
+  (when (derived-mode-p 'c-ts-mode 'c++-ts-mode)
+    (clang-format-region start end)))
+
+(defun my-clang-format-on-indent ()
+  "Format the current line or region using clang-format."
+  (interactive)
+  (if (use-region-p)
+      (my-clang-format-region (region-beginning) (region-end))
+    (let ((pos (point))
+          (start (line-beginning-position))
+          (end (line-end-position)))
+      (my-clang-format-region start end)
+      (goto-char pos))))
 
 ;; VI-style matching parenthesis
 ;;  From Eric Hendrickson edh @ med.umn.edu
