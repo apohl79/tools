@@ -85,6 +85,18 @@
                     (treesit-indent)
                     (goto-char (line-end-position)))))))
 
+(defun my/newline-and-indent-no-clang-format (&optional arg)
+    "Insert a newline and just call treesit-indent instead of clang-format.
+This is to avoid clang-format killing the empty line immediately."
+  (interactive "*p")
+  (delete-horizontal-space t)
+  (unless arg
+    (setq arg 1))
+  (let ((electric-indent-mode nil))
+    (dotimes (_ arg)
+      (newline nil t)
+      (treesit-indent))))
+
 ;; Custom TAB behavior for prog-modes
 (defun my/indent-or-tab ()
   "Smart tab behavior.

@@ -19,7 +19,7 @@
 ;(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
 
 (package! clang-format)
-(package! proto-ts-mode :recipe (:host github :repo "Clement-Jean/proto-ts-mode"))
+;(package! proto-ts-mode :recipe (:host github :repo "Clement-Jean/proto-ts-mode"))
 
 ;(package! lsp-bridge
 ;  :recipe (:host github

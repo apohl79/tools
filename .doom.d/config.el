@@ -12,7 +12,7 @@
     (set-frame-size (selected-frame) (- (display-pixel-width) 16) (display-pixel-height) t)))
 
 ;; Restore last session automatically
-(add-hook! 'window-setup-hook #'my/quickload-session)
+(add-hook 'window-setup-hook #'my/quickload-session)
 
 (message "*** General / General behavior")
 
@@ -145,6 +145,8 @@
  :map (prog-mode-map)
  "C-c RET" #'recompile
  "TAB" #'my/indent-or-tab
+ :map (c-ts-base-mode-map)
+ "RET" #'my/newline-and-indent-no-clang-format
  ;:map (typescript-ts-base-mode-map)
  ;"TAB" #'treesit-indent
  ;:map (c++-mode-map c-mode-map typescript-mode-map js-mode-map java-mode-map)
@@ -366,9 +368,6 @@
 
 (setq-default ff-other-file-alist 'my/cpp-other-file-alist)
 
-(add-hook 'c-mode-common-hook 'my/clang-format-indent)
-(add-hook 'c++-mode-hook 'my/clang-format-indent)
-
 (setq projectile-completion-system 'default)
 
 (message "*** Coding / Git")
@@ -391,7 +390,7 @@
         lsp-ui-doc-enable nil
         lsp-enable-indentation nil
         ;; Use xcode's clangd
-        ;lsp-clients-clangd-executable "/Library/Developer/CommandLineTools/usr/bin/clangd"
+        lsp-clients-clangd-executable "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clangd"
         lsp-clients-clangd-args '("--log=error"
                                   "--background-index"
                                   "--clang-tidy"
@@ -535,48 +534,49 @@
 
 (message "*** Coding / Tree-Sitter")
 
-;(add-to-list 'major-mode-remap-alist '(js-ts-mode . js-mode))
-;(add-to-list 'major-mode-remap-alist '(typescript-ts-mode . typescript-mode))
-;(add-to-list 'major-mode-remap-alist '(tsx-ts-mode . typescript-mode))
+;;(add-to-list 'major-mode-remap-alist '(js-ts-mode . js-mode))
+;;(add-to-list 'major-mode-remap-alist '(typescript-ts-mode . typescript-mode))
+;;(add-to-list 'major-mode-remap-alist '(tsx-ts-mode . typescript-mode))
 
 (use-package! treesit
   :config
-  (setq treesit-language-source-alist
-   '((c "https://github.com/tree-sitter/tree-sitter-c")
-     (cpp "https://github.com/tree-sitter/tree-sitter-cpp")
-     (proto "https://github.com/Clement-Jean/tree-sitter-proto")
-     (java "https://github.com/tree-sitter/tree-sitter-java")
-     (javascript "https://github.com/tree-sitter/tree-sitter-javascript")
-     (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
-     (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
-     (json "https://github.com/tree-sitter/tree-sitter-json")
-     (yaml "https://github.com/ikatyang/tree-sitter-yaml")
-     (python "https://github.com/tree-sitter/tree-sitter-python")
-     (cmake "https://github.com/uyha/tree-sitter-cmake")
-     (bash "https://github.com/tree-sitter/tree-sitter-bash")))
+  (setq treesit-font-lock-level 4
+        treesit-language-source-alist
+        '((c "https://github.com/tree-sitter/tree-sitter-c")
+          (cpp "https://github.com/tree-sitter/tree-sitter-cpp")
+          (proto "https://github.com/Clement-Jean/tree-sitter-proto")
+          (java "https://github.com/tree-sitter/tree-sitter-java")
+          (javascript "https://github.com/tree-sitter/tree-sitter-javascript")
+          (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
+          (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
+          (json "https://github.com/tree-sitter/tree-sitter-json")
+          (yaml "https://github.com/ikatyang/tree-sitter-yaml")
+          (python "https://github.com/tree-sitter/tree-sitter-python")
+          (cmake "https://github.com/uyha/tree-sitter-cmake")
+          (bash "https://github.com/tree-sitter/tree-sitter-bash")))
 
   ;; Map major modes to their tree-sitter equivalents
   (setq major-mode-remap-alist
-   '((c-mode . c-ts-mode)
-     (c++-mode . c++-ts-mode)
-     (c-or-c++-mode . c-or-c++-ts-mode)
-     (protobuf-mode . proto-ts-mode)
-     (java-mode . java-ts-mode)
-     (js-mode . js-ts-mode)
-     (typescript-mode . typescript-ts-mode)
-     (javascript-mode . js-ts-mode)
-     (json-mode . json-ts-mode)
-     (yaml-mode . yaml-ts-mode)
-     (sh-mode . bash-ts-mode)
-     (cmake-mode . cmake-ts-mode)
-     (python-mode . python-ts-mode))))
+        '((c-mode . c-ts-mode)
+          (c++-mode . c++-ts-mode)
+          (c-or-c++-mode . c-or-c++-ts-mode)
+                                        ;(protobuf-mode . proto-ts-mode)
+          (java-mode . java-ts-mode)
+          (js-mode . js-ts-mode)
+          (typescript-mode . typescript-ts-mode)
+          (javascript-mode . js-ts-mode)
+          (json-mode . json-ts-mode)
+          (yaml-mode . yaml-ts-mode)
+          (sh-mode . bash-ts-mode)
+          (cmake-mode . cmake-ts-mode)
+          (python-mode . python-ts-mode))))
 
 (use-package! clang-format
   :init
   ;; update the indent style to disable namespace indention with treesit-indent
   (defun my/c-ts-indent-style-no-namespace()
-        `(((n-p-gp nil nil "namespace_definition") grand-parent 0)
-          ,@(alist-get 'bsd (c-ts-mode--indent-styles 'cpp))))
+    `(((n-p-gp nil nil "namespace_definition") grand-parent 0)
+      ,@(alist-get 'bsd (c-ts-mode--indent-styles 'cpp))))
   :config
   (add-hook 'c-ts-base-mode-hook
             (lambda ()
