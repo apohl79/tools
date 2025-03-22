@@ -142,8 +142,10 @@
  "C-c w Q" #'my-quickload-session
 
  ;; mode specific
- :map (c++-mode-map c-mode-map cmake-mode-map objc-mode-map)
+ :map (c++-mode-map c-mode-map cmake-mode-map objc-mode-map c-ts-base-mode-map cmake-ts-mode-map proto-ts-mode-map)
  "C-c RET" #'recompile
+ :map (c-ts-base-mode-map)
+ "TAB" #'my-clang-format-on-indent
  ;:map (c++-mode-map c-mode-map typescript-mode-map js-mode-map java-mode-map)
  ;"s-." #'lsp-bridge-peek
  ;"s-," #'lsp-bridge-peek-jump-back
@@ -383,6 +385,7 @@
   :config
   (setq lsp-disabled-clients '(ccls)
         lsp-idle-delay 0.9
+        lsp-file-watch-threshold 2000
         lsp-restart 'auto-restart
         lsp-ui-doc-enable nil
         ;; Use xcode's clangd
@@ -539,13 +542,15 @@
   (setq treesit-language-source-alist
    '((c "https://github.com/tree-sitter/tree-sitter-c")
      (cpp "https://github.com/tree-sitter/tree-sitter-cpp")
+     (proto "https://github.com/Clement-Jean/tree-sitter-proto")
      (java "https://github.com/tree-sitter/tree-sitter-java")
      (javascript "https://github.com/tree-sitter/tree-sitter-javascript")
      (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
      (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
      (json "https://github.com/tree-sitter/tree-sitter-json")
      (yaml "https://github.com/ikatyang/tree-sitter-yaml")
-     (python "https://github.com/Wilfred/tree-sitter-python")
+     (python "https://github.com/tree-sitter/tree-sitter-python")
+     (cmake "https://github.com/uyha/tree-sitter-cmake")
      (bash "https://github.com/tree-sitter/tree-sitter-bash")))
 
   ;; Map major modes to their tree-sitter equivalents
@@ -553,6 +558,7 @@
    '((c-mode . c-ts-mode)
      (c++-mode . c++-ts-mode)
      (c-or-c++-mode . c-or-c++-ts-mode)
+     (protobuf-mode . proto-ts-mode)
      (java-mode . java-ts-mode)
      (js-mode . js-ts-mode)
      (typescript-mode . typescript-ts-mode)
@@ -560,14 +566,14 @@
      (json-mode . json-ts-mode)
      (yaml-mode . yaml-ts-mode)
      (sh-mode . bash-ts-mode)
+     (cmake-mode . cmake-ts-mode)
      (python-mode . python-ts-mode))))
 
 (use-package! clang-format
   :config
-  ;(define-key c-ts-mode-map (kbd "TAB") 'my-clang-format-on-indent)
   (add-hook 'c-ts-base-mode-hook
             (lambda ()
-              (setq indent-line-function 'my-clang-format-on-indent)
+              ;(setq indent-line-function 'my-clang-format-on-indent)
               (add-hook 'before-save-hook 'my-clang-format-buffer nil 'local))))
 
 (message "*** Coding / Templates")
