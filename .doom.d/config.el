@@ -12,7 +12,7 @@
     (set-frame-size (selected-frame) (- (display-pixel-width) 16) (display-pixel-height) t)))
 
 ;; Restore last session automatically
-(add-hook! 'window-setup-hook #'my-quickload-session)
+(add-hook! 'window-setup-hook #'my/quickload-session)
 
 (message "*** General / General behavior")
 
@@ -84,7 +84,7 @@
  "s-3" #'treemacs-project-follow-mode
 
  ;; navigation
- "C-x p" #'my-previous-window
+ "C-x p" #'my/previous-window
  "C-x n" #'other-window
  "M-<left>" #'outline-hide-subtree
  "M-<right>" #'outline-show-children
@@ -93,7 +93,7 @@
  "<home>" #'beginning-of-line
  "<end>" #'end-of-line
  "C-x r e" #'replace-regexp
- "C-x c p" #'my-match-paren
+ "C-x c p" #'my/match-paren
  "C-c x" #'dabbrev-expand
  "C-c b" #'revert-buffer
  "C-c u" #'upcase-region
@@ -102,7 +102,7 @@
  "C-c C-a" #'auto-fill-mode
  "C-c j" #'set-justification-left
  "M-g" #'goto-line
- "C-x C-y" #'my-save-and-killbuf
+ "C-x C-y" #'my/save-and-killbuf
 
  ;; code navigation
  "s-." #'xref-find-definitions
@@ -139,13 +139,14 @@
  ;; miscellaneous
  "M-s <up>" #'comint-previous-input
  "M-s <down>" #'comint-next-input
- "C-c w Q" #'my-quickload-session
+ "C-c w Q" #'my/quickload-session
 
  ;; mode specific
- :map (c++-mode-map c-mode-map cmake-mode-map objc-mode-map c-ts-base-mode-map cmake-ts-mode-map proto-ts-mode-map)
+ :map (prog-mode-map)
  "C-c RET" #'recompile
- :map (c-ts-base-mode-map)
- "TAB" #'my-clang-format-on-indent
+ "TAB" #'my/indent-or-tab
+ ;:map (typescript-ts-base-mode-map)
+ ;"TAB" #'treesit-indent
  ;:map (c++-mode-map c-mode-map typescript-mode-map js-mode-map java-mode-map)
  ;"s-." #'lsp-bridge-peek
  ;"s-," #'lsp-bridge-peek-jump-back
@@ -171,7 +172,7 @@
  "f" #'mu4e-views-toggle-auto-view-selected-message
  "i" #'mu4e-views-mu4e-view-as-nonblocked-html
  :map org-msg-edit-mode-map
- "C-c C-c" #'my-org-msg-ctrl-c-ctrl-c
+ "C-c C-c" #'my/org-msg-ctrl-c-ctrl-c
  )
 
 (after! treemacs
@@ -204,7 +205,7 @@
                     ;; this fixes the problem of not closing the edit buffer properly
                     (add-hook 'message-sent-hook
                               (lambda ()
-                                (my-message-kill-buffer-no-query)
+                                (my/message-kill-buffer-no-query)
                                 (mu4e-compose-post-restore-window-configuration)))))
   :config
   (setq mail-user-agent 'mu4e-user-agent ; important for org-msg
@@ -267,13 +268,13 @@
 
 (setq doom-theme 'doom-city-lights)
 
-(defvar my-fixed-font "Iosevka Comfy")
-(defvar my-variable-font "Roboto")
+(defvar my/fixed-font "Iosevka Comfy")
+(defvar my/variable-font "Roboto")
 
 (setq doom-font
-      (font-spec :family my-fixed-font :size 13)
+      (font-spec :family my/fixed-font :size 13)
       doom-variable-pitch-font
-      (font-spec :family my-variable-font :size 13))
+      (font-spec :family my/variable-font :size 13))
 
 ;; zoom in/out steps
 (setq doom-font-increment 1)
@@ -283,8 +284,8 @@
 (setq display-line-numbers-type t)
 
 ;; Always fixed font even in variable-pitch-mode
-(set-face-attribute 'line-number nil :font my-fixed-font)
-(set-face-attribute 'line-number-current-line nil :font my-fixed-font)
+(set-face-attribute 'line-number nil :font my/fixed-font)
+(set-face-attribute 'line-number-current-line nil :font my/fixed-font)
 
 ;; Set the project name as frame title (window name in macOS)
 (setq frame-title-format '("" "%b" (:eval
@@ -304,7 +305,7 @@
   (treemacs-project-follow-mode 1)
   (set-face-attribute 'treemacs-root-face nil :height 1.0)
   ;; treemacs png/svg special icons don't look great, so we patch the icon set
-  (add-hook 'treemacs-mode-hook 'my-update-treemacs-icons))
+  (add-hook 'treemacs-mode-hook 'my/update-treemacs-icons))
 
 (after! org-mode
   (setq org-support-shift-select t
@@ -325,7 +326,7 @@
                                       ("DONE" :inherit org-modern-todo :height 1.2 :inverse-video nil
                                        :foreground "white" :distant-foreground "white" :background "grey25"))))
   ;; Make the document title a bit bigger
-  (set-face-attribute 'org-document-title nil :font my-variable-font :weight 'bold :height 1.3 :underline t)
+  (set-face-attribute 'org-document-title nil :font my/variable-font :weight 'bold :height 1.3 :underline t)
   ;; Resize headings
   (dolist (face '((org-level-1 . 1.1)
                   (org-level-2 . 1.1)
@@ -335,10 +336,10 @@
                   (org-level-6 . 1.1)
                   (org-level-7 . 1.1)
                   (org-level-8 . 1.1)))
-    (set-face-attribute (car face) nil :font my-variable-font :height (cdr face))))
+    (set-face-attribute (car face) nil :font my/variable-font :height (cdr face))))
 
 (after! org-modern-faces
-  (set-face-attribute 'org-modern-symbol nil :family my-fixed-font))
+  (set-face-attribute 'org-modern-symbol nil :family my/fixed-font))
 
 (use-package! mixed-pitch
   :after org
@@ -350,7 +351,7 @@
 (setq compilation-scroll-output 'next-error
       compilation-skip-threshold 2)
 
-(defvar my-cpp-other-file-alist
+(defvar my/cpp-other-file-alist
   '(("\\.cpp\\'" (".h" ".hpp" ".ipp"))
     ("\\.ipp\\'" (".hpp" ".cpp"))
     ("\\.hpp\\'" (".ipp" ".cpp"))
@@ -363,10 +364,10 @@
     ("\\.c\\'" (".h"))
     ("\\.h\\'" (".cpp" ".cc" ".cxx" ".c" ".mm"))))
 
-(setq-default ff-other-file-alist 'my-cpp-other-file-alist)
+(setq-default ff-other-file-alist 'my/cpp-other-file-alist)
 
-(add-hook 'c-mode-common-hook 'my-clang-format-indent)
-(add-hook 'c++-mode-hook 'my-clang-format-indent)
+(add-hook 'c-mode-common-hook 'my/clang-format-indent)
+(add-hook 'c++-mode-hook 'my/clang-format-indent)
 
 (setq projectile-completion-system 'default)
 
@@ -388,6 +389,7 @@
         lsp-file-watch-threshold 2000
         lsp-restart 'auto-restart
         lsp-ui-doc-enable nil
+        lsp-enable-indentation nil
         ;; Use xcode's clangd
         ;lsp-clients-clangd-executable "/Library/Developer/CommandLineTools/usr/bin/clangd"
         lsp-clients-clangd-args '("--log=error"
@@ -570,11 +572,21 @@
      (python-mode . python-ts-mode))))
 
 (use-package! clang-format
+  :init
+  ;; update the indent style to disable namespace indention with treesit-indent
+  (defun my/c-ts-indent-style-no-namespace()
+        `(((n-p-gp nil nil "namespace_definition") grand-parent 0)
+          ,@(alist-get 'bsd (c-ts-mode--indent-styles 'cpp))))
   :config
   (add-hook 'c-ts-base-mode-hook
             (lambda ()
-              ;(setq indent-line-function 'my-clang-format-on-indent)
-              (add-hook 'before-save-hook 'my-clang-format-buffer nil 'local))))
+              ;; clang-format based indention
+              (setq indent-line-function 'my/clang-format-on-indent
+                    indent-region-function 'my/clang-format-indent-region
+                    ;; for newline-and-indent (RET key binding) we fall back to
+                    ;; treesit-indent, so lets disable namespace indention
+                    c-ts-mode-indent-style #'my/c-ts-indent-style-no-namespace)
+              (add-hook 'before-save-hook 'my/clang-format-buffer nil 'local))))
 
 (message "*** Coding / Templates")
 
@@ -593,12 +605,12 @@
 
 (message "*** Coding / Terminal")
 
-(advice-add 'mwheel-scroll :after #'my-scroll-mouse-handler)
+(advice-add 'mwheel-scroll :after #'my/scroll-mouse-handler)
 
 (message "*** Coding / Compilation Buffer")
 
-(add-hook 'compilation-start-hook 'my-compilation-started)
-(add-hook 'compilation-finish-functions 'my-hide-compile-buffer-if-successful)
+(add-hook 'compilation-start-hook 'my/compilation-started)
+(add-hook 'compilation-finish-functions 'my/hide-compile-buffer-if-successful)
 
 (use-package! kubernetes)
 
@@ -620,17 +632,17 @@
   (setq gptel-default-mode 'org-mode)
 
   ;; OpenAI
-  (setq! gptel-api-key (my-read-file "~/.gptel/chatgpt.key"))
+  (setq! gptel-api-key (my/read-file "~/.gptel/chatgpt.key"))
 
   ;; Google
   (defun gptel-gemini-api-key ()
-    (my-read-file "~/.gptel/gemini.key"))
+    (my/read-file "~/.gptel/gemini.key"))
   (gptel-make-gemini "Gemini" :stream t
                      :key #'gptel-gemini-api-key)
 
   ;; Anthropic (default)
   (defun gptel-claude-api-key ()
-    (my-read-file "~/.gptel/claude.key"))
+    (my/read-file "~/.gptel/claude.key"))
   (setq gptel-backend
         (gptel-make-anthropic "Claude" :stream t
                               :key #'gptel-claude-api-key)))

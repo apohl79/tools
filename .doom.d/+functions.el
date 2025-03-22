@@ -1,12 +1,12 @@
 ;;; +functions.el -*- lexical-binding: t; -*-
 
-(defun my-read-file (file-path)
+(defun my/read-file (file-path)
   "Read the contents of FILE-PATH and return it as a string."
   (with-temp-buffer
     (insert-file-contents file-path)
     (buffer-string)))
 
-(defun my-indent-buffer ()
+(defun my/indent-buffer ()
   "Indents an entire buffer using the default intenting scheme."
   (interactive)
   (save-excursion
@@ -15,7 +15,7 @@
     (untabify (point-min) (point-max))))
 
 ;; leaving emacs without saving current buffer
-(defun my-save-and-killbuf ()
+(defun my/save-and-killbuf ()
   "save current buffer and quit"
   (interactive)
   (if (not buffer-read-only)
@@ -23,14 +23,14 @@
   (kill-this-buffer))
 
 ;; Walk between the windows
-(defun my-previous-window ()
+(defun my/previous-window ()
   "Previous window"
   (interactive)
   (other-window -1))
 
 ;; indent via clang-format in cc-mode
 ;(load! "clang-format")
-;(defun my-clang-format-indent ()
+;(defun my/clang-format-indent ()
 ;  (c-set-offset 'substatement-open 0)
 ;  (c-set-offset 'innamespace 0)
 ;  (setq tab-width 8)
@@ -43,56 +43,100 @@
 ;    (add-hook 'c-special-indent-hook
 ;              (lambda ()
 ;                (interactive)
-;                (setq my-char-pos (buffer-substring-no-properties (point) (1+ (point))))
+;                (setq my/char-pos (buffer-substring-no-properties (point) (1+ (point))))
 ;                (let ((beg (if mark-active (region-beginning)
 ;                             (min (line-beginning-position) (1- (point-max)))))
 ;                      (end (if mark-active (region-end)
 ;                             (line-end-position))))
 ;                  (when (string-match-p "[^ ]" (buffer-substring-no-properties beg end)) ; ignore empty lines
-;                    (when (not (equal "}" my-char-pos)) ; allow to move closing }
-;                      (when (not (equal ")" my-char-pos)) ; allow to move closing )
-;                        (when (not (equal "]" my-char-pos)) ; allow to move closing ]
+;                    (when (not (equal "}" my/char-pos)) ; allow to move closing }
+;                      (when (not (equal ")" my/char-pos)) ; allow to move closing )
+;                        (when (not (equal "]" my/char-pos)) ; allow to move closing ]
 ;                          (clang-format-region beg end))))))))
 ;    (c-toggle-electric-state -1)))
 
 ;; indent via clang-format in c-ts-mode
-(defun my-clang-format-buffer ()
+(defun my/clang-format-buffer ()
   "Format the current buffer using clang-format."
   (interactive)
   (when (derived-mode-p 'c-ts-mode 'c++-ts-mode)
     (clang-format-buffer)))
 
-(defun my-clang-format-region (start end)
+(defun my/clang-format-region (start end)
   "Format the region from START to END using clang-format."
   (interactive "r")
   (when (derived-mode-p 'c-ts-mode 'c++-ts-mode)
     (clang-format-region start end)))
 
-(defun my-clang-format-on-indent ()
-  "Format the current line or region using clang-format."
+(defun my/clang-format-on-indent ()
+    "Format the current line or region using clang-format."
+    (interactive)
+    (if (use-region-p)
+        (my/clang-format-region (region-beginning) (region-end))
+        (let ((pos (point))
+                 (start (line-beginning-position))
+                 (end (line-end-position)))
+            ;; Only format if there's actual content on the line
+            (if (> (- end start) 0)
+                (progn
+                    (my/clang-format-region start end)
+                    (goto-char pos))
+                (progn
+                    (treesit-indent)
+                    (goto-char (line-end-position)))))))
+
+;; Custom TAB behavior for prog-modes
+(defun my/indent-or-tab ()
+  "Smart tab behavior.
+If region is selected, call `indent-region-function'.
+If point is at end of line, call `indent-line-function'.
+Otherwise call `indent-for-tab-command'."
   (interactive)
-  (if (use-region-p)
-      (my-clang-format-region (region-beginning) (region-end))
-    (let ((pos (point))
-          (start (line-beginning-position))
-          (end (line-end-position)))
-      (my-clang-format-region start end)
-      (goto-char pos))))
+  (cond
+   ;; If region is active, indent it
+   ((use-region-p)
+    (if indent-region-function
+        (funcall indent-region-function (region-beginning) (region-end))
+      (indent-region (region-beginning) (region-end))))
+   
+   ;; If at end of line, just indent this line
+   ((= (point) (line-end-position))
+    (if indent-line-function
+        (funcall indent-line-function)
+      (indent-according-to-mode)))
+   
+   ;; Otherwise standard tab behavior
+   (t
+    (indent-for-tab-command))))
+
+;; Custom indent-region for C++ that avoids formatting empty lines
+(defun my/clang-format-indent-region (start end)
+  "Format a region using clang-format, but skip empty lines."
+  (interactive "r")
+  (save-excursion
+    (goto-char start)
+    (while (< (point) end)
+      (let ((line-start (line-beginning-position))
+            (line-end (line-end-position)))
+        ;; Only format non-empty lines
+        (when (> (- line-end line-start) 0)
+          (my/clang-format-region line-start line-end)))
+      (forward-line 1))))
 
 ;; VI-style matching parenthesis
 ;;  From Eric Hendrickson edh @ med.umn.edu
-(defun my-match-paren (arg)
+(defun my/match-paren (arg)
   "Go to the matching parenthesis if on parenthesis otherwise insert %."
   (interactive "p")
   (cond ((looking-at "[([{]") (forward-sexp 1) (backward-char))
         ((looking-at "[])}]") (forward-char) (backward-sexp 1))))
 
-(defun my-quickload-session ()
+(defun my/quickload-session ()
   "Reload the last session with `doom/quickload-session` passing `t`."
   (interactive)
   (doom/quickload-session t))
 
-(defun my-update-treemacs-icons ()
+(defun my/update-treemacs-icons ()
   "Replace all image (png/svg) icons in treemacs with font based icons."
   ;; Replace all special dir icons
   (treemacs-create-icon :icon (propertize "		" 'face 'treemacs-nerd-icons-file-face)
@@ -125,7 +169,7 @@
          ))
      icons)))
 
-(defun my-enable-global-lsp-bridge-mode ()
+(defun my/enable-global-lsp-bridge-mode ()
   "Add custom lsp-bridge language server configurations and enable lsp-bridge-mode"
   (dolist (hook (append lsp-bridge-default-mode-hooks acm-backend-capf-mode-hooks))
     (add-hook hook (lambda ()
@@ -141,23 +185,23 @@
 
 
 ;; Customize peek mode jumping so it works similar to xref jumping
-(defvar my-last-file '())
-(defvar my-last-pos '())
-(defun my-lsp-bridge-pre-peek-jump ()
+(defvar my/last-file '())
+(defvar my/last-pos '())
+(defun my/lsp-bridge-pre-peek-jump ()
   "Store the position before executing a peek jump to jump back later."
-  (push (buffer-file-name) my-last-file)
-  (push (point) my-last-pos))
-(defun my-lsp-bridge-post-peek-jump ()
+  (push (buffer-file-name) my/last-file)
+  (push (point) my/last-pos))
+(defun my/lsp-bridge-post-peek-jump ()
   "Disable peek mode after a jump."
   (lsp-bridge-peek-mode -1))
-(defun my-lsp-bridge-peek-jump-back ()
+(defun my/lsp-bridge-peek-jump-back ()
   "Custom function to return to the previous position of a peek jump."
-  (when (not (null my-last-pos))
-    (find-file (pop my-last-file))
-    (goto-char (pop my-last-pos)))
+  (when (not (null my/last-pos))
+    (find-file (pop my/last-file))
+    (goto-char (pop my/last-pos)))
   (lsp-bridge-peek-mode -1))
 
-(defun my-message-kill-buffer-no-query ()
+(defun my/message-kill-buffer-no-query ()
   "A version of message-kill-buffer() without any user confirmation which deletes the
  file and a backup"
   (interactive nil message-mode)
@@ -173,7 +217,7 @@
     (let ((message-draft-article draft-article))
       (message-disassociate-draft))))
 
-(defun my-describe-fac-at-point (face)
+(defun my/describe-fac-at-point (face)
   "Describe the typeface properties of FACE."
   (interactive
    (list
@@ -182,7 +226,7 @@
       (completing-read "Face: " cseq nil t))))
   (describe-face face))
 
-(defun my-org-msg-ctrl-c-ctrl-c ()
+(defun my/org-msg-ctrl-c-ctrl-c ()
   "Send message like `message-send-and-exit'.
 If the current buffer is OrgMsg buffer and OrgMsg is enabled (see
 `org-msg-toggle'), it calls `message-send-and-exit'. With the
@@ -196,7 +240,7 @@ This is an interactive copy of the original org-msg function."
 	(org-msg-mua-call 'send 'message-send)
       (org-msg-mua-call 'send-and-exit 'message-send-and-exit))))
 
-(defun my-scroll-mouse-handler (&rest ev)
+(defun my/scroll-mouse-handler (&rest ev)
   "A mouse scroll event handler for vterm that enables/disables vterm-copy-mode to
 avoid auto-scrolling when scrolling up and turning it back on when scrolling down
 to the end of the buffer."
@@ -214,7 +258,7 @@ to the end of the buffer."
     :group 'compilation
     :type 'number)
 
-(defun my-hide-compile-buffer-if-successful (buffer string)
+(defun my/hide-compile-buffer-if-successful (buffer string)
   (setq compilation-total-time (time-subtract nil compilation-start-time))
   (setq time-str (concat " (Time: " (format-time-string "%s.%3N" compilation-total-time) "s)"))
 
@@ -238,5 +282,6 @@ to the end of the buffer."
 
 (make-variable-buffer-local 'compilation-start-time)
 
-(defun my-compilation-started (proc)
+(defun my/compilation-started (proc)
   (setq compilation-start-time (current-time)))
+
