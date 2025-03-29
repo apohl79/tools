@@ -90,6 +90,7 @@ if [ "$(uname)" = "Darwin" ]; then
         if [ ! -e "$HOME/.config/emacs" ]; then
             echo "installing doom emacs..."
             brew install git ripgrep coreutils fd fontconfig font-iosevka-comfy font-roboto shellcheck isort pipenv markdown jq hunspell enchant
+            brew install clang-format google-java-format
             git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
             export PATH=/opt/homebrew/bin:"$PATH"
             "$HOME/.config/emacs/bin/doom" install --force --env --install --fonts --hooks
@@ -108,7 +109,7 @@ if [ "$(uname)" = "Darwin" ]; then
     if [ -z "$INST" ] || [ "$INST" = "y" ] || [ "$INST" = "Y" ]; then
         echo "installing environment..."
         brew install owncloud keepassxc cryptomator || true
-        brew install wezterm llvm clang-format cmake python3 libtool gh nvm htop packages dos2unix mosquitto || true
+        brew install wezterm llvm cmake python3 libtool gh nvm htop packages dos2unix mosquitto || true
         brew install oracle-jdk jenv || true
         brew install rectangle raycast contexts hammerspoon menumeters deepl || true
         brew install signal whatsapp || true

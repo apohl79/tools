@@ -126,4 +126,4 @@ fi
 
 export PATH="/Users/andreas/.codeium/windsurf/bin:$PATH"
 
-#alias git-local-cleanup="git fetch --prune; git for-each-ref --format '%(refname:short) %(upstream:track)' refs/heads | awk '\$2 == \"[gone]\" {print \$1}' | xargs -r git branch -D"
+alias git-branch-local-cleanup='git fetch --prune; git branch -vv | grep ": gone]" | awk "{print \$1}" | xargs git branch -D'

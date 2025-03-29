@@ -181,6 +181,8 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
  "TAB" #'my/indent-or-tab
  :map (c-ts-base-mode-map)
  "RET" #'my/newline-and-indent-no-clang-format
+ :map (protobuf-mode-map)
+ "C-c ;" #'+company/dabbrev
  ;:map (typescript-ts-base-mode-map)
  ;"TAB" #'treesit-indent
  ;:map (c++-mode-map c-mode-map typescript-mode-map js-mode-map java-mode-map)
@@ -415,6 +417,20 @@ I'm using mu4e and org-msg coming with doom. Unfortunately org-msg needs some fi
 (use-package! mixed-pitch
   :after org
   :hook (org-mode . mixed-pitch-mode))
+#+end_src
+
+** PGmacs
+
+The pgmacs theme is not cool.... this is not complete, but sets some reasonable colors for browsing.
+
+#+begin_src emacs-lisp :tangle yes
+(use-package! pgmacs
+  :config
+  (set-face-attribute 'pgmacs-table-data nil :foreground "gray")
+  (set-face-attribute 'pgmacs-column-foreign-key nil :foreground "orange")
+  (setq pgmacs-row-colors '("#1D252C" "#181E24")
+        pgmacs-deleted-color "#B93448")
+  )
 #+end_src
 
 ** Tags
@@ -761,12 +777,19 @@ FIXME: This does not work properly yet.
           (cmake-mode . cmake-ts-mode)
           (python-mode . python-ts-mode))))
 
+#+end_src
+
+** Format / Indention
+
+I'm using clang-format for c++ and google-java-format for java.
+
+#+begin_src emacs-lisp :tangle yes
 (use-package! clang-format
   :init
   ;; update the indent style to disable namespace indention with treesit-indent
   (defun my/c-ts-indent-style-no-namespace()
     `(((n-p-gp nil nil "namespace_definition") grand-parent 0)
-      ,@(alist-get 'bsd (c-ts-mode--indent-styles 'cpp))))
+      ,@(alist-get 'gnu (c-ts-mode--indent-styles 'cpp))))
   :config
   (add-hook 'c-ts-base-mode-hook
             (lambda ()
@@ -776,7 +799,17 @@ FIXME: This does not work properly yet.
                     ;; for newline-and-indent (RET key binding) we fall back to
                     ;; treesit-indent, so lets disable namespace indention
                     c-ts-mode-indent-style #'my/c-ts-indent-style-no-namespace)
-              (add-hook 'before-save-hook 'my/clang-format-buffer nil 'local))))
+              (add-hook 'before-save-hook 'my/clang-format-buffer nil 'local)
+              (electric-indent-mode -1))))
+
+(setq google-java-format-executable "/opt/homebrew/bin/google-java-format")
+(add-hook 'java-ts-mode-hook
+            (lambda ()
+              ;; google-java-format based indention
+              (setq indent-line-function 'my/google-java-format-on-indent
+                    indent-region-function 'my/google-java-format-indent-region)
+              (add-hook 'before-save-hook 'google-java-format-buffer nil 'local)))
+
 #+end_src
 
 ** Templates
@@ -832,6 +865,21 @@ This is based on: https://stackoverflow.com/questions/11043004/emacs-compile-buf
 #+begin_src emacs-lisp :tangle yes
 (use-package! kubernetes)
 #+end_src
+
+** PostgresQL
+
+Setup some default connection functions
+
+#+begin_src emacs-lisp :tangle yes
+(use-package! pgmacs
+  :init
+  ;; local dev
+  (defun my/postgres-trunk-dev ()
+    (interactive)
+    (pgmacs-open-string "dbname=trunk user=postgres password=password"))
+)
+#+end_src
+** gRPC
 
 * AI Assistant (LLM)
 

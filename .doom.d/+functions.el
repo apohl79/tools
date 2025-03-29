@@ -135,6 +135,39 @@ Otherwise call `indent-for-tab-command'."
           (my/clang-format-region line-start line-end)))
       (forward-line 1))))
 
+(load! "google-java-format")
+(defun my/google-java-format-on-indent ()
+    "Format the current line or region using google-java-format."
+    (interactive)
+    (if (use-region-p)
+        (google-java-format-region (region-beginning) (region-end))
+        (let ((pos (point))
+                 (start (line-beginning-position))
+                 (end (line-end-position)))
+            ;; Only format if there's actual content on the line
+            (if (> (- end start) 0)
+                (progn
+                    (google-java-format-region start end)
+                    (goto-char pos))
+                (progn
+                    (treesit-indent)
+                    (goto-char (line-end-position)))))))
+
+;; Custom indent-region for java that avoids formatting empty lines
+(defun my/google-java-format-indent-region (start end)
+  "Format a region using google-java-format, but skip empty lines."
+  (interactive "r")
+  (save-excursion
+    (goto-char start)
+    (while (< (point) end)
+      (let ((line-start (line-beginning-position))
+            (line-end (line-end-position)))
+        ;; Only format non-empty lines
+        (when (> (- line-end line-start) 0)
+          (google-java-format-region line-start line-end)))
+      (forward-line 1))))
+
+
 ;; VI-style matching parenthesis
 ;;  From Eric Hendrickson edh @ med.umn.edu
 (defun my/match-paren (arg)

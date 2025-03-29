@@ -147,6 +147,8 @@
  "TAB" #'my/indent-or-tab
  :map (c-ts-base-mode-map)
  "RET" #'my/newline-and-indent-no-clang-format
+ :map (protobuf-mode-map)
+ "C-c ;" #'+company/dabbrev
  ;:map (typescript-ts-base-mode-map)
  ;"TAB" #'treesit-indent
  ;:map (c++-mode-map c-mode-map typescript-mode-map js-mode-map java-mode-map)
@@ -346,6 +348,14 @@
 (use-package! mixed-pitch
   :after org
   :hook (org-mode . mixed-pitch-mode))
+
+(use-package! pgmacs
+  :config
+  (set-face-attribute 'pgmacs-table-data nil :foreground "gray")
+  (set-face-attribute 'pgmacs-column-foreign-key nil :foreground "orange")
+  (setq pgmacs-row-colors '("#1D252C" "#181E24")
+        pgmacs-deleted-color "#B93448")
+  )
 
 (message "*** Coding / General")
 
@@ -576,7 +586,7 @@
   ;; update the indent style to disable namespace indention with treesit-indent
   (defun my/c-ts-indent-style-no-namespace()
     `(((n-p-gp nil nil "namespace_definition") grand-parent 0)
-      ,@(alist-get 'bsd (c-ts-mode--indent-styles 'cpp))))
+      ,@(alist-get 'gnu (c-ts-mode--indent-styles 'cpp))))
   :config
   (add-hook 'c-ts-base-mode-hook
             (lambda ()
@@ -586,7 +596,16 @@
                     ;; for newline-and-indent (RET key binding) we fall back to
                     ;; treesit-indent, so lets disable namespace indention
                     c-ts-mode-indent-style #'my/c-ts-indent-style-no-namespace)
-              (add-hook 'before-save-hook 'my/clang-format-buffer nil 'local))))
+              (add-hook 'before-save-hook 'my/clang-format-buffer nil 'local)
+              (electric-indent-mode -1))))
+
+(setq google-java-format-executable "/opt/homebrew/bin/google-java-format")
+(add-hook 'java-ts-mode-hook
+            (lambda ()
+              ;; google-java-format based indention
+              (setq indent-line-function 'my/google-java-format-on-indent
+                    indent-region-function 'my/google-java-format-indent-region)
+              (add-hook 'before-save-hook 'google-java-format-buffer nil 'local)))
 
 (message "*** Coding / Templates")
 
@@ -613,6 +632,14 @@
 (add-hook 'compilation-finish-functions 'my/hide-compile-buffer-if-successful)
 
 (use-package! kubernetes)
+
+(use-package! pgmacs
+  :init
+  ;; local dev
+  (defun my/postgres-trunk-dev ()
+    (interactive)
+    (pgmacs-open-string "dbname=trunk user=postgres password=password"))
+)
 
 (message "*** LLM")
 
