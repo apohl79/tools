@@ -91,6 +91,7 @@ if [ "$(uname)" = "Darwin" ]; then
             echo "installing doom emacs..."
             brew install git ripgrep coreutils fd fontconfig font-iosevka-comfy font-roboto shellcheck isort pipenv markdown jq hunspell enchant
             brew install clang-format google-java-format
+            brew install leiningen
             git clone --depth 1 https://github.com/doomemacs/doomemacs ~/.config/emacs
             export PATH=/opt/homebrew/bin:"$PATH"
             "$HOME/.config/emacs/bin/doom" install --force --env --install --fonts --hooks
@@ -122,7 +123,7 @@ if [ "$(uname)" = "Darwin" ]; then
         brew install arduino-ide || true
         brew install utm || true
         brew install cliclick || true
-        pip3 install paho-mqtt || true
+        pip3 install paho-mqtt pygments || true
         # java
         brew install jenv openjdk@21 jdtls || true
         jenv add /opt/homebrew/opt/openjdk@21 || true

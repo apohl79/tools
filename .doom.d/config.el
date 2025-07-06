@@ -12,7 +12,7 @@
     (set-frame-size (selected-frame) (- (display-pixel-width) 16) (display-pixel-height) t)))
 
 ;; Restore last session automatically
-(add-hook 'window-setup-hook #'my/quickload-session)
+(add-hook 'doom-after-init-hook #'my/quickload-session)
 
 (message "*** General / General behavior")
 
@@ -57,20 +57,18 @@
       org-startup-with-inline-images t
       org-image-actual-width '(300))
 
-(message "*** General / Spellchecker")
-
-(use-package! jinx
-  :hook ((org-mode . jinx-mode)
-         (prog-mode . jinx-mode))
+(use-package! pdf-tools
   :config
-  (setq jinx-languages "en_US de_DE_frami"
-        jinx-delay 1.0)
-  ; no spell checking in strings
-  (add-to-list 'jinx-exclude-faces '(prog-mode font-lock-string-face font-lock-comment-face)))
+  (pdf-tools-install))
 
-(after! vertico-multiform ;; if using vertico
-  (add-to-list 'vertico-multiform-categories
-               '(jinx (vertico-grid-annotate . 25))))
+;; Properly detect and handle CRLF files
+(setq inhibit-eol-conversion t)
+
+;; More flexible EOL handling
+(prefer-coding-system 'utf-8)
+(set-default-coding-systems 'utf-8)
+(set-terminal-coding-system 'utf-8)
+(set-keyboard-coding-system 'utf-8)
 
 (message "*** Key Bindings")
 
@@ -539,8 +537,12 @@
                 ("\\.puml$"                 . plantuml-mode)
                 ("\\.ino$"                  . c++-ts-mode)
                 ("\\.ts$"                   . typescript-ts-mode)
-                ("\\.tsx$"                  . tsx-ts-mode)
+                ("\\.tsx$"                  . jtsx-tsx-mode)
                 ) auto-mode-alist))
+
+(use-package! jtsx
+  :custom
+  (jtsx-enable-all-syntax-highlighting-features t))
 
 (message "*** Coding / Tree-Sitter")
 
@@ -596,7 +598,7 @@
                     ;; for newline-and-indent (RET key binding) we fall back to
                     ;; treesit-indent, so lets disable namespace indention
                     c-ts-mode-indent-style #'my/c-ts-indent-style-no-namespace)
-              (add-hook 'before-save-hook 'my/clang-format-buffer nil 'local)
+              ;(add-hook 'before-save-hook 'my/clang-format-buffer nil 'local)
               (electric-indent-mode -1))))
 
 (setq google-java-format-executable "/opt/homebrew/bin/google-java-format")
@@ -624,7 +626,7 @@
 
 (message "*** Coding / Terminal")
 
-(advice-add 'mwheel-scroll :after #'my/scroll-mouse-handler)
+;(advice-add 'mwheel-scroll :after #'my/scroll-mouse-handler)
 
 (message "*** Coding / Compilation Buffer")
 
@@ -640,6 +642,83 @@
     (interactive)
     (pgmacs-open-string "dbname=trunk user=postgres password=password"))
 )
+
+(use-package! ejc-sql
+  :config
+  (setq clomacs-httpd-default-port 8595
+        ejc-complete-on-dot t
+        ejc-result-table-impl 'ejc-result-mode)
+  (require 'ejc-autocomplete)
+  (add-hook 'ejc-sql-minor-mode-hook
+            (lambda ()
+              (auto-complete-mode t)
+              (ejc-ac-setup)))
+  (require 'ejc-company)
+  (push 'ejc-company-backend company-backends)
+  (add-hook 'ejc-sql-minor-mode-hook
+            (lambda ()
+              (company-mode t)))
+  (add-hook 'ejc-sql-minor-mode-hook
+          (lambda ()
+            (ejc-eldoc-setup))))
+
+(ejc-create-connection
+ "trunk-local-dev"
+ :classpath (concat "~/.m2/repository/org.postgresql/postgresql/42.6.0/"
+                    "postgresql-42.6.0.jar")
+ :subprotocol "postgresql"
+ :subname "//localhost:5432/trunk"
+ :user "postgres"
+ :password "password"
+ :sslmode nil)
+
+(ejc-create-connection
+ "trunk-staging"
+ :classpath (concat "~/.m2/repository/org.postgresql/postgresql/42.6.0/"
+                    "postgresql-42.6.0.jar")
+ :subprotocol "postgresql"
+ :subname "//syncdna-staging-rds.cvoa2ia260p9.us-east-2.rds.amazonaws.com:5432/trunk"
+ :user "app"
+ :password "QR0_{HN4A@Ieu5Yb<Xb8"
+ :sslmode nil)
+
+(ejc-create-connection
+ "authn-staging"
+ :classpath (concat "~/.m2/repository/org.postgresql/postgresql/42.6.0/"
+                    "postgresql-42.6.0.jar")
+ :subprotocol "postgresql"
+ :subname "//syncdna-staging-rds.cvoa2ia260p9.us-east-2.rds.amazonaws.com:5432/authn"
+ :user "app"
+ :password "QR0_{HN4A@Ieu5Yb<Xb8"
+ :sslmode nil)
+
+(load! "grpclient-mode")
+(load! "grpclient")
+(use-package! grpclient
+  :init
+  (add-to-list 'auto-mode-alist '("\\.grpc\\'" . grpclient-mode)))
+
+  (defun my/claude-code ()
+    (interactive)
+    (claude-code)
+    (run-at-time 1 nil
+                 (lambda ()
+                   (claude-code-send-command "read ./CLAUDE.md carefully. make sure you follow all of the defined rules and settings for code style, comments, testing, the development process and diagnostics like using an lsp via mcp when available. use you your builtin read tool to read file instead of using an mcp." t))))
+  (use-package! claude-code
+    :config
+    ;(setq claude-code-terminal-backend 'vterm)
+    (claude-code-mode)
+
+    ;; Configure claude-code buffers to display on the right
+    (add-to-list 'display-buffer-alist
+                 '("\\*claude:.*"
+                   (display-buffer-in-side-window)
+                   (side . right)
+                   (window-width . 0.5)))
+
+    (map! :map claude-code-command-map "c" #'my/claude-code)
+
+    :bind-keymap ("C-s-x" . claude-code-command-map))
 
 (message "*** LLM")
 

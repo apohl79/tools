@@ -1,3 +1,4 @@
+;;; -*- lexical-binding: t -*-
 ;;; Compiled snippets and support files for `c++-mode'
 ;;; Snippet definitions:
 ;;;

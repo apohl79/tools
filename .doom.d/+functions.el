@@ -177,9 +177,50 @@ Otherwise call `indent-for-tab-command'."
         ((looking-at "[])}]") (forward-char) (backward-sexp 1))))
 
 (defun my/quickload-session ()
-  "Reload the last session with `doom/quickload-session` passing `t`."
+  "Load the last session with a delay to allow UI rendering and show progress."
   (interactive)
-  (doom/quickload-session t))
+  ;; Set a timer to load the session after a delay
+  (run-with-timer 0.5 nil
+                 (lambda ()
+                   (let ((original-title frame-title-format)
+                         (buffer-count 0)
+                         (current-count 0)
+                         (last-percentage 0))
+
+                     ;; Count def-buffer declarations in the autosave file
+                     (with-temp-buffer
+                       (insert-file-contents "~/.config/emacs/.local/etc/workspaces/autosave")
+                       (goto-char (point-min))
+                       (while (re-search-forward "(def-buffer\\b" nil t)
+                         (setq buffer-count (1+ buffer-count))))
+
+                     ;; Initial title update
+                     (setq frame-title-format "Restoring session...")
+                     (sit-for 0.1) ;; Allow the title to update
+
+                     ;; Advise persp-mode functions if available
+                     (when (fboundp 'persp-add-buffer)
+                       (advice-add 'persp-add-buffer :after
+                                (lambda (&rest _)
+                                  (setq current-count (1+ current-count))
+                                  (let ((percentage (if (> buffer-count 0)
+                                                      (min 100 (floor (* 100 (/ (float current-count) buffer-count))))
+                                                      0)))
+                                    (when (> percentage last-percentage)
+                                      (setq last-percentage percentage)
+                                      (setq progress (format "Restoring session... %d%% (%d/%d)"
+                                                       percentage current-count buffer-count))
+                                      (message "%s" progress)
+                                      )))))
+
+                     (unwind-protect
+                         (doom/quickload-session t)
+                       ;; Cleanup
+                       (when (fboundp 'persp-add-buffer)
+                         (advice-remove 'persp-add-buffer (lambda (&rest _) nil)))
+                       (setq frame-title-format original-title)
+                       (sit-for 0.1)))) ;; Ensure the final title update is visible
+                 ))
 
 (defun my/update-treemacs-icons ()
   "Replace all image (png/svg) icons in treemacs with font based icons."

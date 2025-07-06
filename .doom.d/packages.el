@@ -13,13 +13,16 @@
 (package! gptel)
 (package! elysium)
 (package! org-modern)
-(package! jinx)
+(package! pdf-tools)
+;(package! jinx)
 (package! consult-omni :recipe (:host github :repo "armindarvish/consult-omni"))
 ;(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
 
 (package! clang-format)
 
 ;;(package! proto-ts-mode :recipe (:host github :repo "Clement-Jean/proto-ts-mode"))
+
+(package! jtsx)
 
 ;;(package! lsp-bridge
 ;;  :recipe (:host github
@@ -36,8 +39,24 @@
 (package! svg-tag-mode :recipe (:host github :repo "rougier/svg-tag-mode"))
 
 (package! kubernetes)
+
+;; db support
+(package! ejc-sql)
+(package! auto-complete)
 (package! pg :recipe (:host github :repo "emarsden/pg-el"))
 (package! pgmacs :recipe (:host github :repo "emarsden/pgmacs"))
+
+(package! eat :recipe (:host codeberg
+                        :repo "akib/emacs-eat"
+                        :files ("*.el" ("term" "term/*.el") "*.texi"
+                                 "*.ti" ("terminfo/e" "terminfo/e/*")
+                                 ("terminfo/65" "terminfo/65/*")
+                                 ("integration" "integration/*")
+                                 (:exclude ".dir-locals.el" "*-tests.el"))))
+
+(package! claude-code :recipe (:host github
+                                :repo "stevemolitor/claude-code.el"
+                                :files ("*.el" (:exclude "images/*"))))
 
 ;; To install a package directly from a remote git repo, you must specify a
 ;; `:recipe'. You'll find documentation on what `:recipe' accepts here:
