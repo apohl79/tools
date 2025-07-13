@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: Generate C++ method implementation
+# key: impl
+# --
+${1:ReturnType} ${2:ClassName}::${3:methodName}(${4:parameters}) {
+    ${0:// TODO: Implement}
+}

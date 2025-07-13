@@ -112,6 +112,13 @@
  "s-*" #'doom/increase-font-size
  "s-_" #'doom/decrease-font-size
 
+;; claude-code
+(:prefix ("C-s-x" . "Claude")
+         "c" #'claude-code-ide
+         "r" #'claude-code-ide-resume
+         "k" #'claude-code-ide-stop
+         "RET" #'claude-code-ide-insert-newline)
+
  ;; gptel/elysium
  (:leader :prefix ("C-s" . "LLM")
           (:prefix ("e" . "elysium")
@@ -144,7 +151,8 @@
  "C-c RET" #'recompile
  "TAB" #'my/indent-or-tab
  :map (c-ts-base-mode-map)
- "RET" #'my/newline-and-indent-no-clang-format
+ "RET" #'my/clang-format-newline-and-indent
+ "C-c c g" #'my/generate-cpp-implementation :desc "Copy Impl Body to Clipboard"
  :map (protobuf-mode-map)
  "C-c ;" #'+company/dabbrev
  ;:map (typescript-ts-base-mode-map)
@@ -397,14 +405,17 @@
         lsp-restart 'auto-restart
         lsp-ui-doc-enable nil
         lsp-enable-indentation nil
+        lsp-modeline-code-actions-enable t
+        lsp-log-io t  ; Enable LSP communication logging
         ;; Use xcode's clangd
-        lsp-clients-clangd-executable "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clangd"
+        lsp-clients-clangd-executable "/opt/homebrew/Cellar/llvm@19/19.1.7/bin/clangd"
         lsp-clients-clangd-args '("--log=error"
                                   "--background-index"
                                   "--clang-tidy"
                                   "--completion-style=detailed"
-                                  "--header-insertion=never"
-                                  "--pretty")
+                                  "--header-insertion=iwyu"
+                                  "--pretty"
+                                  "--function-arg-placeholders")
         ;; Disable some pygthon warnings
         lsp-pylsp-plugins-flake8-ignore "E128,E261,E265,E302,E401,E501,E713,E741"
         lsp-pylsp-plugins-pydocstyle-enabled nil
@@ -441,10 +452,16 @@
             (setq-local lsp-enabled-clients '(ts-ls eslint))
             (lsp-deferred)))
 
-;; Set flycheck cpp standard
+;; Configure C/C++ tree-sitter indentation to match clang-format
+(setq c-ts-mode-indent-offset 4)
+(setq c++-ts-mode-indent-offset 4)
+
+;; Set flycheck cpp standard and fix indentation rules
 (add-hook 'c++-ts-mode-hook
           (lambda ()
-            (setq flycheck-clang-language-standard "c++17")))
+            (setq flycheck-clang-language-standard "c++17")
+            (setq-local c-ts-mode-indent-offset 4)
+            (setq-local tab-width 4)))
 
 (message "*** Coding / Debugging")
 
@@ -587,8 +604,34 @@
   :init
   ;; update the indent style to disable namespace indention with treesit-indent
   (defun my/c-ts-indent-style-no-namespace()
-    `(((n-p-gp nil nil "namespace_definition") grand-parent 0)
-      ,@(alist-get 'gnu (c-ts-mode--indent-styles 'cpp))))
+    "Custom indent style based on Google style with 4-space indentation."
+    ;; Start with k&r style which is closer to Google style than gnu
+    (let ((base-style (alist-get 'k&r (c-ts-mode--indent-styles 'cpp))))
+      `(;; Namespace members should not be indented
+        ((n-p-gp nil nil "namespace_definition") grand-parent 0)
+        ;; Override k&r to use 4 spaces instead of default offset
+        ((parent-is "compound_statement") standalone-parent 4)
+        ((parent-is "if_statement") standalone-parent 4)
+        ((parent-is "else_clause") standalone-parent 4)
+        ((parent-is "do_statement") standalone-parent 4)
+        ((parent-is "for_statement") standalone-parent 4)
+        ((parent-is "while_statement") standalone-parent 4)
+        ((parent-is "switch_statement") standalone-parent 4)
+        ((parent-is "case_statement") standalone-parent 4)
+        ;; Function parameters and arguments
+        ((parent-is "argument_list") parent-bol 4)
+        ((parent-is "parameter_list") parent-bol 4)
+        ;; Class/struct members use 2-space indent (Google style)
+        ((parent-is "field_declaration_list") parent-bol 2)
+        ((node-is "field_declaration") parent-bol 2)
+        ;; Access specifiers at same level as class opening brace
+        ((node-is "access_specifier") parent-bol 0)
+        ;; Comments should follow the code indentation
+        ((node-is "comment") no-indent)
+        ;; Preprocessor directives at column 0
+        ((node-is "preproc") column-0 0)
+        ;; Include base k&r rules that we haven't overridden
+        ,@base-style)))
   :config
   (add-hook 'c-ts-base-mode-hook
             (lambda ()
@@ -697,28 +740,6 @@
 (use-package! grpclient
   :init
   (add-to-list 'auto-mode-alist '("\\.grpc\\'" . grpclient-mode)))
-
-  (defun my/claude-code ()
-    (interactive)
-    (claude-code)
-    (run-at-time 1 nil
-                 (lambda ()
-                   (claude-code-send-command "read ./CLAUDE.md carefully. make sure you follow all of the defined rules and settings for code style, comments, testing, the development process and diagnostics like using an lsp via mcp when available. use you your builtin read tool to read file instead of using an mcp." t))))
-  (use-package! claude-code
-    :config
-    ;(setq claude-code-terminal-backend 'vterm)
-    (claude-code-mode)
-
-    ;; Configure claude-code buffers to display on the right
-    (add-to-list 'display-buffer-alist
-                 '("\\*claude:.*"
-                   (display-buffer-in-side-window)
-                   (side . right)
-                   (window-width . 0.5)))
-
-    (map! :map claude-code-command-map "c" #'my/claude-code)
-
-    :bind-keymap ("C-s-x" . claude-code-command-map))
 
 (message "*** LLM")
 

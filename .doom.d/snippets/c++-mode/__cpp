@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Andreas Pohl
+ * Copyright (c) 2025 Andreas Pohl
  *
  * Author: Andreas Pohl
  */

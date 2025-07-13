@@ -85,17 +85,76 @@
                     (treesit-indent)
                     (goto-char (line-end-position)))))))
 
+(defun my/get-clang-format-indent-width ()
+  "Get the IndentWidth from clang-format configuration."
+  (let* ((clang-format-dir (locate-dominating-file default-directory ".clang-format"))
+         (clang-format-config (when clang-format-dir
+                                (expand-file-name ".clang-format" clang-format-dir)))
+         (indent-width 4)) ; default to 4 if not found
+    (when (and clang-format-config (file-exists-p clang-format-config))
+      (with-temp-buffer
+        (insert-file-contents clang-format-config)
+        (goto-char (point-min))
+        (when (re-search-forward "^IndentWidth:\\s-*\\([0-9]+\\)" nil t)
+          (setq indent-width (string-to-number (match-string 1))))))
+    indent-width))
+
 (defun my/newline-and-indent-no-clang-format (&optional arg)
-    "Insert a newline and just call treesit-indent instead of clang-format.
-This is to avoid clang-format killing the empty line immediately."
+    "Insert a newline and indent based on clang-format's style.
+This avoids clang-format killing the empty line immediately."
   (interactive "*p")
   (delete-horizontal-space t)
   (unless arg
     (setq arg 1))
-  (let ((electric-indent-mode nil))
+  (let ((electric-indent-mode nil)
+        (indent-width (my/get-clang-format-indent-width)))
     (dotimes (_ arg)
       (newline nil t)
-      (treesit-indent))))
+      ;; Find the first non-empty line above to get proper context
+      (let* ((context-line-info (save-excursion
+                                 (let ((found nil)
+                                       (line-text "")
+                                       (line-indent 0))
+                                   (while (and (not found) (> (line-number-at-pos) 1))
+                                     (forward-line -1)
+                                     (setq line-text (buffer-substring-no-properties
+                                                     (line-beginning-position)
+                                                     (line-end-position)))
+                                     (when (string-match-p "[^ \t\n]" line-text)
+                                       (setq found t)
+                                       (back-to-indentation)
+                                       (setq line-indent (current-column))))
+                                   (list line-text line-indent))))
+             (prev-line (car context-line-info))
+             (parent-indent (cadr context-line-info)))
+        (cond
+         ;; Empty line on empty line - maintain current indent level
+         ((string= "" (string-trim prev-line))
+          (indent-to parent-indent))
+         ;; After a line ending with { or :, increase indent
+         ((string-match "[{:]\\s-*$" prev-line)
+          (indent-to (+ parent-indent indent-width)))
+         ;; After access specifier (public:, private:, etc), indent members
+         ((string-match "^\\s-*\\(public\\|private\\|protected\\):" prev-line)
+          (indent-to (+ parent-indent 2))) ; Google style: members are +2 from access specifier
+         ;; Lambda continuation - align with previous capture parameter
+         ((and (string-match "\\[.*," prev-line)
+               (not (string-match "]" prev-line)))
+          (save-excursion
+            (forward-line -1)
+            (when (re-search-forward "\\[" (line-end-position) t)
+              (indent-to (current-column)))))
+         ;; Function parameter continuation - align with opening parenthesis
+         ((and (string-match "(" prev-line)
+               (not (string-match ")" prev-line))
+               (not (string-match "{" prev-line)))
+          (save-excursion
+            (forward-line -1)
+            (when (re-search-forward "(" (line-end-position) t)
+              (indent-to (current-column)))))
+         ;; Default: same indent as parent
+         (t
+          (indent-to parent-indent)))))))
 
 ;; Custom TAB behavior for prog-modes
 (defun my/indent-or-tab ()
@@ -135,6 +194,19 @@ Otherwise call `indent-for-tab-command'."
           (my/clang-format-region line-start line-end)))
       (forward-line 1))))
 
+(defun my/clang-format-newline-and-indent (&optional arg)
+  "Insert newline and indent using clang-format, preserving empty lines."
+  (interactive "*p")
+  (unless arg (setq arg 1))
+  (dotimes (_ arg)
+    (newline nil t)
+    ;; Insert a temporary dummy statement to get proper indentation
+    (insert "//")
+    ;; Format the line to get proper indentation from clang-format
+    (clang-format-region (line-beginning-position) (line-end-position))
+    ;; Remove the "//" dummy statement
+    (delete-char -2)))
+
 (load! "google-java-format")
 (defun my/google-java-format-on-indent ()
     "Format the current line or region using google-java-format."
@@ -167,6 +239,51 @@ Otherwise call `indent-for-tab-command'."
           (google-java-format-region line-start line-end)))
       (forward-line 1))))
 
+(defun my/generate-cpp-implementation ()
+  "Generate C++ method implementation from current line declaration."
+  (interactive)
+  (save-excursion
+    (beginning-of-line)
+    (let* ((line (buffer-substring-no-properties 
+                  (line-beginning-position) 
+                  (line-end-position)))
+           (class-name (my/get-current-class-name))
+           (method-sig (my/parse-method-signature line)))
+      (if method-sig
+          (let ((impl (my/format-method-implementation class-name method-sig)))
+            (kill-new impl)
+            (message "Implementation copied to clipboard: %s::%s" 
+                     class-name (nth 1 method-sig)))
+        (message "No method signature found on current line")))))
+
+(defun my/get-current-class-name ()
+  "Get the current class name from context."
+  (save-excursion
+    (when (re-search-backward "^class\\s-+\\([a-zA-Z_][a-zA-Z0-9_]*\\)" nil t)
+      (match-string 1))))
+
+(defun my/parse-method-signature (line)
+  "Parse method signature from line, return (return-type method-name params)."
+  ;; Handle pattern: [virtual] return_type method_name(params) [const];
+  (when (string-match "^\\s-*\\(virtual\\s-+\\)?\\(.+?\\)\\s-+\\([a-zA-Z_][a-zA-Z0-9_]*\\)\\s-*(\\([^)]*\\))\\s-*\\(const\\)?\\s-*;" line)
+    (list (string-trim (match-string 2 line))  ; return type
+          (string-trim (match-string 3 line))  ; method name  
+          (string-trim (match-string 4 line))  ; parameters
+          (match-string 5 line))))             ; const
+
+(defun my/format-method-implementation (class-name method-info)
+  "Format the method implementation."
+  (when (and class-name method-info)
+    (let ((return-type (nth 0 method-info))
+          (method-name (nth 1 method-info))
+          (params (nth 2 method-info))
+          (const-qualifier (nth 3 method-info)))
+      (format "%s %s::%s(%s)%s {\n    // TODO: Implement\n}"
+              return-type
+              class-name
+              method-name
+              params
+              (if const-qualifier " const" "")))))
 
 ;; VI-style matching parenthesis
 ;;  From Eric Hendrickson edh @ med.umn.edu
