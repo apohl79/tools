@@ -5,11 +5,11 @@
 (setq user-full-name "Andreas Pohl"
       user-mail-address "pohl@e47.org")
 
-;; Maximize emacs w/o setting a frame property to keep normal macOS window management working
-(add-hook 'doom-init-ui-hook
-  (lambda ()
-    (set-frame-position (selected-frame) 0 0)
-    (set-frame-size (selected-frame) (- (display-pixel-width) 16) (display-pixel-height) t)))
+;; Restore frame geometry and font size from last session
+(add-hook 'doom-init-ui-hook #'my/restore-frame-geometry)
+
+;; Save frame geometry and font size on exit
+(add-hook 'kill-emacs-hook #'my/save-frame-geometry)
 
 ;; Restore last session automatically
 (add-hook 'doom-after-init-hook #'my/quickload-session)
@@ -45,6 +45,60 @@
 ;; File name in the mode line
 (setq doom-modeline-buffer-file-name-style 'truncate-with-project)
 
+(message "*** General / Dashboard")
+
+;; Custom widget to show all workspaces/projects as clickable buttons
+(defun +doom-dashboard-widget-projects ()
+  (when (modulep! :ui workspaces)
+    (let ((workspaces (persp-names)))
+      (when workspaces
+        (insert "\n")
+        ;; Center the title using doom's centering function
+        (insert (+doom-dashboard--center
+                 +doom-dashboard--width
+                 (propertize "Projects:" 'face 'doom-dashboard-menu-title)))
+        (insert "\n\n")
+        (dolist (workspace workspaces)
+          (unless (string= workspace persp-nil-name)
+            ;; Center each workspace name using doom's centering function
+            (insert
+             (+doom-dashboard--center
+              +doom-dashboard--width
+              (with-temp-buffer
+                (insert-text-button workspace
+                                    'action `(lambda (_)
+                                               ;; Quit dashboard window first
+                                               (let ((dashboard-window (get-buffer-window +doom-dashboard-name)))
+                                                 (when dashboard-window
+                                                   (with-selected-window dashboard-window
+                                                     (quit-window t))))
+                                               ;; Then switch workspace
+                                               (+workspace-switch ,workspace t))
+                                    'follow-link t
+                                    'face 'doom-dashboard-menu-desc
+                                    'mouse-face 'doom-dashboard-menu-title
+                                    'help-echo (format "Switch to workspace: %s" workspace))
+                (buffer-string))))
+            (insert "\n")))))))
+
+
+;; Add the projects widget to the dashboard (without the shortmenu)
+(setq +doom-dashboard-functions
+      '(doom-dashboard-widget-banner
+        +doom-dashboard-widget-projects
+        doom-dashboard-widget-loaded))
+
+;; Disable line numbers in dashboard - multiple approaches for reliability
+(add-hook '+doom-dashboard-mode-hook
+          (lambda ()
+            (display-line-numbers-mode -1)
+            (setq-local display-line-numbers nil)))
+
+(add-hook 'doom-dashboard-mode-hook
+          (lambda ()
+            (display-line-numbers-mode -1)
+            (setq-local display-line-numbers nil)))
+
 (message "*** General / Org")
 
 (setq org-directory "~/Library/Mobile Documents/iCloud~com~appsonthemove~beorg/Documents/org/"
@@ -56,6 +110,12 @@
       org-hide-emphasis-markers t
       org-startup-with-inline-images t
       org-image-actual-width '(300))
+
+(after! markdown-mode
+  ;; Make URLs clickable with mouse and C-c RET
+  (add-hook! 'markdown-mode-hook
+    #'goto-address-mode     ; Makes URLs clickable
+    #'visual-line-mode))
 
 (use-package! pdf-tools
   :config
@@ -117,7 +177,8 @@
          "c" #'claude-code-ide
          "r" #'claude-code-ide-resume
          "k" #'claude-code-ide-stop
-         "RET" #'claude-code-ide-insert-newline)
+         "RET" #'claude-code-ide-insert-newline
+         "ESC" #'claude-code-ide-send-escape)
 
  ;; gptel/elysium
  (:leader :prefix ("C-s" . "LLM")
@@ -152,7 +213,7 @@
  "TAB" #'my/indent-or-tab
  :map (c-ts-base-mode-map)
  "RET" #'my/clang-format-newline-and-indent
- "C-c c g" #'my/generate-cpp-implementation :desc "Copy Impl Body to Clipboard"
+ :desc "Copy Impl Body to Clipboard" "C-c c g" #'my/generate-cpp-implementation
  :map (protobuf-mode-map)
  "C-c ;" #'+company/dabbrev
  ;:map (typescript-ts-base-mode-map)
@@ -279,6 +340,7 @@
 (setq doom-theme 'doom-city-lights)
 
 (defvar my/fixed-font "Iosevka Comfy")
+(defvar my/unicode-font "JuliaMono")
 (defvar my/variable-font "Roboto")
 
 (setq doom-font
@@ -289,6 +351,54 @@
 ;; zoom in/out steps
 (setq doom-font-increment 1)
 
+;; IMPORTANT: Set this to nil so custom fontset is used
+(setq use-default-font-for-symbols nil)
+
+;; Define function to configure fontsets
+(defun my/configure-fontsets ()
+  "Configure fontsets for unicode and symbol characters."
+
+  (set-fontset-font t 'symbol nil)
+
+  ;; General unicode/symbol setup - use unicode font
+  (set-fontset-font t 'unicode (font-spec :family my/unicode-font) nil 'prepend)
+  (set-fontset-font t 'symbol (font-spec :family my/unicode-font) nil 'prepend)
+
+  ;; Box-drawing and geometric shapes to align vterm buffer width properly
+  (set-fontset-font t '(#x2500 . #x257F) (font-spec :family my/fixed-font) nil 'prepend)
+  (set-fontset-font t '(#x2580 . #x259F) (font-spec :family my/fixed-font) nil 'prepend)
+  (set-fontset-font t '(#x25A0 . #x25FF) (font-spec :family my/fixed-font) nil 'prepend)
+
+  ;; Fix non-breaking space underlines
+  (set-face-attribute 'nobreak-space nil :underline nil)
+)
+
+;; Apply after Doom sets fonts and on zoom
+(add-hook 'after-setting-font-hook #'my/configure-fontsets)
+(add-hook 'doom-init-ui-hook #'my/configure-fontsets)
+;; Also apply when loading vterm buffers
+(add-hook 'vterm-mode-hook #'my/configure-fontsets)
+
+;; Replace specific Claude Code Unicode symbols with ASCII in vterm buffers
+(defun my/vterm-replace-unicode-spinners ()
+  "Set buffer-local display table to replace Unicode spinners with ASCII in vterm."
+  (let ((table (or buffer-display-table (make-display-table))))
+    ;; · - U+00B7 (Middle Dot)
+    (aset table #x00B7 (vector ?*))
+    ;; ✢ - U+2722 (Four Teardrop-Spoked Asterisk)
+    (aset table #x2722 (vector ?*))
+    ;; ✳ - U+2733 (Eight Spoked Asterisk)
+    (aset table #x2733 (vector ?*))
+    ;; ✶ - U+2736 (Six Pointed Black Star)
+    (aset table #x2736 (vector ? ))
+    ;; ✻ - U+273B (Teardrop-Spoked Asterisk)
+    (aset table #x273B (vector ? ))
+    ;; ✽ - U+273D (Heavy Teardrop-Spoked Asterisk)
+    (aset table #x273D (vector ? ))
+    (setq buffer-display-table table)))
+
+(add-hook 'vterm-mode-hook #'my/vterm-replace-unicode-spinners)
+
 ;; This determines the style of line numbers in effect. If set to `nil', line
 ;; numbers are disabled. For relative line numbers, set this to `relative'.
 (setq display-line-numbers-type t)
@@ -297,6 +407,8 @@
 (set-face-attribute 'line-number nil :font my/fixed-font)
 (set-face-attribute 'line-number-current-line nil :font my/fixed-font)
 
+(add-hook 'vterm-mode-hook (lambda () (display-line-numbers-mode 0)))
+
 ;; Set the project name as frame title (window name in macOS)
 (setq frame-title-format '("" "%b" (:eval
                                     (let ((project-name (projectile-project-name)))
@@ -304,10 +416,10 @@
                                         (format " in [%s]" project-name))))))
 
 (add-hook 'doom-init-ui-hook
-  (lambda ()
-    ;; Enable/disable toolbar mode to set the proper (minimal) titlebar height (macOS)
-    (tool-bar-mode 1)
-    (tool-bar-mode 0)))
+          (lambda ()
+            ;; Enable/disable toolbar mode to set the proper (minimal) titlebar height (macOS)
+            (tool-bar-mode 1)
+            (tool-bar-mode 0)))
 
 (after! treemacs
   (setq treemacs-width 45)
@@ -317,43 +429,83 @@
   ;; treemacs png/svg special icons don't look great, so we patch the icon set
   (add-hook 'treemacs-mode-hook 'my/update-treemacs-icons))
 
+;; Dim inactive buffers to highlight the active one
+(use-package! dimmer
+  :config
+  (dimmer-mode t)
+  ;; Adjust dimming percentage (0.0-1.0, lower = darker)
+  (setq dimmer-fraction 0.20))
+
 (after! org-mode
   (setq org-support-shift-select t
         org-replace-disputed-keys t))
 
+(after! org
+  (defun org-add-color-keywords ()
+    (font-lock-add-keywords
+     nil
+     '(("{\\([a-zA-Z#0-9]+\\):\\([^}]+\\)}"
+        (0 (let ((color (match-string 1))
+                 (start (match-beginning 0))
+                 (color-end (match-end 1))
+                 (text-start (match-beginning 2))
+                 (text-end (match-end 2))
+                 (end (match-end 0)))
+             ;; Hide the opening bracket and color name
+             (put-text-property start (1+ color-end) 'invisible t)
+             ;; Color the text
+             (put-text-property text-start text-end 'face `(:foreground ,color))
+             ;; Hide the closing bracket
+             (put-text-property text-end end 'invisible t)
+             nil))))))
+
+  (add-hook 'org-mode-hook 'org-add-color-keywords))
+
 (use-package! org-modern
   :after org
   :hook ((org-mode . global-org-modern-mode)
-         (org-mode . (lambda ()
-                       ;; increase line spacing a little
-                       (setq-local default-text-properties '(line-spacing 0.1 line-height 1.1)))))
+         ;(org-mode . (lambda ()
+         ;              ;; increase line spacing a little
+         ;              (setq-local default-text-properties '(line-spacing 0.1 line-height 1.1))))
+         )
   :config
   (setq org-modern-star 'replace
         org-modern-label-border 0.3
-        org-modern-replace-stars "●●●●●"
+        org-modern-table-vertical 1
+        org-modern-replace-stars "￭￭￭￭￭"
         org-modern-todo-faces (quote (("WAIT" :inherit org-modern-todo :height 1.2 :foreground "goldenrod")
                                       ("HOLD" :inherit org-modern-todo :height 1.2 :foreground "indian red")
                                       ("DONE" :inherit org-modern-todo :height 1.2 :inverse-video nil
                                        :foreground "white" :distant-foreground "white" :background "grey25"))))
+
   ;; Make the document title a bit bigger
-  (set-face-attribute 'org-document-title nil :font my/variable-font :weight 'bold :height 1.3 :underline t)
+  ;(set-face-attribute 'org-document-title nil :font my/variable-font :weight 'bold :height 1.3 :underline t)
+  (set-face-attribute 'org-document-title nil :font my/fixed-font :weight 'bold :height 1.2 :underline t)
+
+  ;; Set the table color
+  (set-face-attribute 'org-table nil :foreground "#D4AF37")
+
   ;; Resize headings
   (dolist (face '((org-level-1 . 1.1)
-                  (org-level-2 . 1.1)
-                  (org-level-3 . 1.1)
-                  (org-level-4 . 1.1)
-                  (org-level-5 . 1.1)
-                  (org-level-6 . 1.1)
-                  (org-level-7 . 1.1)
-                  (org-level-8 . 1.1)))
-    (set-face-attribute (car face) nil :font my/variable-font :height (cdr face))))
+                  (org-level-2 . 1.0)
+                  (org-level-3 . 1.0)
+                  (org-level-4 . 1.0)
+                  (org-level-5 . 1.0)
+                  (org-level-6 . 1.0)
+                  (org-level-7 . 1.0)
+                  (org-level-8 . 1.0)))
+    ;(set-face-attribute (car face) nil :font my/variable-font :height (cdr face))
+    (set-face-attribute (car face) nil :font my/fixed-font :height (cdr face))))
 
 (after! org-modern-faces
   (set-face-attribute 'org-modern-symbol nil :family my/fixed-font))
 
-(use-package! mixed-pitch
-  :after org
-  :hook (org-mode . mixed-pitch-mode))
+;(use-package! mixed-pitch
+;  :after org
+;  :hook (org-mode . mixed-pitch-mode))
+
+(use-package! valign
+  :hook (markdown-mode . valign-mode))
 
 (use-package! pgmacs
   :config
@@ -413,7 +565,7 @@
                                   "--background-index"
                                   "--clang-tidy"
                                   "--completion-style=detailed"
-                                  "--header-insertion=iwyu"
+                                  "--header-insertion=never"
                                   "--pretty"
                                   "--function-arg-placeholders")
         ;; Disable some pygthon warnings
@@ -555,6 +707,8 @@
                 ("\\.ino$"                  . c++-ts-mode)
                 ("\\.ts$"                   . typescript-ts-mode)
                 ("\\.tsx$"                  . jtsx-tsx-mode)
+                ("\\.tf$"                   . terraform-mode)
+                ("\\.hcl$"                  . terraform-mode)
                 ) auto-mode-alist))
 
 (use-package! jtsx
@@ -669,6 +823,24 @@
 
 (message "*** Coding / Terminal")
 
+(setq vterm-disable-bold-font t
+      vterm-disable-underline t
+      ;; Add some buffer to terminal width calculation (adjust if lines still wrap)
+      vterm-min-window-width 10)
+
+;; Optimize vterm window resizing to avoid rerenders on height changes
+(after! vterm
+  (my/vterm-configure-resize-optimization)
+  ;; Add small margins to prevent wrapping issues
+  (setq-default left-margin-width 1
+                right-margin-width 1))
+
+;; Refresh vterm on window configuration changes
+(add-hook 'window-configuration-change-hook
+          (lambda ()
+            (when (eq major-mode 'vterm-mode)
+              (vterm-reset-cursor-point))))
+
 ;(advice-add 'mwheel-scroll :after #'my/scroll-mouse-handler)
 
 (message "*** Coding / Compilation Buffer")
@@ -740,6 +912,17 @@
 (use-package! grpclient
   :init
   (add-to-list 'auto-mode-alist '("\\.grpc\\'" . grpclient-mode)))
+
+(use-package! claude-code-ide
+  :config
+  (setq claude-code-ide-window-width 105  ; Reduced to account for fringe/margins
+        claude-code-ide-use-side-window t
+        claude-code-ide-vterm-render-delay 0.05
+        claude-code-ide-terminal-backend 'vterm)
+  (claude-code-ide-emacs-tools-setup))
+
+(use-package! terraform
+  :hook (terraform-mode . terraform-format-on-save-mode))
 
 (message "*** LLM")
 

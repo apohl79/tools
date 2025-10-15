@@ -1,0 +1,176 @@
+# Configuration for setup.py - manages brew, npm, and pip packages
+# This file defines all packages and symlinks for the development environment
+
+brew:
+  # Homebrew taps (third-party repositories)
+  taps:
+    - d12frosted/emacs-plus                    # Enhanced Emacs build for macOS
+
+  # Core Emacs dependencies
+  emacs_dependencies:
+    - jansson                                  # JSON parsing library
+    - libxml2                                  # XML parsing library
+    - tree-sitter                             # Incremental parsing library
+    - imagemagick                              # Image manipulation
+    - librsvg                                  # SVG rendering
+    - python@3.13                             # Python interpreter
+    - glslang                                  # OpenGL shading language
+    - mailutils                                # Email utilities
+    - jpeg                                     # JPEG support
+
+  # Emacs installation formula with options
+  emacs_formula:
+    name: emacs-plus@31
+    options:
+      - --with-imagemagick
+      - --with-mailutils
+      - --with-xwidgets
+      - --with-savchenkovaleriy-big-sur-3d-icon
+
+  # Language servers for development
+  language_servers:
+    - basedpyright                             # Python language server
+    - ruff                                     # Python linter and formatter
+
+  # Doom Emacs specific dependencies
+  doom_dependencies:
+    - git                                      # Version control
+    - ripgrep                                  # Fast search tool
+    - coreutils                                # GNU core utilities
+    - fd                                       # Fast file finder
+    - fontconfig                               # Font configuration
+    - font-iosevka-comfy                       # Coding font
+    - font-roboto                              # UI font
+    - font-juliamono                           # Unicode symbols
+    - shellcheck                               # Shell script analyzer
+    - isort                                    # Python import sorter
+    - pipenv                                   # Python dependency manager
+    - markdown                                 # Markdown processor
+    - jq                                       # JSON processor
+    - hunspell                                 # Spell checker
+    - enchant                                  # Spell checking library
+    - clang-format                             # C/C++ formatter
+    - google-java-format                       # Java formatter
+    - leiningen                                # Clojure build tool
+
+  # General development tools
+  development_tools:
+    - nvm                                      # Node version manager
+    - wezterm                                  # GPU-accelerated terminal
+    - font-iosevka-comfy                       # Terminal font
+    - llvm                                     # Compiler infrastructure
+    - cmake                                    # Build system
+    - python@3.13                              # Python interpreter
+    - libtool                                  # Generic library support
+    - gh                                       # GitHub CLI
+    - htop                                     # Interactive process viewer
+    - packages                                 # Package manager for various languages
+    - dos2unix                                 # Line ending converter
+    - mosquitto                                # MQTT broker
+    - cliclick                                 # Mouse/keyboard automation
+
+  # Java development tools
+  java_tools:
+    - oracle-jdk                               # Oracle JDK
+    - jenv                                     # Java environment manager
+    - openjdk@21                               # OpenJDK version 21
+    - jdtls                                    # Java language server
+
+  # macOS productivity tools
+  productivity_tools:
+    - rectangle                                # Window management
+    - raycast                                  # Launcher and productivity tool
+    - contexts                                 # Window switcher
+    - hammerspoon                              # Automation tool
+    - menumeters                               # System monitoring
+    - deepl                                    # Translation tool
+
+  # Cloud storage and security
+  cloud_storage:
+    - owncloud                                 # Personal cloud storage
+    - keepassxc                                # Password manager
+    - cryptomator                              # Cloud encryption
+
+  # Communication apps
+  communication:
+    - signal                                   # Secure messaging
+    - whatsapp                                 # Messaging
+    - mailspring                               # Email client
+
+  # Web browsers
+  browsers:
+    - arc                                      # Browser focused on productivity
+    - brave-browser                            # Privacy-focused browser
+    - tor-browser                              # Anonymous browsing
+
+  # Other applications
+  other_apps:
+    - spotify                                  # Music streaming
+    - ilok-license-manager                     # Audio plugin licensing
+    - balenaetcher                             # USB/SD card writer
+    - arduino-ide                              # Arduino development
+    - utm                                      # Virtual machine manager
+
+# NPM global packages
+npm:
+  global:
+    - yaml-language-server                     # YAML language server for LSP
+    - "@georgesg/arc-cli"                      # Arc browser CLI tool
+
+# Python packages
+pip:
+  # Emacs dependencies
+  emacs_dependencies:
+    - epc                                      # Emacs-Python communication
+    - orjson                                   # Fast JSON library
+    - sexpdata                                 # S-expression parser
+    - six                                      # Python 2/3 compatibility
+    - setuptools                               # Package installation
+    - paramiko                                 # SSH2 protocol library
+    - rapidfuzz                                # Fuzzy string matching
+    - watchdog                                 # File system events
+    - packaging                                # Package version handling
+
+  # Other Python tools
+  other:
+    - paho-mqtt                                # MQTT client library
+    - pygments                                 # Syntax highlighting
+
+# Symlink configurations
+# {script_dir} = directory containing setup.py
+# {home} = user's home directory
+symlinks:
+  - name: tools
+    source: "{script_dir}"
+    target: "{home}/bin/tools"
+    
+  - name: zsh
+    source: "{script_dir}/.zshrc"
+    target: "{home}/.zshrc"
+    force: true                                # Overwrite if exists
+    
+  - name: powerlevel10k
+    source: "{script_dir}/.p10k.zsh"
+    target: "{home}/.p10k.zsh"
+    force: true
+    
+  - name: profile
+    source: "{home}/.zshrc"
+    target: "{home}/.profile"
+    force: true
+    
+  - name: clang-format
+    source: "{script_dir}/.clang-format"
+    target: "{home}/.clang-format"
+
+# Emacs configuration symlinks (chosen during setup)
+emacs_symlinks:
+  doom:
+    name: doom
+    source: "{script_dir}/.doom.d"
+    target: "{home}/.config/doom"
+    
+  light:
+    name: emacs
+    source: "{script_dir}/.emacs"
+    target: "{home}/.emacs"

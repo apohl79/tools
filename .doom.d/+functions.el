@@ -296,6 +296,51 @@ Otherwise call `indent-for-tab-command'."
 (defun my/quickload-session ()
   "Load the last session with a delay to allow UI rendering and show progress."
   (interactive)
+
+  ;; Create a dedicated loading buffer (not the dashboard buffer)
+  (let ((loading-buffer (get-buffer-create "*session-loading*")))
+    ;; Switch to the loading buffer first
+    (switch-to-buffer loading-buffer)
+
+    (with-current-buffer loading-buffer
+      (erase-buffer)
+      (setq buffer-read-only nil)
+
+      ;; Remove any margins
+      (setq left-margin-width 0
+            right-margin-width 0)
+      (set-window-buffer (selected-window) loading-buffer)
+
+      ;; Insert text with display properties to center it
+      (insert "\n\n\n\n")
+
+      ;; Calculate padding to center "Loading Session..."
+      (let* ((text1 "Loading Session...")
+             (text2 "Please wait while your workspace is restored")
+             (text3 "0%")
+             (padding1 (propertize " " 'display `(space :align-to (- center ,(/ (length text1) 2)))))
+             (padding2 (propertize " " 'display `(space :align-to (- center ,(/ (length text2) 2)))))
+             (padding3 (propertize " " 'display `(space :align-to (- center ,(/ (length text3) 2))))))
+
+        (insert padding1)
+        (insert (propertize text1 'face '(:height 1.5 :weight bold)))
+        (insert "\n\n")
+
+        (insert padding2)
+        (insert text2)
+        (insert "\n\n")
+
+        ;; Insert progress line with a marker for updates
+        (insert padding3)
+        (setq-local progress-start-marker (point-marker))
+        (insert (propertize text3 'face '(:height 1.2)))
+        (setq-local progress-end-marker (point-marker))
+        (insert "\n"))
+
+      (setq buffer-read-only t))
+
+    (redisplay t))
+
   ;; Set a timer to load the session after a delay
   (run-with-timer 0.5 nil
                  (lambda ()
@@ -328,7 +373,27 @@ Otherwise call `indent-for-tab-command'."
                                       (setq progress (format "Restoring session... %d%% (%d/%d)"
                                                        percentage current-count buffer-count))
                                       (message "%s" progress)
-                                      )))))
+
+                                      ;; Update the loading buffer with the current percentage
+                                      (let ((loading-buf (get-buffer "*session-loading*")))
+                                        (when (and loading-buf
+                                                   (buffer-live-p loading-buf))
+                                          (with-current-buffer loading-buf
+                                            (when (and (boundp 'progress-start-marker)
+                                                       (boundp 'progress-end-marker)
+                                                       (marker-position progress-start-marker)
+                                                       (marker-position progress-end-marker))
+                                              (let ((inhibit-read-only t)
+                                                    (percent-text (format "%d%%" percentage)))
+                                                ;; Delete old percentage text
+                                                (delete-region progress-start-marker progress-end-marker)
+                                                ;; Insert new percentage
+                                                (goto-char progress-start-marker)
+                                                (insert (propertize percent-text 'face '(:height 1.2)))
+                                                ;; Update end marker
+                                                (set-marker progress-end-marker (point)))
+                                              ;; Force redisplay
+                                              (redisplay t))))))))))
 
                      (unwind-protect
                          (doom/quickload-session t)
@@ -336,8 +401,18 @@ Otherwise call `indent-for-tab-command'."
                        (when (fboundp 'persp-add-buffer)
                          (advice-remove 'persp-add-buffer (lambda (&rest _) nil)))
                        (setq frame-title-format original-title)
-                       (sit-for 0.1)))) ;; Ensure the final title update is visible
-                 ))
+                       (sit-for 0.1) ;; Ensure the final title update is visible
+
+                       ;; Show doom dashboard after session loads
+                       (run-with-timer 0.2 nil
+                                       (lambda ()
+                                         ;; Kill the loading buffer
+                                         (when (get-buffer "*session-loading*")
+                                           (kill-buffer "*session-loading*"))
+                                         ;; Show dashboard
+                                         (switch-to-buffer (doom-fallback-buffer))
+                                         (when (fboundp '+doom-dashboard-reload)
+                                           (+doom-dashboard-reload t)))))))))
 
 (defun my/update-treemacs-icons ()
   "Replace all image (png/svg) icons in treemacs with font based icons."
@@ -488,3 +563,75 @@ to the end of the buffer."
 (defun my/compilation-started (proc)
   (setq compilation-start-time (current-time)))
 
+;; vterm window resize optimization
+(defvar my/vterm-window-widths (make-hash-table :test 'eq)
+  "Hash table storing the last known width of each window.")
+
+(defun my/vterm-window-adjust-advice (orig-fun &rest args)
+  "Advice to only signal vterm window size change on width change.
+This prevents unnecessary terminal reflows when only height changes."
+  (let ((result (apply orig-fun args)))
+    (let ((width-changed nil))
+      ;; Check all windows for vterm buffers
+      (dolist (window (window-list))
+        (let ((buffer (window-buffer window)))
+          (when (and buffer 
+                     (with-current-buffer buffer
+                       (eq major-mode 'vterm-mode)))
+            (let ((current-width (window-width window))
+                  (stored-width (gethash window my/vterm-window-widths)))
+              (when (or (not stored-width) (/= current-width stored-width))
+                (setq width-changed t)
+                (puthash window current-width my/vterm-window-widths))))))
+      ;; Only return result if width actually changed
+      (if width-changed
+          result
+        nil))))
+
+(defun my/vterm-configure-resize-optimization ()
+  "Configure vterm to only rerender on width changes, not height changes."
+  (advice-add 'vterm--window-adjust-process-window-size
+              :around #'my/vterm-window-adjust-advice))
+
+;; Frame geometry persistence
+(defvar my/frame-geometry-file "~/.config/emacs/frame-geometry"
+  "File to store frame geometry and font size.")
+
+(defun my/save-frame-geometry ()
+  "Save the current frame geometry and font size to file."
+  (interactive)
+  (let* ((frame (selected-frame))
+         ;; Get the current font height (in 1/10 points)
+         (current-height (face-attribute 'default :height frame))
+         ;; Use character-based dimensions for more reliable restoration
+         (geometry `((left . ,(frame-parameter frame 'left))
+                     (top . ,(frame-parameter frame 'top))
+                     (width . ,(frame-width frame))
+                     (height . ,(frame-height frame))
+                     (font-height . ,current-height))))
+    (with-temp-file (expand-file-name my/frame-geometry-file)
+      (prin1 geometry (current-buffer)))))
+
+(defun my/restore-frame-geometry ()
+  "Restore frame geometry and font size from file."
+  (interactive)
+  (let ((geometry-file (expand-file-name my/frame-geometry-file)))
+    (when (file-exists-p geometry-file)
+      (condition-case nil
+          (let* ((geometry (with-temp-buffer
+                            (insert-file-contents geometry-file)
+                            (goto-char (point-min))
+                            (read (current-buffer))))
+                 (left (alist-get 'left geometry))
+                 (top (alist-get 'top geometry))
+                 (width (alist-get 'width geometry))
+                 (height (alist-get 'height geometry))
+                 (saved-font-height (alist-get 'font-height geometry)))
+            ;; Restore font size first (affects frame sizing)
+            (when saved-font-height
+              (set-face-attribute 'default (selected-frame) :height saved-font-height))
+            ;; Restore frame position and size using character dimensions
+            (when (and left top width height)
+              (set-frame-position (selected-frame) left top)
+              (set-frame-size (selected-frame) width height nil)))
+        (error nil)))))

@@ -44,7 +44,7 @@
        :ui
        ;;deft              ; notational velocity for Emacs
        doom                ; what makes DOOM look the way it does
-       ;doom-dashboard      ; a nifty splash screen for Emacs
+       doom-dashboard      ; a nifty splash screen for Emacs
        ;;doom-quit         ; DOOM quit-message prompts when you quit Emacs
        ;;(emoji +unicode)  ; 🙂
        ;;fill-column       ; a `fill-column' indicator
@@ -119,7 +119,7 @@
        ;;prodigy           ; FIXME managing external services & code builders
        ;;rgb               ; creating color strings
        ;;taskrunner        ; taskrunner for all your projects
-       ;;terraform         ; infrastructure as code
+       terraform           ; infrastructure as code
        ;;tmux              ; an API for interacting with tmux
        ;;upload            ; map local to remote projects via ssh/ftp
 

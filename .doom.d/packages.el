@@ -10,12 +10,14 @@
 ;(package! some-package)
 (package! protobuf-mode)
 (package! platformio-mode)
-(package! gptel)
-(package! elysium)
+;(package! gptel)
+;(package! elysium)
 (package! org-modern)
+(package! valign)
 (package! pdf-tools)
+(package! simple-httpd)
 ;(package! jinx)
-(package! consult-omni :recipe (:host github :repo "armindarvish/consult-omni"))
+;(package! consult-omni :recipe (:host github :repo "armindarvish/consult-omni"))
 ;(package! lsp-tailwindcss :recipe (:host github :repo "merrickluo/lsp-tailwindcss"))
 
 (package! clang-format)
@@ -55,6 +57,12 @@
                                  (:exclude ".dir-locals.el" "*-tests.el"))))
 
 (package! claude-code-ide :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
+
+;; Highlight active buffer by dimming inactive ones
+(package! dimmer)
+
+;; Add border to active window
+(package! selected-window-accent-mode)
 
 ;; To install a package directly from a remote git repo, you must specify a
 ;; `:recipe'. You'll find documentation on what `:recipe' accepts here:
