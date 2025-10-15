@@ -65,36 +65,64 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 ;; Custom widget to show all workspaces/projects as clickable buttons
 (defun +doom-dashboard-widget-projects ()
   (when (modulep! :ui workspaces)
-    (let ((workspaces (persp-names)))
+    (let ((workspaces (persp-names))
+          (content-width 75)) ; Fixed width for consistent alignment (use most of 80 chars)
       (when workspaces
         (insert "\n")
         ;; Center the title using doom's centering function
         (insert (+doom-dashboard--center
                  +doom-dashboard--width
-                 (propertize "Projects:" 'face 'doom-dashboard-menu-title)))
+                 (propertize "Workspaces:" 'face 'doom-dashboard-menu-title)))
         (insert "\n\n")
         (dolist (workspace workspaces)
           (unless (string= workspace persp-nil-name)
-            ;; Center each workspace name using doom's centering function
-            (insert
-             (+doom-dashboard--center
-              +doom-dashboard--width
-              (with-temp-buffer
-                (insert-text-button workspace
-                                    'action `(lambda (_)
-                                               ;; Quit dashboard window first
-                                               (let ((dashboard-window (get-buffer-window +doom-dashboard-name)))
-                                                 (when dashboard-window
-                                                   (with-selected-window dashboard-window
-                                                     (quit-window t))))
-                                               ;; Then switch workspace
-                                               (+workspace-switch ,workspace t))
-                                    'follow-link t
-                                    'face 'doom-dashboard-menu-desc
-                                    'mouse-face 'doom-dashboard-menu-title
-                                    'help-echo (format "Switch to workspace: %s" workspace))
-                (buffer-string))))
-            (insert "\n")))))))
+            ;; Get the project directory for this workspace
+            (let* ((persp (persp-get-by-name workspace))
+                   (workspace-name workspace) ; Capture for closure
+                   (project-dir (when persp
+                                  ;; Try to get project root from workspace buffers
+                                  (let ((buffers (persp-buffers persp)))
+                                    (catch 'found
+                                      (dolist (buf buffers)
+                                        (when-let ((root (ignore-errors
+                                                          (with-current-buffer buf
+                                                            (and (buffer-file-name)
+                                                                 (projectile-project-root))))))
+                                          ;(message "DEBUG: %s: Found project root %s from buffer %s" workspace-name root (buffer-name buf))
+                                          (throw 'found (abbreviate-file-name root))))))))
+                   (project-dir-display (or project-dir ""))
+                   ;; Calculate spacing to right-align the path within content-width
+                   (spacing (max 1 (- content-width (length workspace) (length project-dir-display)))))
+              ;; Center and insert the line
+              (insert
+               (+doom-dashboard--center
+                +doom-dashboard--width
+                (with-temp-buffer
+                  ;; Insert workspace name as button with workspace stored as property
+                  (insert-text-button workspace
+                                      'workspace-name workspace-name
+                                      'action (lambda (button)
+                                                 ;; Get workspace name from button property
+                                                 (let ((ws (button-get button 'workspace-name)))
+                                                   ;; Quit dashboard window first
+                                                   (let ((dashboard-window (get-buffer-window +doom-dashboard-name)))
+                                                     (when dashboard-window
+                                                       (with-selected-window dashboard-window
+                                                         (quit-window t))))
+                                                   ;; Then switch workspace
+                                                   (+workspace-switch ws t)))
+                                      'follow-link t
+                                      'face 'doom-dashboard-menu-desc
+                                      'mouse-face 'doom-dashboard-menu-title
+                                      'help-echo (format "Switch to workspace: %s → %s" workspace-name project-dir-display))
+                  ;; Add spacing
+                  (insert (make-string spacing ?\s))
+                  ;; Add path with same color as "Doom loaded..." text
+                  (let ((start (point)))
+                    (insert project-dir-display)
+                    (add-text-properties start (point) '(face (:foreground "#51606E"))))
+                  (buffer-string))))
+              (insert "\n"))))))))
 
 
 ;; Add the projects widget to the dashboard (without the shortmenu)
@@ -559,7 +587,7 @@ Visual indication for the active buffer by dimming inactive ones and adding a bo
              ;; Hide the opening bracket and color name
              (put-text-property start (1+ color-end) 'invisible t)
              ;; Color the text
-             (put-text-property text-start text-end 'face `(:foreground ,color))
+             (add-face-text-property text-start text-end `(:foreground ,color))
              ;; Hide the closing bracket
              (put-text-property text-end end 'invisible t)
              nil))))))

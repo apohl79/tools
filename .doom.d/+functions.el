@@ -334,8 +334,7 @@ Otherwise call `indent-for-tab-command'."
         (insert padding3)
         (setq-local progress-start-marker (point-marker))
         (insert (propertize text3 'face '(:height 1.2)))
-        (setq-local progress-end-marker (point-marker))
-        (insert "\n"))
+        (setq-local progress-end-marker (point-marker)))
 
       (setq buffer-read-only t))
 
