@@ -145,8 +145,13 @@ def install_brew_packages(packages, check_only=False):
 
     missing = []
     for pkg in packages:
-        pkg_base = pkg.split('@')[0]
-        if pkg not in installed_all and pkg_base not in installed_all:
+        # Strip tap prefix if present (e.g., "getsentry/tools/sentry-cli" -> "sentry-cli")
+        pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
+        # Strip version suffix (e.g., "python@3.13" -> "python")
+        pkg_base = pkg_name.split('@')[0]
+
+        # Check if package or its base name is installed
+        if pkg_name not in installed_all and pkg_base not in installed_all:
             missing.append(pkg)
 
     if missing:
@@ -475,20 +480,29 @@ def compare_packages(installed, config_packages, ignored_packages):
     ignored_brew_formulae = set(ignored_packages.get('brew_formulae', []))
     ignored_brew_casks = set(ignored_packages.get('brew_casks', []))
 
+    # Create a normalized version of config_brew for comparison (strip tap prefixes)
+    config_brew_normalized = set()
+    for pkg in config_brew:
+        pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
+        config_brew_normalized.add(pkg_name)
+
     # Separate installed into formulae and casks for diff
     for pkg in installed['brew_formulae']:
-        if pkg not in config_brew and pkg not in ignored_brew_formulae:
+        if pkg not in config_brew_normalized and pkg not in ignored_brew_formulae:
             diffs['brew_formulae']['to_add'].add(pkg)
 
     for pkg in installed['brew_casks']:
-        if pkg not in config_brew and pkg not in ignored_brew_casks:
+        if pkg not in config_brew_normalized and pkg not in ignored_brew_casks:
             diffs['brew_casks']['to_add'].add(pkg)
 
     # Check for packages in config but not explicitly installed
     for pkg in config_brew:
-        if pkg not in installed_brew:
+        # Normalize package name (strip tap prefix)
+        pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
+
+        if pkg_name not in installed_brew:
             # Check if it's installed as a dependency
-            if pkg in all_brew_formulae:
+            if pkg_name in all_brew_formulae:
                 # It's installed but only as a dependency - mark for removal
                 diffs['brew_formulae']['to_remove_deps'].add(pkg)
             else:
