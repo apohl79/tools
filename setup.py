@@ -5,7 +5,7 @@ import subprocess
 import platform
 import shutil
 import glob
-import yaml
+import tomllib
 import argparse
 import json
 
@@ -19,10 +19,10 @@ def get_script_dir():
 def link(name, source, target):
     """create a symlink if it doesn't exist."""
     if not os.path.exists(target):
-        print(f"linking {name} ({source} -> {target})")
+        print(f"  linking {name} ({source} -> {target})")
         os.symlink(source, target)
     else:
-        print(f"skipping {name} (exists)")
+        print(f"  skipping {name} (exists)")
 
 
 def link_force(name, source, target):
@@ -50,12 +50,25 @@ def command_exists(cmd):
     return shutil.which(cmd) is not None
 
 
-def get_installed_brew_packages():
-    """get list of installed brew packages."""
+def get_all_brew_packages():
+    """get list of all installed brew packages (including dependencies)."""
     try:
         result = subprocess.run(['brew', 'list', '--formula'], capture_output=True, text=True)
         if result.returncode == 0:
-            return set(result.stdout.strip().split('\n'))
+            packages = [pkg.strip() for pkg in result.stdout.strip().split('\n') if pkg.strip()]
+            return set(packages)
+    except (subprocess.SubprocessError, FileNotFoundError):
+        pass
+    return set()
+
+
+def get_installed_brew_packages():
+    """get list of explicitly installed brew packages (not dependencies)."""
+    try:
+        result = subprocess.run(['brew', 'leaves'], capture_output=True, text=True)
+        if result.returncode == 0:
+            packages = [pkg.strip() for pkg in result.stdout.strip().split('\n') if pkg.strip()]
+            return set(packages)
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return set()
@@ -66,7 +79,8 @@ def get_installed_brew_casks():
     try:
         result = subprocess.run(['brew', 'list', '--cask'], capture_output=True, text=True)
         if result.returncode == 0:
-            return set(result.stdout.strip().split('\n'))
+            packages = [pkg.strip() for pkg in result.stdout.strip().split('\n') if pkg.strip()]
+            return set(packages)
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return set()
@@ -115,94 +129,87 @@ def check_symlink(source, target):
 
 
 def load_config(config_path):
-    """load configuration from YAML file."""
-    with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+    """load configuration from TOML file."""
+    with open(config_path, 'rb') as f:
+        return tomllib.load(f)
 
 
-def install_brew_packages(packages, package_name="packages", check_only=False):
+def install_brew_packages(packages, check_only=False):
     """install missing brew packages."""
     if not packages:
         return
-    
-    # Separate formulae and casks
-    installed_formulae = get_installed_brew_packages()
+
+    installed_formulae = get_all_brew_packages()
     installed_casks = get_installed_brew_casks()
     installed_all = installed_formulae | installed_casks
-    
+
     missing = []
     for pkg in packages:
-        # Remove any version suffix for checking (e.g., openjdk@21 -> openjdk)
         pkg_base = pkg.split('@')[0]
         if pkg not in installed_all and pkg_base not in installed_all:
             missing.append(pkg)
-    
+
     if missing:
-        print(f"\n{package_name}:")
         print(f"  missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
             print("  installing...")
             run_command(f"brew install {' '.join(missing)}")
     else:
-        print(f"\n{package_name}: all {len(packages)} packages already installed")
+        print(f"  all {len(packages)} packages already installed")
 
 
 def install_npm_packages(packages, check_only=False):
     """install missing global npm packages."""
     if not packages:
         return
-        
+
     installed = get_installed_npm_packages()
     missing = []
-    
+
     for pkg in packages:
-        # Extract package name without scope for checking
         pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
         if pkg not in installed and pkg_name not in installed:
             missing.append(pkg)
-    
+
     if missing:
-        print("\nnpm packages:")
         print(f"  missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
             print("  installing...")
             for package in missing:
                 run_command(f"npm install -g {package}")
     else:
-        print(f"\nnpm packages: all {len(packages)} packages already installed")
+        print(f"  all {len(packages)} packages already installed")
 
 
 def install_pip_packages(packages, check_only=False):
     """install missing pip packages."""
     if not packages:
         return
-        
+
     installed = get_installed_pip_packages()
     missing = []
-    
+
     for pkg in packages:
         if pkg.lower() not in installed:
             missing.append(pkg)
-    
+
     if missing:
-        print("\npython packages:")
         print(f"  missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
             print("  installing...")
             run_command(f"pip3 install {' '.join(missing)}")
     else:
-        print(f"\npython packages: all {len(packages)} packages already installed")
+        print(f"  all {len(packages)} packages already installed")
 
 
 def apply_symlinks(symlinks, script_dir, home, check_only=False):
     """apply symlinks from configuration."""
-    print("\nchecking symlinks...")
     needs_update = []
-    
+
     for symlink in symlinks:
         source = symlink['source'].format(script_dir=script_dir, home=home)
         target = symlink['target'].format(script_dir=script_dir, home=home)
-        
+
         if os.path.exists(target):
             if check_symlink(source, target):
                 print(f"  ✓ {symlink['name']} is correctly linked")
@@ -212,287 +219,838 @@ def apply_symlinks(symlinks, script_dir, home, check_only=False):
         else:
             print(f"  ✗ {symlink['name']} is missing")
             needs_update.append(symlink)
-    
+
     if needs_update and not check_only:
-        print("\nupdating symlinks...")
+        print("\n  updating symlinks...")
         for symlink in needs_update:
             source = symlink['source'].format(script_dir=script_dir, home=home)
             target = symlink['target'].format(script_dir=script_dir, home=home)
-            
+
             if symlink.get('force', False):
                 link_force(symlink['name'], source, target)
             else:
                 link(symlink['name'], source, target)
 
 
-def detect_emacs_setup(home):
-    """detect existing emacs setup (doom or light)."""
-    doom_path = os.path.join(home, ".config/doom")
-    light_path = os.path.join(home, ".emacs")
-    
-    if os.path.exists(doom_path) or os.path.exists(os.path.join(home, ".config/emacs")):
-        return "doom"
-    elif os.path.exists(light_path):
-        return "light"
-    return None
+def setup_shell(config, home, check_only=False):
+    """setup oh-my-zsh and powerlevel10k."""
+    print("\n=== Shell Configuration ===")
 
-
-def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='setup development environment')
-    parser.add_argument('--check', action='store_true', help='only check what would be installed')
-    parser.add_argument('--update', action='store_true', help='update existing packages')
-    args = parser.parse_args()
-    
-    # Get script directory
-    script_dir = get_script_dir()
-    if not script_dir:
-        script_dir = os.getcwd()
-    
-    # Load configuration
-    config_path = os.path.join(script_dir, 'setup.yaml')
-    if not os.path.exists(config_path):
-        print(f"error: configuration file {config_path} not found")
-        sys.exit(1)
-    
-    config = load_config(config_path)
-    
-    # Change to HOME directory
-    home = os.path.expanduser("~")
-    os.chdir(home)
-    
-    # Create ~/bin if it doesn't exist
-    bin_dir = os.path.join(home, "bin")
-    if not os.path.exists(bin_dir):
-        os.makedirs(bin_dir)
-    
-    # Check oh-my-zsh installation
-    print("\nchecking shell configuration...")
     oh_my_zsh_path = os.path.join(home, ".oh-my-zsh", "oh-my-zsh.sh")
     zsh_custom = os.environ.get("ZSH_CUSTOM", os.path.join(home, ".oh-my-zsh/custom"))
     p10k_path = os.path.join(zsh_custom, "themes/powerlevel10k")
-    
+
     if os.path.exists(oh_my_zsh_path):
         print("  ✓ oh-my-zsh is installed")
-        # Check powerlevel10k
         if os.path.exists(p10k_path):
             print("  ✓ powerlevel10k theme is installed")
         else:
             print("  ✗ powerlevel10k theme is missing")
-            if not args.check:
-                print("installing powerlevel10k...")
-                run_command(f"git clone --depth=1 https://github.com/romkatv/powerlevel10k.git {p10k_path}")
+            if not check_only:
+                print("  installing powerlevel10k...")
+                run_command(f"git clone --depth=1 {config['shell']['powerlevel10k_repo']} {p10k_path}")
     else:
         print("  ✗ oh-my-zsh is not installed")
-        if not args.check:
-            # Remove existing directories
+        if not check_only:
             for path in [os.path.join(home, ".oh-my-zsh"), "/etc/oh-my-zsh"]:
                 if os.path.exists(path):
                     shutil.rmtree(path)
-            
-            print("\ninstalling oh-my-zsh...")
+
+            print("  installing oh-my-zsh...")
             env = os.environ.copy()
             env["RUNZSH"] = "no"
-            run_command('sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"', env=env)
-            
-            print("Installing powerlevel10k...")
-            run_command(f"git clone --depth=1 https://github.com/romkatv/powerlevel10k.git {p10k_path}")
-    
-    # Create symlinks from configuration
-    apply_symlinks(config['symlinks'], script_dir, home, args.check)
-    
-    # Detect existing Emacs setup or ask user
-    existing_setup = detect_emacs_setup(home)
-    if existing_setup:
-        print(f"\ndetected existing {existing_setup} Emacs setup")
-        use_existing = input(f"continue with {existing_setup} setup? [Y/n]: ").strip()
-        if not use_existing or use_existing.lower() in ["y", "yes"]:
-            doom_choice = "1" if existing_setup == "doom" else "2"
+            run_command(f'sh -c "$(curl -fsSL {config["shell"]["oh_my_zsh_url"]})"', env=env)
+
+            print("  installing powerlevel10k...")
+            run_command(f"git clone --depth=1 {config['shell']['powerlevel10k_repo']} {p10k_path}")
+
+
+def layer1_base_packages(config, check_only=False):
+    """Layer 1: Install all base system packages."""
+    print("\n=== Layer 1: Base System Packages ===")
+
+    # Add homebrew taps
+    if not check_only:
+        for tap in config['layer1']['brew_taps']:
+            if not is_brew_tap_added(tap):
+                print(f"  adding tap: {tap}")
+                run_command(f"brew tap {tap}")
+
+    # Install brew packages
+    print("\nbrew packages:")
+    install_brew_packages(config['layer1']['brew_packages'], check_only)
+
+    # Install npm packages
+    print("\nnpm packages:")
+    install_npm_packages(config['layer1']['npm_packages'], check_only)
+
+    # Install pip packages
+    print("\npython packages:")
+    install_pip_packages(config['layer1']['pip_packages'], check_only)
+
+
+def layer2_emacs(config, home, check_only=False):
+    """Layer 2: Install Emacs."""
+    print("\n=== Layer 2: Emacs Installation ===")
+
+    needs_emacs = not command_exists("emacs")
+
+    if needs_emacs:
+        print("  ✗ Emacs not found")
+        if not check_only:
+            emacs_formula = config['layer2']['formula']
+            options = ' '.join(config['layer2']['options'])
+            install_cmd = f"brew install {options} {emacs_formula}"
+            print(f"  installing {emacs_formula}...")
+            run_command(install_cmd)
+            run_command("defaults write org.gnu.Emacs TransparentTitleBar DARK")
+    else:
+        print("  ✓ Emacs is already installed")
+
+    # Install dictionaries
+    spelling_dir = os.path.join(home, "Library/Spelling")
+    os.makedirs(spelling_dir, exist_ok=True)
+
+    missing_dicts = []
+    for dict_entry in config['layer2']['dictionaries']:
+        dict_path = os.path.join(spelling_dir, dict_entry['filename'])
+        if not os.path.exists(dict_path):
+            missing_dicts.append(dict_entry)
+
+    if missing_dicts:
+        print(f"\n  dictionaries: {len(missing_dicts)} missing")
+        if not check_only:
+            print("  installing dictionaries...")
+            for dict_entry in missing_dicts:
+                run_command(f"wget -nc {dict_entry['url']} -O {spelling_dir}/{dict_entry['filename']}")
+    else:
+        print("  ✓ all dictionaries installed")
+
+
+def layer3_doom(config, home, check_only=False):
+    """Layer 3: Install Doom Emacs."""
+    print("\n=== Layer 3: Doom Emacs ===")
+
+    emacs_config_path = config['layer3']['install_path'].format(home=home)
+    doom_bin = os.path.join(emacs_config_path, "bin/doom")
+
+    if os.path.exists(emacs_config_path):
+        print("  ✓ Doom Emacs is installed")
+        if not os.path.exists(doom_bin):
+            print("  ✗ doom binary not found")
+            if not check_only:
+                repair = input("  repair Doom Emacs installation? [Y/n]: ").strip()
+                if not repair or repair.lower() in ["y", "yes"]:
+                    print("  running doom sync...")
+                    env = os.environ.copy()
+                    env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
+                    run_command(f"{doom_bin} sync", env=env)
+    else:
+        print("  ✗ Doom Emacs not found")
+        if not check_only:
+            print("  installing Doom Emacs...")
+            run_command(f"git clone --depth 1 {config['layer3']['repo']} {emacs_config_path}")
+
+            env = os.environ.copy()
+            env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
+
+            run_command(f"{doom_bin} install --force --env --install --fonts --hooks", env=env)
+            run_command(f"{doom_bin} sync", env=env)
+
+
+def layer4_symlinks(config, script_dir, home, check_only=False):
+    """Layer 4: Setup symlinks."""
+    print("\n=== Layer 4: Symlinks ===")
+
+    # Determine emacs setup type
+    existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
+    existing_light = os.path.exists(os.path.join(home, ".emacs"))
+
+    if existing_doom or existing_light:
+        setup_type = "doom" if existing_doom else "light"
+        print(f"  detected existing {setup_type} Emacs setup")
+        if not check_only:
+            use_existing = input(f"  continue with {setup_type} setup? [Y/n]: ").strip()
+            if not use_existing or use_existing.lower() in ["y", "yes"]:
+                emacs_choice = setup_type
+            else:
+                print("\n  choose emacs setup:")
+                print("   1) doom")
+                print("   2) light")
+                print("   3) skip")
+                choice = input("  > ").strip()
+                emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
         else:
-            print("\nchoose emacs setup:")
-            print(" 1) doom")
-            print(" 2) light") 
-            print(" 3) skip")
-            doom_choice = input().strip()
+            emacs_choice = setup_type
     else:
-        print("\nchoose emacs setup:")
-        print(" 1) doom")
-        print(" 2) light")
-        print(" 3) skip")
-        doom_choice = input().strip()
-    
-    if doom_choice == "1":
-        config_dir = os.path.join(home, ".config")
-        if not os.path.exists(config_dir):
-            os.makedirs(config_dir)
-        emacs_link = config['emacs_symlinks']['doom']
-        link(emacs_link['name'], 
-             emacs_link['source'].format(script_dir=script_dir, home=home),
-             emacs_link['target'].format(script_dir=script_dir, home=home))
-    elif doom_choice == "2":
-        emacs_link = config['emacs_symlinks']['light']
-        link(emacs_link['name'], 
-             emacs_link['source'].format(script_dir=script_dir, home=home),
-             emacs_link['target'].format(script_dir=script_dir, home=home))
-    else:
-        print("skipping emacs")
-    
-    # macOS-specific installations
-    if platform.system() == "Darwin":
-        # Install Homebrew if not present
-        if not command_exists("brew"):
-            print("installing homebrew...")
+        if not check_only:
+            print("\n  choose emacs setup:")
+            print("   1) doom")
+            print("   2) light")
+            print("   3) skip")
+            choice = input("  > ").strip()
+            emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
+        else:
+            emacs_choice = None
+
+    # Apply emacs symlink if chosen
+    if emacs_choice:
+        emacs_link = config['emacs_symlinks'][emacs_choice]
+        source = emacs_link['source'].format(script_dir=script_dir, home=home)
+        target = emacs_link['target'].format(script_dir=script_dir, home=home)
+
+        # Create .config directory if needed for doom
+        if emacs_choice == "doom":
+            config_dir = os.path.join(home, ".config")
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+
+        if not check_only:
+            link(emacs_link['name'], source, target)
+
+    # Apply all other symlinks
+    print("\n  applying symlinks...")
+    apply_symlinks(config['symlinks'], script_dir, home, check_only)
+
+    # Setup jdtls links if present
+    if not check_only and command_exists("jenv"):
+        jdtls_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/config_mac")
+        if jdtls_patterns:
+            jdtls_dir = os.path.join(home, "tools/jdtls")
+            os.makedirs(jdtls_dir, exist_ok=True)
+            link("jdtls/config_mac", jdtls_patterns[0], os.path.join(jdtls_dir, "config_mac"))
+
+        jdtls_plugin_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/plugins")
+        if jdtls_plugin_patterns:
+            link("jdtls/plugins", jdtls_plugin_patterns[0], os.path.join(home, "tools/jdtls/plugins"))
+
+    # Configure Java if jenv is installed
+    if command_exists("jenv") and not check_only:
+        result = subprocess.run(['jenv', 'versions'], capture_output=True, text=True)
+        if '21' not in result.stdout:
+            print("\n  configuring java 21...")
+            run_command("jenv add /opt/homebrew/opt/openjdk@21")
+            run_command("jenv global 21")
+
+
+def get_all_installed_packages():
+    """Get all installed packages categorized by type."""
+    packages = {
+        'brew_formulae': set(),
+        'brew_casks': set(),
+        'npm': set(),
+        'pip': set()
+    }
+
+    # Get brew formulae
+    packages['brew_formulae'] = get_installed_brew_packages()
+
+    # Get brew casks
+    packages['brew_casks'] = get_installed_brew_casks()
+
+    # Get npm packages
+    packages['npm'] = get_installed_npm_packages()
+
+    # Get pip packages
+    packages['pip'] = get_installed_pip_packages()
+
+    return packages
+
+
+def compare_packages(installed, config_packages, ignored_packages):
+    """Compare installed packages with config and return differences."""
+    diffs = {
+        'brew_formulae': {'to_add': set(), 'to_remove': set(), 'to_remove_deps': set()},
+        'brew_casks': {'to_add': set(), 'to_remove': set()},
+        'npm': {'to_add': set(), 'to_remove': set()},
+        'pip': {'to_add': set(), 'to_remove': set()}
+    }
+
+    # Get all brew packages (including dependencies) to identify dependency-only packages
+    all_brew_formulae = get_all_brew_packages()
+
+    # Brew packages (combined formulae and casks)
+    config_brew = set(config_packages.get('brew_packages', []))
+    installed_brew = installed['brew_formulae'] | installed['brew_casks']
+    ignored_brew_formulae = set(ignored_packages.get('brew_formulae', []))
+    ignored_brew_casks = set(ignored_packages.get('brew_casks', []))
+
+    # Separate installed into formulae and casks for diff
+    for pkg in installed['brew_formulae']:
+        if pkg not in config_brew and pkg not in ignored_brew_formulae:
+            diffs['brew_formulae']['to_add'].add(pkg)
+
+    for pkg in installed['brew_casks']:
+        if pkg not in config_brew and pkg not in ignored_brew_casks:
+            diffs['brew_casks']['to_add'].add(pkg)
+
+    # Check for packages in config but not explicitly installed
+    for pkg in config_brew:
+        if pkg not in installed_brew:
+            # Check if it's installed as a dependency
+            if pkg in all_brew_formulae:
+                # It's installed but only as a dependency - mark for removal
+                diffs['brew_formulae']['to_remove_deps'].add(pkg)
+            else:
+                # Not installed at all - genuinely removed
+                diffs['brew_formulae']['to_remove'].add(pkg)
+
+    # NPM packages
+    config_npm = set(config_packages.get('npm_packages', []))
+    ignored_npm = set(ignored_packages.get('npm_packages', []))
+
+    for pkg in installed['npm']:
+        if pkg not in config_npm and pkg not in ignored_npm:
+            diffs['npm']['to_add'].add(pkg)
+
+    for pkg in config_npm:
+        if pkg not in installed['npm']:
+            diffs['npm']['to_remove'].add(pkg)
+
+    # PIP packages
+    config_pip = set(config_packages.get('pip_packages', []))
+    ignored_pip = set(ignored_packages.get('pip_packages', []))
+
+    for pkg in installed['pip']:
+        if pkg not in config_pip and pkg not in ignored_pip:
+            diffs['pip']['to_add'].add(pkg)
+
+    for pkg in config_pip:
+        if pkg not in installed['pip']:
+            diffs['pip']['to_remove'].add(pkg)
+
+    return diffs
+
+
+def write_toml_config(config_path, config, package_updates, ignored_updates):
+    """Write updated config back to TOML file."""
+    import shutil
+    from datetime import datetime
+
+    # Create backup
+    backup_path = f"{config_path}.bak"
+    shutil.copy2(config_path, backup_path)
+    print(f"\nCreated backup: {backup_path}")
+
+    # Read original file to preserve comments
+    with open(config_path, 'r') as f:
+        lines = f.readlines()
+
+    # Update brew packages
+    brew_packages = sorted(
+        (set(config['layer1']['brew_packages']) |
+         package_updates['brew_formulae']['add'] |
+         package_updates['brew_casks']['add']) -
+        package_updates['brew_formulae']['remove'] -
+        package_updates['brew_casks']['remove']
+    )
+
+    # Update npm packages
+    npm_packages = sorted(
+        (set(config['layer1']['npm_packages']) |
+         package_updates['npm']['add']) -
+        package_updates['npm']['remove']
+    )
+
+    # Update pip packages
+    pip_packages = sorted(
+        (set(config['layer1']['pip_packages']) |
+         package_updates['pip']['add']) -
+        package_updates['pip']['remove']
+    )
+
+    # Build new TOML content
+    content = []
+    content.append("# Simplified layered configuration for setup.py\n")
+    content.append("# Installation proceeds in sequential layers\n\n")
+
+    # Layer 1
+    content.append("# Layer 1: Base system packages\n")
+    content.append("[layer1]\n")
+    content.append('name = "Base System Packages"\n\n')
+
+    content.append("# Homebrew taps to add before installing packages\n")
+    content.append("brew_taps = [\n")
+    for tap in config['layer1']['brew_taps']:
+        content.append(f'    "{tap}",\n')
+    content.append("]\n\n")
+
+    content.append("# All brew packages (formulae and casks) to install\n")
+    content.append("brew_packages = [\n")
+    for pkg in brew_packages:
+        content.append(f'    "{pkg}",\n')
+    content.append("]\n\n")
+
+    content.append("# NPM global packages\n")
+    content.append("npm_packages = [\n")
+    for pkg in npm_packages:
+        content.append(f'    "{pkg}",\n')
+    content.append("]\n\n")
+
+    content.append("# Python packages\n")
+    content.append("pip_packages = [\n")
+    for pkg in pip_packages:
+        content.append(f'    "{pkg}",\n')
+    content.append("]\n\n")
+
+    # Add ignored packages section
+    if any(ignored_updates.values()):
+        content.append("# Packages to ignore during sync\n")
+        content.append("[ignored_packages]\n")
+
+        if ignored_updates.get('brew_formulae'):
+            content.append("brew_formulae = [\n")
+            for pkg in sorted(ignored_updates['brew_formulae']):
+                content.append(f'    "{pkg}",\n')
+            content.append("]\n\n")
+
+        if ignored_updates.get('brew_casks'):
+            content.append("brew_casks = [\n")
+            for pkg in sorted(ignored_updates['brew_casks']):
+                content.append(f'    "{pkg}",\n')
+            content.append("]\n\n")
+
+        if ignored_updates.get('npm_packages'):
+            content.append("npm_packages = [\n")
+            for pkg in sorted(ignored_updates['npm_packages']):
+                content.append(f'    "{pkg}",\n')
+            content.append("]\n\n")
+
+        if ignored_updates.get('pip_packages'):
+            content.append("pip_packages = [\n")
+            for pkg in sorted(ignored_updates['pip_packages']):
+                content.append(f'    "{pkg}",\n')
+            content.append("]\n\n")
+
+    # Copy layer2, layer3, symlinks, emacs_symlinks, and shell sections from original
+    in_layer2_or_later = False
+    for line in lines:
+        if line.startswith("# Layer 2:") or line.startswith("[layer2]"):
+            in_layer2_or_later = True
+        if in_layer2_or_later:
+            content.append(line)
+
+    # Write updated content
+    with open(config_path, 'w') as f:
+        f.writelines(content)
+
+    print(f"Updated: {config_path}")
+
+
+def interactive_package_menu(diffs, current_ignored):
+    """Interactive curses menu for selecting packages to add/remove/ignore."""
+    try:
+        import curses
+    except ImportError:
+        print("Error: curses module not available")
+        return None, None
+
+    def menu_main(stdscr):
+        # Initialize curses
+        curses.curs_set(0)
+        curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+        curses.init_pair(4, curses.COLOR_CYAN, curses.COLOR_BLACK)
+        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLUE)
+
+        # Build menu items
+        categories = [
+            {
+                'name': 'Brew Formulae',
+                'key': 'brew_formulae',
+                'to_add': sorted(diffs['brew_formulae']['to_add']),
+                'to_remove': sorted(diffs['brew_formulae']['to_remove']),
+                'to_remove_deps': sorted(diffs['brew_formulae']['to_remove_deps']),
+                'expanded': False
+            },
+            {
+                'name': 'Brew Casks',
+                'key': 'brew_casks',
+                'to_add': sorted(diffs['brew_casks']['to_add']),
+                'to_remove': sorted(diffs['brew_casks']['to_remove']),
+                'to_remove_deps': [],
+                'expanded': False
+            },
+            {
+                'name': 'NPM Packages',
+                'key': 'npm',
+                'to_add': sorted(diffs['npm']['to_add']),
+                'to_remove': sorted(diffs['npm']['to_remove']),
+                'to_remove_deps': [],
+                'expanded': False
+            },
+            {
+                'name': 'Python Packages',
+                'key': 'pip',
+                'to_add': sorted(diffs['pip']['to_add']),
+                'to_remove': sorted(diffs['pip']['to_remove']),
+                'to_remove_deps': [],
+                'expanded': False
+            }
+        ]
+
+        # Track package states: 'add', 'remove', 'ignore', 'keep'
+        package_states = {}
+        for cat in categories:
+            for pkg in cat['to_add']:
+                package_states[f"{cat['key']}:{pkg}"] = 'add'
+            for pkg in cat['to_remove']:
+                package_states[f"{cat['key']}:{pkg}"] = 'remove'
+            # Auto-mark dependency-only packages for removal
+            for pkg in cat.get('to_remove_deps', []):
+                package_states[f"{cat['key']}:{pkg}"] = 'remove'
+
+        current_row = 0
+        current_col = 0
+
+        while True:
+            stdscr.clear()
+            h, w = stdscr.getmaxyx()
+
+            # Draw header
+            header = "Package Sync - Arrows: navigate | Enter/Tab: expand/collapse | Space: cycle state | s: save | q: quit"
+            stdscr.attron(curses.color_pair(5))
+            stdscr.addstr(0, 0, header[:w-1].ljust(w-1))
+            stdscr.attroff(curses.color_pair(5))
+
+            # Count changes
+            to_add_count = sum(1 for v in package_states.values() if v == 'add')
+            to_remove_count = sum(1 for v in package_states.values() if v == 'remove')
+            to_ignore_count = sum(1 for v in package_states.values() if v == 'ignore')
+
+            summary = f"Add to config: {to_add_count} | Remove from config: {to_remove_count} | Ignore: {to_ignore_count}"
+            stdscr.addstr(1, 2, summary)
+
+            # Draw categories and packages
+            row = 3
+            menu_items = []
+
+            for cat_idx, cat in enumerate(categories):
+                if row >= h - 1:
+                    break
+
+                total_to_add = len(cat['to_add'])
+                total_to_remove = len(cat['to_remove'])
+                total_to_remove_deps = len(cat.get('to_remove_deps', []))
+                total_in_cat = total_to_add + total_to_remove + total_to_remove_deps
+
+                if total_in_cat == 0:
+                    continue
+
+                # Category header
+                menu_items.append(('category', cat_idx, None))
+                prefix = "▼" if cat['expanded'] else "▶"
+                deps_info = f" ({total_to_remove_deps} deps)" if total_to_remove_deps > 0 else ""
+                cat_line = f"{prefix} {cat['name']} ({total_in_cat}{deps_info})"
+
+                if current_row == len(menu_items) - 1:
+                    stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+                    stdscr.addstr(row, 2, cat_line[:w-3])
+                    stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+                else:
+                    stdscr.attron(curses.A_BOLD)
+                    stdscr.addstr(row, 2, cat_line[:w-3])
+                    stdscr.attroff(curses.A_BOLD)
+                row += 1
+
+                # Show packages if expanded
+                if cat['expanded']:
+                    for pkg in cat['to_add']:
+                        if row >= h - 1:
+                            break
+                        key = f"{cat['key']}:{pkg}"
+                        state = package_states.get(key, 'keep')
+                        menu_items.append(('package', cat_idx, pkg))
+
+                        state_str = f"[{state.upper()}]".ljust(10)
+                        pkg_line = f"    {state_str} +{pkg}"
+
+                        if current_row == len(menu_items) - 1:
+                            color = 1 if state == 'add' else 3 if state == 'ignore' else 0
+                            stdscr.attron(curses.color_pair(color) | curses.A_REVERSE)
+                            stdscr.addstr(row, 2, pkg_line[:w-3])
+                            stdscr.attroff(curses.color_pair(color) | curses.A_REVERSE)
+                        else:
+                            color = 1 if state == 'add' else 3 if state == 'ignore' else 0
+                            if color:
+                                stdscr.attron(curses.color_pair(color))
+                            stdscr.addstr(row, 2, pkg_line[:w-3])
+                            if color:
+                                stdscr.attroff(curses.color_pair(color))
+                        row += 1
+
+                    for pkg in cat['to_remove']:
+                        if row >= h - 1:
+                            break
+                        key = f"{cat['key']}:{pkg}"
+                        state = package_states.get(key, 'keep')
+                        menu_items.append(('package', cat_idx, pkg))
+
+                        state_str = f"[{state.upper()}]".ljust(10)
+                        pkg_line = f"    {state_str} -{pkg}"
+
+                        if current_row == len(menu_items) - 1:
+                            color = 2 if state == 'remove' else 3 if state == 'ignore' else 0
+                            stdscr.attron(curses.color_pair(color) | curses.A_REVERSE)
+                            stdscr.addstr(row, 2, pkg_line[:w-3])
+                            stdscr.attroff(curses.color_pair(color) | curses.A_REVERSE)
+                        else:
+                            color = 2 if state == 'remove' else 3 if state == 'ignore' else 0
+                            if color:
+                                stdscr.attron(curses.color_pair(color))
+                            stdscr.addstr(row, 2, pkg_line[:w-3])
+                            if color:
+                                stdscr.attroff(curses.color_pair(color))
+                        row += 1
+
+                    for pkg in cat.get('to_remove_deps', []):
+                        if row >= h - 1:
+                            break
+                        key = f"{cat['key']}:{pkg}"
+                        state = package_states.get(key, 'keep')
+                        menu_items.append(('package', cat_idx, pkg))
+
+                        state_str = f"[{state.upper()}]".ljust(10)
+                        pkg_line = f"    {state_str} -{pkg} (dependency)"
+
+                        if current_row == len(menu_items) - 1:
+                            color = 2 if state == 'remove' else 3 if state == 'ignore' else 0
+                            stdscr.attron(curses.color_pair(color) | curses.A_REVERSE)
+                            stdscr.addstr(row, 2, pkg_line[:w-3])
+                            stdscr.attroff(curses.color_pair(color) | curses.A_REVERSE)
+                        else:
+                            color = 2 if state == 'remove' else 3 if state == 'ignore' else 0
+                            if color:
+                                stdscr.attron(curses.color_pair(color))
+                            stdscr.addstr(row, 2, pkg_line[:w-3])
+                            if color:
+                                stdscr.attroff(curses.color_pair(color))
+                        row += 1
+
+            stdscr.refresh()
+
+            # Handle input
+            key = stdscr.getch()
+
+            if key == ord('q') or key == 27:  # q or ESC
+                return None, None
+            elif key == ord('s'):
+                # Save and exit
+                result_updates = {
+                    'brew_formulae': {'add': set(), 'remove': set()},
+                    'brew_casks': {'add': set(), 'remove': set()},
+                    'npm': {'add': set(), 'remove': set()},
+                    'pip': {'add': set(), 'remove': set()}
+                }
+                result_ignored = {
+                    'brew_formulae': set(current_ignored.get('brew_formulae', [])),
+                    'brew_casks': set(current_ignored.get('brew_casks', [])),
+                    'npm_packages': set(current_ignored.get('npm_packages', [])),
+                    'pip_packages': set(current_ignored.get('pip_packages', []))
+                }
+
+                for key, state in package_states.items():
+                    cat_key, pkg = key.split(':', 1)
+                    if state == 'add':
+                        result_updates[cat_key]['add'].add(pkg)
+                    elif state == 'remove':
+                        result_updates[cat_key]['remove'].add(pkg)
+                    elif state == 'ignore':
+                        ignored_key = cat_key if cat_key.startswith('brew_') else f"{cat_key}_packages"
+                        result_ignored[ignored_key].add(pkg)
+
+                return result_updates, result_ignored
+            elif key == curses.KEY_UP:
+                current_row = max(0, current_row - 1)
+            elif key == curses.KEY_DOWN:
+                current_row = min(len(menu_items) - 1, current_row + 1)
+            elif key == ord('\n') or key == curses.KEY_ENTER or key == ord('\t') or key == 9:
+                # Toggle category expansion (Enter/Tab)
+                if current_row < len(menu_items):
+                    item_type, cat_idx, pkg = menu_items[current_row]
+                    if item_type == 'category':
+                        # On category: toggle expansion
+                        categories[cat_idx]['expanded'] = not categories[cat_idx]['expanded']
+                    elif item_type == 'package':
+                        # On package: collapse the category
+                        categories[cat_idx]['expanded'] = False
+            elif key == ord(' '):
+                # Cycle package state
+                if current_row < len(menu_items):
+                    item_type, cat_idx, pkg = menu_items[current_row]
+                    if item_type == 'package':
+                        cat = categories[cat_idx]
+                        key = f"{cat['key']}:{pkg}"
+                        current_state = package_states.get(key, 'keep')
+
+                        # Cycle: add -> ignore -> keep -> add (for new packages)
+                        # Cycle: remove -> keep -> remove (for removed packages)
+                        # Cycle: remove -> keep (for dependency packages, auto-marked for removal)
+                        if pkg in cat['to_add']:
+                            if current_state == 'add':
+                                package_states[key] = 'ignore'
+                            elif current_state == 'ignore':
+                                package_states[key] = 'keep'
+                            else:
+                                package_states[key] = 'add'
+                        elif pkg in cat['to_remove']:
+                            if current_state == 'remove':
+                                package_states[key] = 'keep'
+                            else:
+                                package_states[key] = 'remove'
+                        elif pkg in cat.get('to_remove_deps', []):
+                            # Dependencies: just toggle remove/keep
+                            if current_state == 'remove':
+                                package_states[key] = 'keep'
+                            else:
+                                package_states[key] = 'remove'
+
+    return curses.wrapper(menu_main)
+
+
+def sync_packages(config_path, config):
+    """Sync installed packages with setup.toml."""
+    print("=== Package Sync ===\n")
+    print("Scanning installed packages...")
+
+    # Get all installed packages
+    installed = get_all_installed_packages()
+
+    # Debug: Show counts of installed packages
+    print(f"  Found {len(installed['brew_formulae'])} brew formulae")
+    print(f"  Found {len(installed['brew_casks'])} brew casks")
+    print(f"  Found {len(installed['npm'])} npm packages")
+    print(f"  Found {len(installed['pip'])} pip packages")
+
+    # Load current config packages
+    config_packages = {
+        'brew_packages': config['layer1'].get('brew_packages', []),
+        'npm_packages': config['layer1'].get('npm_packages', []),
+        'pip_packages': config['layer1'].get('pip_packages', [])
+    }
+
+    print(f"  Config has {len(config_packages['brew_packages'])} brew packages")
+    print(f"  Config has {len(config_packages['npm_packages'])} npm packages")
+    print(f"  Config has {len(config_packages['pip_packages'])} pip packages")
+
+    # Load ignored packages
+    ignored_packages = config.get('ignored_packages', {})
+
+    # Compare
+    diffs = compare_packages(installed, config_packages, ignored_packages)
+
+    # Check if there are any differences
+    has_diffs = any(
+        diffs[cat]['to_add'] or diffs[cat]['to_remove'] or diffs[cat].get('to_remove_deps', set())
+        for cat in ['brew_formulae', 'brew_casks', 'npm', 'pip']
+    )
+
+    if not has_diffs:
+        print("\n✓ All packages are in sync!")
+        return
+
+    # Show summary
+    print("\nPackage differences found:")
+    print("(Installed but not in config / In config but not installed)")
+    for cat_name, cat_key in [('Brew Formulae', 'brew_formulae'),
+                               ('Brew Casks', 'brew_casks'),
+                               ('NPM Packages', 'npm'),
+                               ('Python Packages', 'pip')]:
+        to_add = len(diffs[cat_key]['to_add'])
+        to_remove = len(diffs[cat_key]['to_remove'])
+        to_remove_deps = len(diffs[cat_key].get('to_remove_deps', set()))
+        if to_add or to_remove or to_remove_deps:
+            deps_str = f", {to_remove_deps} dependencies to clean" if to_remove_deps > 0 else ""
+            print(f"  {cat_name}: +{to_add} to add to config, -{to_remove} to remove from config{deps_str}")
+
+    print("\nLaunching interactive menu...")
+    print("(Arrow keys: navigate | Enter/Tab: expand/collapse | Space: cycle state | s: save | q: quit)\n")
+
+    # Show interactive menu
+    updates, ignored_updates = interactive_package_menu(diffs, ignored_packages)
+
+    if updates is None:
+        print("\nSync cancelled.")
+        return
+
+    # Apply updates
+    print("\nApplying changes...")
+    write_toml_config(config_path, config, updates, ignored_updates)
+
+    print("\n✓ Sync complete!")
+
+
+def main():
+    parser = argparse.ArgumentParser(description='setup development environment in layers')
+    parser.add_argument('--check', action='store_true', help='only check what would be installed')
+    parser.add_argument('--layer', type=int, choices=[1, 2, 3, 4], help='run specific layer only')
+    parser.add_argument('--sync', action='store_true', help='sync installed packages with setup.toml')
+    args = parser.parse_args()
+
+    # macOS only for now
+    if platform.system() != "Darwin":
+        print("error: this script currently only supports macOS")
+        sys.exit(1)
+
+    # Get paths
+    script_dir = get_script_dir()
+    if not script_dir:
+        script_dir = os.getcwd()
+
+    home = os.path.expanduser("~")
+    os.chdir(home)
+
+    # Create ~/bin if needed
+    bin_dir = os.path.join(home, "bin")
+    if not os.path.exists(bin_dir):
+        os.makedirs(bin_dir)
+
+    # Load configuration
+    config_path = os.path.join(script_dir, 'setup.toml')
+    if not os.path.exists(config_path):
+        print(f"error: configuration file {config_path} not found")
+        sys.exit(1)
+
+    config = load_config(config_path)
+
+    # Handle sync mode
+    if args.sync:
+        sync_packages(config_path, config)
+        return
+
+    # Install Homebrew if not present
+    if not command_exists("brew"):
+        print("=== Installing Homebrew ===")
+        if not args.check:
             run_command('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
-        
-        if doom_choice == "1":
-            # Check and install nvm if needed
-            if not command_exists("nvm"):
-                install_brew_packages(["nvm"], "node version manager", args.check)
-            
-            # Setup nvm and install node if not in check mode
-            if not args.check and command_exists("nvm"):
-                run_command("nvm install 20")
-                run_command("nvm use 20")
-            
-            # Install emacs and dependencies
-            print("\nchecking emacs installation...")
-            needs_emacs_install = not command_exists("emacs")
-            
-            if needs_emacs_install:
-                print("  Emacs not found, will install")
-            else:
-                print("  Emacs is already installed")
-            
-            # Always check/install dependencies as they might be missing after OS upgrade
-            install_brew_packages(config['brew']['emacs_dependencies'], "emacs dependencies", args.check)
-            install_pip_packages(config['pip']['emacs_dependencies'], args.check)
-            
-            # language servers
-            install_brew_packages(config['brew']['language_servers'], "language servers", args.check)
-            npm_packages = [pkg for pkg in config['npm']['global'] if 'language-server' in pkg]
-            install_npm_packages(npm_packages, args.check)
-            
-            # Install emacs-plus if needed and not in check mode
-            if needs_emacs_install and not args.check:
-                # Add taps
-                for tap in config['brew']['taps']:
-                    if not is_brew_tap_added(tap):
-                        print(f"Adding tap: {tap}")
-                        run_command(f"brew tap {tap}")
-                
-                # Install emacs formula
-                emacs_formula = config['brew']['emacs_formula']
-                install_cmd = f"brew install {' '.join(emacs_formula['options'])} {emacs_formula['name']}"
-                print(f"installing {emacs_formula['name']}...")
-                run_command(install_cmd)
-                run_command("defaults write org.gnu.Emacs TransparentTitleBar DARK")
-            
-            # Check doom emacs installation
-            emacs_config_path = os.path.join(home, ".config/emacs")
-            doom_bin = os.path.join(emacs_config_path, "bin/doom")
-            
-            print("\nchecking doom emacs installation...")
-            if os.path.exists(emacs_config_path):
-                print("  Doom Emacs is installed")
-                # Check if doom binary exists and offer repair
-                if not os.path.exists(doom_bin):
-                    print("  Warning: doom binary not found")
-                    if not args.check:
-                        repair = input("  Repair Doom Emacs installation? [Y/n]: ").strip()
-                        if not repair or repair.lower() in ["y", "yes"]:
-                            print("  running doom sync...")
-                            env = os.environ.copy()
-                            env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
-                            run_command(f"{doom_bin} sync", env=env)
-            else:
-                print("  Doom Emacs not found")
-                
-            # Always check/install doom dependencies
-            install_brew_packages(config['brew']['doom_dependencies'], "doom dependencies", args.check)
-            
-            # Install doom emacs if needed and not in check mode
-            if not os.path.exists(emacs_config_path) and not args.check:
-                print("\ninstalling doom emacs...")
-                run_command(f"git clone --depth 1 https://github.com/doomemacs/doomemacs {emacs_config_path}")
-                
-                # Add /opt/homebrew/bin to PATH for doom commands
-                env = os.environ.copy()
-                env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
-                
-                run_command(f"{doom_bin} install --force --env --install --fonts --hooks", env=env)
-                run_command(f"{doom_bin} sync", env=env)
-                
-            # Check and install dictionaries
-            spelling_dir = os.path.join(home, "Library/Spelling")
-            os.makedirs(spelling_dir, exist_ok=True)
-            
-            dict_files = [
-                ("de_DE_frami.aff", "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.aff"),
-                ("de_DE_frami.dic", "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.dic"),
-                ("en_US.aff", "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.aff"),
-                ("en_US.dic", "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.dic")
-            ]
-            
-            missing_dicts = []
-            for filename, url in dict_files:
-                if not os.path.exists(os.path.join(spelling_dir, filename)):
-                    missing_dicts.append((filename, url))
-            
-            if missing_dicts:
-                print(f"\ndictionaries: {len(missing_dicts)} missing")
-                if not args.check:
-                    print("installing dictionaries...")
-                    for filename, url in missing_dicts:
-                        run_command(f"wget -nc {url} -O {spelling_dir}/{filename}")
-            else:
-                print("\ndictionaries: all installed")
-        
-        # Ask about dev environment installation
-        install_dev = input("install dev environment and tools? [Y/n]: ").strip()
-        
-        if not install_dev or install_dev.lower() in ["y", "yes"]:
-            print("installing environment...")
-            
-            # Install packages by category
-            brew_config = config['brew']
-            install_brew_packages(brew_config['cloud_storage'], "cloud storage", args.check)
-            install_brew_packages(brew_config['development_tools'], "development tools", args.check)
-            install_brew_packages(brew_config['java_tools'], "java tools", args.check)
-            install_brew_packages(brew_config['productivity_tools'], "productivity tools", args.check)
-            install_brew_packages(brew_config['communication'], "communication apps", args.check)
-            install_brew_packages(brew_config['browsers'], "browsers", args.check)
-            install_brew_packages(brew_config['other_apps'], "other applications", args.check)
-            
-            # npm and pip packages
-            install_npm_packages(config['npm']['global'], args.check)
-            install_pip_packages(config['pip']['other'], args.check)
-            
-            # Java setup - only if jenv is installed and not in check mode
-            if command_exists("jenv") and not args.check:
-                # Check if Java 21 is already configured
-                result = subprocess.run(['jenv', 'versions'], capture_output=True, text=True)
-                if '21' not in result.stdout:
-                    print("\nconfiguring java 21...")
-                    run_command("jenv add /opt/homebrew/opt/openjdk@21")
-                    run_command("jenv global 21")
-            
-            # Link jdtls configs if not in check mode
-            if not args.check:
-                jdtls_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/config_mac")
-                if jdtls_patterns:
-                    # Create jdtls directory if it doesn't exist
-                    jdtls_dir = os.path.join(home, "tools/jdtls")
-                    os.makedirs(jdtls_dir, exist_ok=True)
-                    link("jdtls/config_mac", jdtls_patterns[0], os.path.join(jdtls_dir, "config_mac"))
-                
-                jdtls_plugin_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/plugins")
-                if jdtls_plugin_patterns:
-                    link("jdtls/plugins", jdtls_plugin_patterns[0], os.path.join(home, "tools/jdtls/plugins"))
-    
-    # Summary if in check mode
+        else:
+            print("  homebrew would be installed")
+
+    # Setup shell
+    setup_shell(config, home, args.check)
+
+    # Run layers
+    if args.layer is None or args.layer == 1:
+        layer1_base_packages(config, args.check)
+
+    if args.layer is None or args.layer == 2:
+        layer2_emacs(config, home, args.check)
+
+    if args.layer is None or args.layer == 3:
+        layer3_doom(config, home, args.check)
+
+    if args.layer is None or args.layer == 4:
+        layer4_symlinks(config, script_dir, home, args.check)
+
+    # Summary
     if args.check:
         print("\n" + "="*50)
-        print("check complete. run without --check to install/update.")
+        print("check complete. run without --check to install.")
+        print("="*50)
+    else:
+        print("\n" + "="*50)
+        print("setup complete!")
         print("="*50)
 
 

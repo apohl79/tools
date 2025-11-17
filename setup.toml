@@ -1,0 +1,307 @@
+# Simplified layered configuration for setup.py
+# Installation proceeds in sequential layers
+
+# Layer 1: Base system packages
+[layer1]
+name = "Base System Packages"
+
+# Homebrew taps to add before installing packages
+brew_taps = [
+    "d12frosted/emacs-plus",
+]
+
+# All brew packages (formulae and casks) to install
+brew_packages = [
+    "arc",
+    "arduino-ide",
+    "awk",
+    "awscli",
+    "balenaetcher",
+    "base64",
+    "basedpyright",
+    "bentobox",
+    "blackhole-64ch",
+    "clang-format",
+    "cliclick",
+    "clipgrab",
+    "cmake",
+    "conan",
+    "conan@1",
+    "contexts",
+    "coreutils",
+    "cryptomator",
+    "dbus",
+    "dcfldd",
+    "docker",
+    "docker-desktop",
+    "dos2unix",
+    "drawio",
+    "editorconfig",
+    "enchant",
+    "fd",
+    "ffmpeg",
+    "font-iosevka-comfy",
+    "font-juliamono",
+    "font-noto-mono",
+    "font-roboto",
+    "getsentry/tools/sentry-cli",
+    "gh",
+    "gimp",
+    "git",
+    "glslang",
+    "gnu-sed",
+    "gnu-tar",
+    "go",
+    "gomodifytags",
+    "google-java-format",
+    "gopls",
+    "gotests",
+    "grep",
+    "grpcurl",
+    "hammerspoon",
+    "haproxy",
+    "helm",
+    "htop",
+    "hunspell",
+    "icu4c@76",
+    "iftop",
+    "ilok-license-manager",
+    "img2pdf",
+    "iperf3",
+    "isort",
+    "isync",
+    "jansson",
+    "jdtls",
+    "jenv",
+    "jq",
+    "k6",
+    "k9s",
+    "keepassxc",
+    "kubernetes-cli",
+    "leiningen",
+    "libpaho-mqtt",
+    "libxml2",
+    "llvm@17",
+    "llvm@19",
+    "lua-language-server",
+    "mailspring",
+    "make",
+    "markdown",
+    "menumeters",
+    "meson",
+    "mosquitto",
+    "msgpack-tools",
+    "msmtp",
+    "mu",
+    "nasm",
+    "nmap",
+    "nvm",
+    "offlineimap",
+    "ollama",
+    "openjdk@21",
+    "oracle-jdk",
+    "owncloud",
+    "packages",
+    "pandoc",
+    "pdftk-java",
+    "pinentry-mac",
+    "pipenv",
+    "pipx",
+    "podman",
+    "poppler",
+    "protoc-gen-grpc-web",
+    "pytest",
+    "python-packaging",
+    "python@3.11",
+    "raycast",
+    "reaper",
+    "rectangle",
+    "ripgrep",
+    "rsync",
+    "ruff",
+    "rust",
+    "rustup",
+    "shellcheck",
+    "signal",
+    "slack",
+    "spotify",
+    "terraform",
+    "texinfo",
+    "tor",
+    "tor-browser",
+    "tree",
+    "typescript-language-server",
+    "utm",
+    "uv",
+    "vcpkg",
+    "virtualenv",
+    "vlc",
+    "wezterm",
+    "wget",
+    "whatsapp",
+    "wireshark",
+    "wireshark-app",
+]
+
+# NPM global packages
+npm_packages = [
+    "@anthropic-ai/claude-code",
+    "@georgesg/arc-cli",
+    "@tailwindcss/language-server",
+    "@vtsls/language-server",
+    "npm",
+    "typescript-language-server",
+    "vscode-langservers-extracted",
+    "yaml-language-server",
+    "yarn",
+]
+
+# Python packages
+pip_packages = [
+    "certifi",
+    "cffi",
+    "cryptography",
+    "meson",
+    "ndiff",
+    "numpy",
+    "packaging",
+    "pip",
+    "pycparser",
+    "setuptools",
+    "typing_extensions",
+    "wheel",
+]
+
+# Packages to ignore during sync
+[ignored_packages]
+brew_formulae = [
+    "automake",
+    "buf",
+    "cryptography",
+    "d12frosted/emacs-plus/emacs-plus@30",
+    "envoy",
+    "exiftool",
+    "expat",
+    "git-lfs",
+    "stripe/stripe-cli/stripe",
+]
+
+brew_casks = [
+    "alfred",
+    "distroav",
+    "firefox",
+    "font-alegreya",
+    "font-fira-code-nerd-font",
+    "font-fira-mono-nerd-font",
+    "font-hack",
+    "font-hack-nerd-font",
+    "fossa",
+    "gstreamer-runtime",
+    "iterm2",
+    "libndi",
+    "licecap",
+    "mactex-no-gui",
+    "obs",
+    "obs-ndi",
+    "pluginval",
+    "podman-desktop",
+    "postico",
+    "postman",
+    "unetbootin",
+    "wine-stable",
+]
+
+npm_packages = [
+    "@syncdna/mediaserver-api-proto",
+    "@syncdna/mediaserver-app-proto",
+    "@syncdna/trunk-proto",
+    "corepack",
+]
+
+pip_packages = [
+    "grpcio",
+    "grpcio-tools",
+    "pillow",
+    "protobuf",
+]
+
+# Layer 2: Emacs installation
+[layer2]
+name = "Emacs Installation"
+formula = "emacs-plus@31"
+options = [
+    "--with-imagemagick",
+    "--with-mailutils",
+    "--with-xwidgets",
+    "--with-savchenkovaleriy-big-sur-3d-icon",
+]
+
+# Spelling dictionaries to download
+[[layer2.dictionaries]]
+filename = "de_DE_frami.aff"
+url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.aff"
+
+[[layer2.dictionaries]]
+filename = "de_DE_frami.dic"
+url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.dic"
+
+[[layer2.dictionaries]]
+filename = "en_US.aff"
+url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.aff"
+
+[[layer2.dictionaries]]
+filename = "en_US.dic"
+url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.dic"
+
+# Layer 3: Doom Emacs
+[layer3]
+name = "Doom Emacs"
+repo = "https://github.com/doomemacs/doomemacs"
+install_path = "{home}/.config/emacs"
+
+# Layer 4: Symlinks
+# {script_dir} = directory containing setup.py
+# {home} = user's home directory
+[[symlinks]]
+name = "tools"
+source = "{script_dir}"
+target = "{home}/bin/tools"
+
+[[symlinks]]
+name = "zsh"
+source = "{script_dir}/.zshrc"
+target = "{home}/.zshrc"
+force = true
+
+[[symlinks]]
+name = "powerlevel10k"
+source = "{script_dir}/.p10k.zsh"
+target = "{home}/.p10k.zsh"
+force = true
+
+[[symlinks]]
+name = "profile"
+source = "{home}/.zshrc"
+target = "{home}/.profile"
+force = true
+
+[[symlinks]]
+name = "clang-format"
+source = "{script_dir}/.clang-format"
+target = "{home}/.clang-format"
+
+# Emacs configuration symlinks (chosen during setup)
+[emacs_symlinks.doom]
+name = "doom"
+source = "{script_dir}/.doom.d"
+target = "{home}/.config/doom"
+
+[emacs_symlinks.light]
+name = "emacs"
+source = "{script_dir}/.emacs"
+target = "{home}/.emacs"
+
+# Shell setup
+[shell]
+oh_my_zsh_url = "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
+powerlevel10k_repo = "https://github.com/romkatv/powerlevel10k.git"
