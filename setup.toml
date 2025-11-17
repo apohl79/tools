@@ -107,7 +107,6 @@ brew_packages = [
     "pinentry-mac",
     "pipenv",
     "pipx",
-    "podman",
     "poppler",
     "protoc-gen-grpc-web",
     "pytest",
@@ -125,13 +124,11 @@ brew_packages = [
     "signal",
     "slack",
     "spotify",
-    "terraform",
     "texinfo",
     "tor",
     "tor-browser",
     "tree",
     "typescript-language-server",
-    "utm",
     "uv",
     "vcpkg",
     "virtualenv",
@@ -178,12 +175,14 @@ brew_formulae = [
     "automake",
     "buf",
     "cryptography",
-    "d12frosted/emacs-plus/emacs-plus@30",
     "envoy",
     "exiftool",
     "expat",
     "git-lfs",
+    "podman",
+    "stripe",
     "stripe/stripe-cli/stripe",
+    "terraform",
 ]
 
 brew_casks = [
@@ -208,6 +207,7 @@ brew_casks = [
     "postico",
     "postman",
     "unetbootin",
+    "utm",
     "wine-stable",
 ]
 
@@ -228,7 +228,7 @@ pip_packages = [
 # Layer 2: Emacs installation
 [layer2]
 name = "Emacs Installation"
-formula = "emacs-plus@31"
+formula = "emacs-plus@30"
 options = [
     "--with-imagemagick",
     "--with-mailutils",

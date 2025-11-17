@@ -56,7 +56,13 @@ def get_all_brew_packages():
         result = subprocess.run(['brew', 'list', '--formula'], capture_output=True, text=True)
         if result.returncode == 0:
             packages = [pkg.strip() for pkg in result.stdout.strip().split('\n') if pkg.strip()]
-            return set(packages)
+            # brew list --formula doesn't include tap prefix, so no normalization needed
+            # but we'll normalize anyway for consistency
+            normalized = set()
+            for pkg in packages:
+                pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
+                normalized.add(pkg_name)
+            return normalized
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return set()
@@ -68,7 +74,12 @@ def get_installed_brew_packages():
         result = subprocess.run(['brew', 'leaves'], capture_output=True, text=True)
         if result.returncode == 0:
             packages = [pkg.strip() for pkg in result.stdout.strip().split('\n') if pkg.strip()]
-            return set(packages)
+            # Normalize: strip tap prefix (e.g., "getsentry/tools/sentry-cli" -> "sentry-cli")
+            normalized = set()
+            for pkg in packages:
+                pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
+                normalized.add(pkg_name)
+            return normalized
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return set()
@@ -80,7 +91,12 @@ def get_installed_brew_casks():
         result = subprocess.run(['brew', 'list', '--cask'], capture_output=True, text=True)
         if result.returncode == 0:
             packages = [pkg.strip() for pkg in result.stdout.strip().split('\n') if pkg.strip()]
-            return set(packages)
+            # Normalize: strip tap prefix
+            normalized = set()
+            for pkg in packages:
+                pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
+                normalized.add(pkg_name)
+            return normalized
     except (subprocess.SubprocessError, FileNotFoundError):
         pass
     return set()
@@ -487,6 +503,7 @@ def compare_packages(installed, config_packages, ignored_packages):
         config_brew_normalized.add(pkg_name)
 
     # Separate installed into formulae and casks for diff
+    # Note: installed packages are already normalized (tap prefixes stripped)
     for pkg in installed['brew_formulae']:
         if pkg not in config_brew_normalized and pkg not in ignored_brew_formulae:
             diffs['brew_formulae']['to_add'].add(pkg)
@@ -496,12 +513,13 @@ def compare_packages(installed, config_packages, ignored_packages):
             diffs['brew_casks']['to_add'].add(pkg)
 
     # Check for packages in config but not explicitly installed
+    # Note: installed_brew and all_brew_formulae are already normalized
     for pkg in config_brew:
         # Normalize package name (strip tap prefix)
         pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
 
         if pkg_name not in installed_brew:
-            # Check if it's installed as a dependency
+            # Check if it's installed as a dependency (in all packages but not in leaves)
             if pkg_name in all_brew_formulae:
                 # It's installed but only as a dependency - mark for removal
                 diffs['brew_formulae']['to_remove_deps'].add(pkg)
@@ -930,6 +948,21 @@ def sync_packages(config_path, config):
 
     # Get all installed packages
     installed = get_all_installed_packages()
+
+    # Filter out packages that are installed in other layers (layer 2+)
+    # These are handled specially and shouldn't be in layer 1
+    layer_specific_packages = set()
+
+    # Layer 2: Emacs formula
+    if 'layer2' in config:
+        emacs_formula = config['layer2'].get('formula', '')
+        if emacs_formula:
+            # Normalize emacs formula name (strip tap prefix and options)
+            emacs_name = emacs_formula.split('/')[-1] if '/' in emacs_formula else emacs_formula
+            layer_specific_packages.add(emacs_name)
+
+    # Filter out layer-specific packages from installed
+    installed['brew_formulae'] = installed['brew_formulae'] - layer_specific_packages
 
     # Debug: Show counts of installed packages
     print(f"  Found {len(installed['brew_formulae'])} brew formulae")
