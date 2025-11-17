@@ -592,6 +592,83 @@ This prevents unnecessary terminal reflows when only height changes."
   (advice-add 'vterm--window-adjust-process-window-size
               :around #'my/vterm-window-adjust-advice))
 
+;; Dashboard workspace widget with sorting by last usage
+(defun my/doom-dashboard-widget-projects ()
+  "Custom widget to show all workspaces/projects as clickable buttons, sorted by last usage."
+  (when (modulep! :ui workspaces)
+    (let* ((workspaces (persp-names))
+           (content-width 75) ; Fixed width for consistent alignment (use most of 80 chars)
+           ;; Sort workspaces by last switch time (most recent first), excluding nil workspace
+           (sorted-workspaces
+            (sort (delq persp-nil-name (copy-sequence workspaces))
+                  (lambda (a b)
+                    (let* ((persp-a (persp-get-by-name a))
+                           (persp-b (persp-get-by-name b))
+                           (time-a (or (and persp-a (persp-parameter 'persp-last-switch-time persp-a)) 0))
+                           (time-b (or (and persp-b (persp-parameter 'persp-last-switch-time persp-b)) 0)))
+                      (time-less-p time-b time-a)))))) ; Sort descending (most recent first)
+      (when sorted-workspaces
+        (insert "\n")
+        ;; Center the title using doom's centering function
+        (insert (+doom-dashboard--center
+                 +doom-dashboard--width
+                 (propertize "Workspaces:" 'face 'doom-dashboard-menu-title)))
+        (insert "\n\n")
+        (dolist (workspace sorted-workspaces)
+            ;; Get the project directory for this workspace
+            (let* ((persp (persp-get-by-name workspace))
+                   (workspace-name workspace) ; Capture for closure
+                   (project-dir (when persp
+                                  ;; Try to get project root from workspace buffers
+                                  (let ((buffers (persp-buffers persp)))
+                                    (catch 'found
+                                      (dolist (buf buffers)
+                                        (when-let ((root (ignore-errors
+                                                          (with-current-buffer buf
+                                                            (and (buffer-file-name)
+                                                                 (projectile-project-root))))))
+                                          ;(message "DEBUG: %s: Found project root %s from buffer %s" workspace-name root (buffer-name buf))
+                                          (throw 'found (abbreviate-file-name root))))))))
+                   (project-dir-display (or project-dir ""))
+                   ;; Calculate spacing to right-align the path within content-width
+                   (spacing (max 1 (- content-width (length workspace) (length project-dir-display)))))
+              ;; Center and insert the line
+              (insert
+               (+doom-dashboard--center
+                +doom-dashboard--width
+                (with-temp-buffer
+                  ;; Insert workspace name as button with workspace stored as property
+                  (insert-text-button workspace
+                                      'workspace-name workspace-name
+                                      'action (lambda (button)
+                                                 ;; Get workspace name from button property
+                                                 (let ((ws (button-get button 'workspace-name)))
+                                                   ;; Quit dashboard window first
+                                                   (let ((dashboard-window (get-buffer-window +doom-dashboard-name)))
+                                                     (when dashboard-window
+                                                       (with-selected-window dashboard-window
+                                                         (quit-window t))))
+                                                   ;; Then switch workspace
+                                                   (+workspace-switch ws t)))
+                                      'follow-link t
+                                      'face 'doom-dashboard-menu-desc
+                                      'mouse-face 'doom-dashboard-menu-title
+                                      'help-echo (format "Switch to workspace: %s → %s" workspace-name project-dir-display))
+                  ;; Add spacing
+                  (insert (make-string spacing ?\s))
+                  ;; Add path with same color as "Doom loaded..." text
+                  (let ((start (point)))
+                    (insert project-dir-display)
+                    (add-text-properties start (point) '(face (:foreground "#51606E"))))
+                  (buffer-string))))
+              (insert "\n")))))))
+
+(defun my/update-workspace-switch-time (&rest _)
+  "Update the last switch time for the current workspace."
+  (when (and (bound-and-true-p persp-mode)
+             (get-current-persp))
+    (set-persp-parameter 'persp-last-switch-time (float-time) (get-current-persp))))
+
 ;; Frame geometry persistence
 (defvar my/frame-geometry-file "~/.config/emacs/frame-geometry"
   "File to store frame geometry and font size.")

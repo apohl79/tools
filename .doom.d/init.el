@@ -122,6 +122,7 @@
        terraform           ; infrastructure as code
        ;;tmux              ; an API for interacting with tmux
        ;;upload            ; map local to remote projects via ssh/ftp
+       tree-sitter
 
        :os
        (:if IS-MAC macos)  ; improve compatibility with macOS
@@ -154,8 +155,8 @@
        (json +lsp)              ; At least it ain't XML
        ;;(java +meghanada) ; the poster child for carpal tunnel syndrome
        (java +lsp)
-       (javascript +lsp)   ; all(hope(abandon(ye(who(enter(here))))))
-       (typescript +lsp +tsx)
+       (javascript +lsp +tree-sitter)   ; all(hope(abandon(ye(who(enter(here))))))
+       (typescript +lsp +tsx +tree-sitter)
        ;javascript
        ;;julia             ; a better, faster MATLAB
        ;;kotlin            ; a better, slicker Java(Script)
