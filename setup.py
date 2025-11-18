@@ -18,17 +18,30 @@ def get_script_dir():
 
 def link(name, source, target):
     """create a symlink if it doesn't exist."""
-    if not os.path.exists(target):
+    # Use lexists to detect both valid symlinks and broken symlinks
+    if not os.path.lexists(target):
         print(f"  linking {name} ({source} -> {target})")
         os.symlink(source, target)
+    elif os.path.islink(target):
+        # Symlink exists - check if it points to the correct location
+        if os.readlink(target) == source:
+            print(f"  skipping {name} (already linked correctly)")
+        else:
+            print(f"  skipping {name} (symlink exists but points to {os.readlink(target)})")
     else:
-        print(f"  skipping {name} (exists)")
+        print(f"  skipping {name} (exists as regular file/directory)")
 
 
 def link_force(name, source, target):
     """create a symlink, removing existing target if needed."""
-    if os.path.exists(target):
-        os.remove(target)
+    # Use lexists to detect both valid symlinks and broken symlinks
+    if os.path.lexists(target):
+        if os.path.islink(target):
+            os.unlink(target)
+        elif os.path.isdir(target):
+            shutil.rmtree(target)
+        else:
+            os.remove(target)
     link(name, source, target)
 
 
@@ -348,10 +361,67 @@ def layer2_emacs(config, home, check_only=False):
         print("  ✓ all dictionaries installed")
 
 
-def layer3_doom(config, home, check_only=False):
-    """Layer 3: Install Doom Emacs."""
+def layer3_doom(config, script_dir, home, check_only=False):
+    """Layer 3: Install Doom Emacs and setup config."""
     print("\n=== Layer 3: Doom Emacs ===")
 
+    # First, determine and setup emacs config symlink
+    existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
+    existing_light = os.path.exists(os.path.join(home, ".emacs"))
+
+    emacs_choice = None
+    if existing_doom or existing_light:
+        setup_type = "doom" if existing_doom else "light"
+        print(f"  detected existing {setup_type} Emacs setup")
+        if not check_only:
+            use_existing = input(f"  continue with {setup_type} setup? [Y/n]: ").strip()
+            if not use_existing or use_existing.lower() in ["y", "yes"]:
+                emacs_choice = setup_type
+            else:
+                print("\n  choose emacs setup:")
+                print("   1) doom")
+                print("   2) light")
+                print("   3) skip")
+                choice = input("  > ").strip()
+                emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
+        else:
+            emacs_choice = setup_type
+    else:
+        if not check_only:
+            print("\n  choose emacs setup:")
+            print("   1) doom")
+            print("   2) light")
+            print("   3) skip")
+            choice = input("  > ").strip()
+            emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
+        else:
+            emacs_choice = None
+
+    # Apply emacs config symlink if chosen
+    if emacs_choice:
+        emacs_link = config['emacs_symlinks'][emacs_choice]
+        source = emacs_link['source'].format(script_dir=script_dir, home=home)
+        target = emacs_link['target'].format(script_dir=script_dir, home=home)
+
+        # Create .config directory if needed for doom
+        if emacs_choice == "doom":
+            config_dir = os.path.join(home, ".config")
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+
+        if not check_only:
+            print(f"  setting up {emacs_choice} config...")
+            link(emacs_link['name'], source, target)
+
+    # Skip Doom installation if user chose light or skip
+    if emacs_choice != "doom":
+        if emacs_choice == "light":
+            print("  skipping Doom Emacs (using light config)")
+        else:
+            print("  skipping Doom Emacs installation")
+        return
+
+    # Now install Doom Emacs
     emacs_config_path = config['layer3']['install_path'].format(home=home)
     doom_bin = os.path.join(emacs_config_path, "bin/doom")
 
@@ -380,70 +450,24 @@ def layer3_doom(config, home, check_only=False):
 
 
 def layer4_symlinks(config, script_dir, home, check_only=False):
-    """Layer 4: Setup symlinks."""
+    """Layer 4: Setup general symlinks."""
     print("\n=== Layer 4: Symlinks ===")
 
-    # Determine emacs setup type
-    existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
-    existing_light = os.path.exists(os.path.join(home, ".emacs"))
-
-    if existing_doom or existing_light:
-        setup_type = "doom" if existing_doom else "light"
-        print(f"  detected existing {setup_type} Emacs setup")
-        if not check_only:
-            use_existing = input(f"  continue with {setup_type} setup? [Y/n]: ").strip()
-            if not use_existing or use_existing.lower() in ["y", "yes"]:
-                emacs_choice = setup_type
-            else:
-                print("\n  choose emacs setup:")
-                print("   1) doom")
-                print("   2) light")
-                print("   3) skip")
-                choice = input("  > ").strip()
-                emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
-        else:
-            emacs_choice = setup_type
-    else:
-        if not check_only:
-            print("\n  choose emacs setup:")
-            print("   1) doom")
-            print("   2) light")
-            print("   3) skip")
-            choice = input("  > ").strip()
-            emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
-        else:
-            emacs_choice = None
-
-    # Apply emacs symlink if chosen
-    if emacs_choice:
-        emacs_link = config['emacs_symlinks'][emacs_choice]
-        source = emacs_link['source'].format(script_dir=script_dir, home=home)
-        target = emacs_link['target'].format(script_dir=script_dir, home=home)
-
-        # Create .config directory if needed for doom
-        if emacs_choice == "doom":
-            config_dir = os.path.join(home, ".config")
-            if not os.path.exists(config_dir):
-                os.makedirs(config_dir)
-
-        if not check_only:
-            link(emacs_link['name'], source, target)
-
-    # Apply all other symlinks
-    print("\n  applying symlinks...")
+    # Apply all general symlinks (zsh, p10k, editorconfig, etc.)
     apply_symlinks(config['symlinks'], script_dir, home, check_only)
 
     # Setup jdtls links if present
+    # Use link_force to update symlinks when jdtls version changes
     if not check_only and command_exists("jenv"):
         jdtls_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/config_mac")
         if jdtls_patterns:
             jdtls_dir = os.path.join(home, "tools/jdtls")
             os.makedirs(jdtls_dir, exist_ok=True)
-            link("jdtls/config_mac", jdtls_patterns[0], os.path.join(jdtls_dir, "config_mac"))
+            link_force("jdtls/config_mac", jdtls_patterns[0], os.path.join(jdtls_dir, "config_mac"))
 
         jdtls_plugin_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/plugins")
         if jdtls_plugin_patterns:
-            link("jdtls/plugins", jdtls_plugin_patterns[0], os.path.join(home, "tools/jdtls/plugins"))
+            link_force("jdtls/plugins", jdtls_plugin_patterns[0], os.path.join(home, "tools/jdtls/plugins"))
 
     # Configure Java if jenv is installed
     if command_exists("jenv") and not check_only:
@@ -1030,9 +1054,9 @@ def sync_packages(config_path, config):
 
 def main():
     parser = argparse.ArgumentParser(description='setup development environment in layers')
-    parser.add_argument('--check', action='store_true', help='only check what would be installed')
-    parser.add_argument('--layer', type=int, choices=[1, 2, 3, 4], help='run specific layer only')
-    parser.add_argument('--sync', action='store_true', help='sync installed packages with setup.toml')
+    parser.add_argument('-c', '--check', action='store_true', help='only check what would be installed')
+    parser.add_argument('-l', '--layer', type=int, choices=[1, 2, 3, 4], help='run specific layer only')
+    parser.add_argument('-s', '--sync', action='store_true', help='sync installed packages with setup.toml')
     args = parser.parse_args()
 
     # macOS only for now
@@ -1085,7 +1109,7 @@ def main():
         layer2_emacs(config, home, args.check)
 
     if args.layer is None or args.layer == 3:
-        layer3_doom(config, home, args.check)
+        layer3_doom(config, script_dir, home, args.check)
 
     if args.layer is None or args.layer == 4:
         layer4_symlinks(config, script_dir, home, args.check)

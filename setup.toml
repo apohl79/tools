@@ -290,6 +290,11 @@ name = "clang-format"
 source = "{script_dir}/.clang-format"
 target = "{home}/.clang-format"
 
+[[symlinks]]
+name = "editorconfig"
+source = "{script_dir}/.editorconfig"
+target = "{home}/.editorconfig"
+
 # Emacs configuration symlinks (chosen during setup)
 [emacs_symlinks.doom]
 name = "doom"
