@@ -1,6 +1,3 @@
-# Simplified layered configuration for setup.py
-# Installation proceeds in sequential layers
-
 # Layer 0: Shell setup (runs before all other layers)
 [layer0]
 name = "Shell Setup"
