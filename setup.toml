@@ -1,6 +1,12 @@
 # Simplified layered configuration for setup.py
 # Installation proceeds in sequential layers
 
+# Layer 0: Shell setup (runs before all other layers)
+[layer0]
+name = "Shell Setup"
+oh_my_zsh_url = "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
+powerlevel10k_repo = "https://github.com/romkatv/powerlevel10k.git"
+
 # Layer 1: Base system packages
 [layer1]
 name = "Base System Packages"

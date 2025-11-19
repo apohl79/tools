@@ -682,8 +682,17 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
 
     # Build new TOML content
     content = []
-    content.append("# Simplified layered configuration for setup.py\n")
-    content.append("# Installation proceeds in sequential layers\n\n")
+
+    # Copy Layer 0 from original file
+    in_layer0 = False
+    for line in lines:
+        if line.startswith("# Layer 0:") or line.startswith("[layer0]"):
+            in_layer0 = True
+        elif line.startswith("# Layer 1:") or line.startswith("[layer1]"):
+            in_layer0 = False
+            break
+        if in_layer0:
+            content.append(line)
 
     # Layer 1
     content.append("# Layer 1: Base system packages\n")
@@ -714,7 +723,7 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
         content.append(f'    "{pkg}",\n')
     content.append("]\n\n")
 
-    # Copy layer2, layer3, symlinks, emacs_symlinks, and shell sections from original
+    # Copy layer2, layer3, and layer4 sections from original
     in_layer2_or_later = False
     for line in lines:
         if line.startswith("# Layer 2:") or line.startswith("[layer2]"):
