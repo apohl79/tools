@@ -163,6 +163,63 @@ def load_config(config_path):
         return tomllib.load(f)
 
 
+def load_ignored_packages():
+    """load ignored packages from ~/.config/setup-tools/ignored_packages.toml."""
+    ignored_path = os.path.expanduser("~/.config/setup-tools/ignored_packages.toml")
+    if os.path.exists(ignored_path):
+        with open(ignored_path, 'rb') as f:
+            return tomllib.load(f)
+    return {}
+
+
+def save_ignored_packages(ignored_packages, keep_dependencies=None):
+    """save ignored packages to ~/.config/setup-tools/ignored_packages.toml."""
+    ignored_path = os.path.expanduser("~/.config/setup-tools/ignored_packages.toml")
+    os.makedirs(os.path.dirname(ignored_path), exist_ok=True)
+
+    content = []
+    content.append("# Packages to ignore during sync\n")
+    content.append("# This file is read by setup.py when syncing packages\n\n")
+
+    if ignored_packages.get('brew_formulae'):
+        content.append("brew_formulae = [\n")
+        for pkg in sorted(ignored_packages['brew_formulae']):
+            content.append(f'    "{pkg}",\n')
+        content.append("]\n\n")
+
+    if ignored_packages.get('brew_casks'):
+        content.append("brew_casks = [\n")
+        for pkg in sorted(ignored_packages['brew_casks']):
+            content.append(f'    "{pkg}",\n')
+        content.append("]\n\n")
+
+    if ignored_packages.get('npm_packages'):
+        content.append("npm_packages = [\n")
+        for pkg in sorted(ignored_packages['npm_packages']):
+            content.append(f'    "{pkg}",\n')
+        content.append("]\n\n")
+
+    if ignored_packages.get('pip_packages'):
+        content.append("pip_packages = [\n")
+        for pkg in sorted(ignored_packages['pip_packages']):
+            content.append(f'    "{pkg}",\n')
+        content.append("]\n")
+
+    # Add kept dependencies section
+    if keep_dependencies:
+        content.append("\n# Dependency packages to keep (not remove during sync)\n")
+        content.append("[keep_dependencies]\n")
+
+        if keep_dependencies.get('brew_formulae'):
+            content.append("brew_formulae = [\n")
+            for pkg in sorted(keep_dependencies['brew_formulae']):
+                content.append(f'    "{pkg}",\n')
+            content.append("]\n")
+
+    with open(ignored_path, 'w') as f:
+        f.writelines(content)
+
+
 def install_brew_packages(packages, check_only=False):
     """install missing brew packages."""
     if not packages:
@@ -266,9 +323,9 @@ def apply_symlinks(symlinks, script_dir, home, check_only=False):
                 link(symlink['name'], source, target)
 
 
-def setup_shell(config, home, check_only=False):
-    """setup oh-my-zsh and powerlevel10k."""
-    print("\n=== Shell Configuration ===")
+def layer0_shell(config, home, check_only=False):
+    """Layer 0: Setup oh-my-zsh and powerlevel10k."""
+    print("\n=== Layer 0: Shell Setup ===")
 
     oh_my_zsh_path = os.path.join(home, ".oh-my-zsh", "oh-my-zsh.sh")
     zsh_custom = os.environ.get("ZSH_CUSTOM", os.path.join(home, ".oh-my-zsh/custom"))
@@ -282,7 +339,7 @@ def setup_shell(config, home, check_only=False):
             print("  ✗ powerlevel10k theme is missing")
             if not check_only:
                 print("  installing powerlevel10k...")
-                run_command(f"git clone --depth=1 {config['shell']['powerlevel10k_repo']} {p10k_path}")
+                run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
     else:
         print("  ✗ oh-my-zsh is not installed")
         if not check_only:
@@ -293,10 +350,10 @@ def setup_shell(config, home, check_only=False):
             print("  installing oh-my-zsh...")
             env = os.environ.copy()
             env["RUNZSH"] = "no"
-            run_command(f'sh -c "$(curl -fsSL {config["shell"]["oh_my_zsh_url"]})"', env=env)
+            run_command(f'sh -c "$(curl -fsSL {config["layer0"]["oh_my_zsh_url"]})"', env=env)
 
             print("  installing powerlevel10k...")
-            run_command(f"git clone --depth=1 {config['shell']['powerlevel10k_repo']} {p10k_path}")
+            run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
 
 
 def layer1_base_packages(config, check_only=False):
@@ -399,7 +456,7 @@ def layer3_doom(config, script_dir, home, check_only=False):
 
     # Apply emacs config symlink if chosen
     if emacs_choice:
-        emacs_link = config['emacs_symlinks'][emacs_choice]
+        emacs_link = config['layer4']['emacs_symlinks'][emacs_choice]
         source = emacs_link['source'].format(script_dir=script_dir, home=home)
         target = emacs_link['target'].format(script_dir=script_dir, home=home)
 
@@ -454,7 +511,7 @@ def layer4_symlinks(config, script_dir, home, check_only=False):
     print("\n=== Layer 4: Symlinks ===")
 
     # Apply all general symlinks (zsh, p10k, editorconfig, etc.)
-    apply_symlinks(config['symlinks'], script_dir, home, check_only)
+    apply_symlinks(config['layer4']['symlinks'], script_dir, home, check_only)
 
     # Setup jdtls links if present
     # Use link_force to update symlinks when jdtls version changes
@@ -502,8 +559,11 @@ def get_all_installed_packages():
     return packages
 
 
-def compare_packages(installed, config_packages, ignored_packages):
+def compare_packages(installed, config_packages, ignored_packages, keep_dependencies=None):
     """Compare installed packages with config and return differences."""
+    if keep_dependencies is None:
+        keep_dependencies = {}
+
     diffs = {
         'brew_formulae': {'to_add': set(), 'to_remove': set(), 'to_remove_deps': set()},
         'brew_casks': {'to_add': set(), 'to_remove': set()},
@@ -519,6 +579,7 @@ def compare_packages(installed, config_packages, ignored_packages):
     installed_brew = installed['brew_formulae'] | installed['brew_casks']
     ignored_brew_formulae = set(ignored_packages.get('brew_formulae', []))
     ignored_brew_casks = set(ignored_packages.get('brew_casks', []))
+    keep_deps_brew_formulae = set(keep_dependencies.get('brew_formulae', []))
 
     # Create a normalized version of config_brew for comparison (strip tap prefixes)
     config_brew_normalized = set()
@@ -545,8 +606,10 @@ def compare_packages(installed, config_packages, ignored_packages):
         if pkg_name not in installed_brew:
             # Check if it's installed as a dependency (in all packages but not in leaves)
             if pkg_name in all_brew_formulae:
-                # It's installed but only as a dependency - mark for removal
-                diffs['brew_formulae']['to_remove_deps'].add(pkg)
+                # It's installed but only as a dependency
+                # Only mark for removal if not in keep_dependencies
+                if pkg not in keep_deps_brew_formulae and pkg_name not in keep_deps_brew_formulae:
+                    diffs['brew_formulae']['to_remove_deps'].add(pkg)
             else:
                 # Not installed at all - genuinely removed
                 diffs['brew_formulae']['to_remove'].add(pkg)
@@ -578,15 +641,17 @@ def compare_packages(installed, config_packages, ignored_packages):
     return diffs
 
 
-def write_toml_config(config_path, config, package_updates, ignored_updates):
+def write_toml_config(config_path, config, package_updates, ignored_updates, keep_dependencies=None):
     """Write updated config back to TOML file."""
     import shutil
-    from datetime import datetime
 
     # Create backup
     backup_path = f"{config_path}.bak"
     shutil.copy2(config_path, backup_path)
     print(f"\nCreated backup: {backup_path}")
+
+    # Save ignored packages to separate file
+    save_ignored_packages(ignored_updates, keep_dependencies)
 
     # Read original file to preserve comments
     with open(config_path, 'r') as f:
@@ -649,35 +714,6 @@ def write_toml_config(config_path, config, package_updates, ignored_updates):
         content.append(f'    "{pkg}",\n')
     content.append("]\n\n")
 
-    # Add ignored packages section
-    if any(ignored_updates.values()):
-        content.append("# Packages to ignore during sync\n")
-        content.append("[ignored_packages]\n")
-
-        if ignored_updates.get('brew_formulae'):
-            content.append("brew_formulae = [\n")
-            for pkg in sorted(ignored_updates['brew_formulae']):
-                content.append(f'    "{pkg}",\n')
-            content.append("]\n\n")
-
-        if ignored_updates.get('brew_casks'):
-            content.append("brew_casks = [\n")
-            for pkg in sorted(ignored_updates['brew_casks']):
-                content.append(f'    "{pkg}",\n')
-            content.append("]\n\n")
-
-        if ignored_updates.get('npm_packages'):
-            content.append("npm_packages = [\n")
-            for pkg in sorted(ignored_updates['npm_packages']):
-                content.append(f'    "{pkg}",\n')
-            content.append("]\n\n")
-
-        if ignored_updates.get('pip_packages'):
-            content.append("pip_packages = [\n")
-            for pkg in sorted(ignored_updates['pip_packages']):
-                content.append(f'    "{pkg}",\n')
-            content.append("]\n\n")
-
     # Copy layer2, layer3, symlinks, emacs_symlinks, and shell sections from original
     in_layer2_or_later = False
     for line in lines:
@@ -691,6 +727,7 @@ def write_toml_config(config_path, config, package_updates, ignored_updates):
         f.writelines(content)
 
     print(f"Updated: {config_path}")
+    print(f"Updated: ~/.config/setup-tools/ignored_packages.toml")
 
 
 def interactive_package_menu(diffs, current_ignored):
@@ -890,7 +927,7 @@ def interactive_package_menu(diffs, current_ignored):
             key = stdscr.getch()
 
             if key == ord('q') or key == 27:  # q or ESC
-                return None, None
+                return None, None, None
             elif key == ord('s'):
                 # Save and exit
                 result_updates = {
@@ -905,6 +942,15 @@ def interactive_package_menu(diffs, current_ignored):
                     'npm_packages': set(current_ignored.get('npm_packages', [])),
                     'pip_packages': set(current_ignored.get('pip_packages', []))
                 }
+                result_kept_deps = {
+                    'brew_formulae': set()
+                }
+
+                # Track which packages are dependency packages
+                dep_packages = set()
+                for cat in categories:
+                    for pkg in cat.get('to_remove_deps', []):
+                        dep_packages.add(f"{cat['key']}:{pkg}")
 
                 for key, state in package_states.items():
                     cat_key, pkg = key.split(':', 1)
@@ -915,8 +961,12 @@ def interactive_package_menu(diffs, current_ignored):
                     elif state == 'ignore':
                         ignored_key = cat_key if cat_key.startswith('brew_') else f"{cat_key}_packages"
                         result_ignored[ignored_key].add(pkg)
+                    elif state == 'keep' and key in dep_packages:
+                        # This is a dependency package being kept
+                        if cat_key == 'brew_formulae':
+                            result_kept_deps['brew_formulae'].add(pkg)
 
-                return result_updates, result_ignored
+                return result_updates, result_ignored, result_kept_deps
             elif key == curses.KEY_UP:
                 current_row = max(0, current_row - 1)
             elif key == curses.KEY_DOWN:
@@ -1005,11 +1055,18 @@ def sync_packages(config_path, config):
     print(f"  Config has {len(config_packages['npm_packages'])} npm packages")
     print(f"  Config has {len(config_packages['pip_packages'])} pip packages")
 
-    # Load ignored packages
-    ignored_packages = config.get('ignored_packages', {})
+    # Load ignored packages from ~/.config/setup-tools/ignored_packages.toml
+    ignored_config = load_ignored_packages()
+    ignored_packages = {
+        'brew_formulae': ignored_config.get('brew_formulae', []),
+        'brew_casks': ignored_config.get('brew_casks', []),
+        'npm_packages': ignored_config.get('npm_packages', []),
+        'pip_packages': ignored_config.get('pip_packages', [])
+    }
+    keep_dependencies = ignored_config.get('keep_dependencies', {})
 
     # Compare
-    diffs = compare_packages(installed, config_packages, ignored_packages)
+    diffs = compare_packages(installed, config_packages, ignored_packages, keep_dependencies)
 
     # Check if there are any differences
     has_diffs = any(
@@ -1039,24 +1096,264 @@ def sync_packages(config_path, config):
     print("(Arrow keys: navigate | Enter/Tab: expand/collapse | Space: cycle state | s: save | q: quit)\n")
 
     # Show interactive menu
-    updates, ignored_updates = interactive_package_menu(diffs, ignored_packages)
+    updates, ignored_updates, kept_deps = interactive_package_menu(diffs, ignored_packages)
 
     if updates is None:
         print("\nSync cancelled.")
         return
 
+    # Merge kept dependencies with existing ones
+    if kept_deps:
+        if 'brew_formulae' in kept_deps:
+            existing_kept = set(keep_dependencies.get('brew_formulae', []))
+            keep_dependencies['brew_formulae'] = list(existing_kept | kept_deps['brew_formulae'])
+
     # Apply updates
     print("\nApplying changes...")
-    write_toml_config(config_path, config, updates, ignored_updates)
+    write_toml_config(config_path, config, updates, ignored_updates, keep_dependencies)
 
     print("\n✓ Sync complete!")
+
+
+def interactive_manage_ignored(ignored_packages, keep_dependencies):
+    """Interactive curses menu for managing ignored and kept packages."""
+    try:
+        import curses
+    except ImportError:
+        print("Error: curses module not available")
+        return None
+
+    def menu_main(stdscr):
+        # Initialize curses
+        curses.curs_set(0)
+        curses.init_pair(1, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
+        curses.init_pair(4, curses.COLOR_CYAN, curses.COLOR_BLACK)
+        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLUE)
+
+        # Build package lists
+        categories = [
+            {
+                'name': 'Ignored Brew Formulae',
+                'key': 'brew_formulae',
+                'packages': sorted(ignored_packages.get('brew_formulae', [])),
+                'expanded': False
+            },
+            {
+                'name': 'Ignored Brew Casks',
+                'key': 'brew_casks',
+                'packages': sorted(ignored_packages.get('brew_casks', [])),
+                'expanded': False
+            },
+            {
+                'name': 'Ignored NPM Packages',
+                'key': 'npm_packages',
+                'packages': sorted(ignored_packages.get('npm_packages', [])),
+                'expanded': False
+            },
+            {
+                'name': 'Ignored Python Packages',
+                'key': 'pip_packages',
+                'packages': sorted(ignored_packages.get('pip_packages', [])),
+                'expanded': False
+            },
+            {
+                'name': 'Kept Dependencies (Brew Formulae)',
+                'key': 'keep_deps_brew',
+                'packages': sorted(keep_dependencies.get('brew_formulae', [])),
+                'expanded': False
+            }
+        ]
+
+        # Track package states: 'keep' or 'remove'
+        package_states = {}
+        for cat in categories:
+            for pkg in cat['packages']:
+                package_states[f"{cat['key']}:{pkg}"] = 'keep'
+
+        current_row = 0
+
+        while True:
+            stdscr.clear()
+            h, w = stdscr.getmaxyx()
+
+            # Draw header
+            header = "Manage Ignored/Kept Packages - Arrows: navigate | Enter/Tab: expand/collapse | Space: toggle | s: save | q: quit"
+            stdscr.attron(curses.color_pair(5))
+            stdscr.addstr(0, 0, header[:w-1].ljust(w-1))
+            stdscr.attroff(curses.color_pair(5))
+
+            # Count changes
+            to_remove_count = sum(1 for v in package_states.values() if v == 'remove')
+
+            summary = f"Packages to remove from lists: {to_remove_count}"
+            stdscr.addstr(1, 2, summary)
+
+            # Draw categories and packages
+            row = 3
+            menu_items = []
+
+            for cat_idx, cat in enumerate(categories):
+                if row >= h - 1:
+                    break
+
+                total_in_cat = len(cat['packages'])
+                if total_in_cat == 0:
+                    continue
+
+                # Category header
+                menu_items.append(('category', cat_idx, None))
+                prefix = "▼" if cat['expanded'] else "▶"
+                cat_line = f"{prefix} {cat['name']} ({total_in_cat})"
+
+                if current_row == len(menu_items) - 1:
+                    stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
+                    stdscr.addstr(row, 2, cat_line[:w-3])
+                    stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+                else:
+                    stdscr.attron(curses.A_BOLD)
+                    stdscr.addstr(row, 2, cat_line[:w-3])
+                    stdscr.attroff(curses.A_BOLD)
+                row += 1
+
+                # Show packages if expanded
+                if cat['expanded']:
+                    for pkg in cat['packages']:
+                        if row >= h - 1:
+                            break
+                        key = f"{cat['key']}:{pkg}"
+                        state = package_states.get(key, 'keep')
+                        menu_items.append(('package', cat_idx, pkg))
+
+                        if state == 'remove':
+                            state_str = "[REMOVE]  "
+                            color = 2  # red
+                        else:
+                            state_str = "[KEEP]    "
+                            color = 1  # green
+
+                        pkg_line = f"    {state_str} {pkg}"
+
+                        if current_row == len(menu_items) - 1:
+                            stdscr.attron(curses.color_pair(color) | curses.A_REVERSE)
+                            stdscr.addstr(row, 2, pkg_line[:w-3])
+                            stdscr.attroff(curses.color_pair(color) | curses.A_REVERSE)
+                        else:
+                            stdscr.attron(curses.color_pair(color))
+                            stdscr.addstr(row, 2, pkg_line[:w-3])
+                            stdscr.attroff(curses.color_pair(color))
+                        row += 1
+
+            stdscr.refresh()
+
+            # Handle input
+            key = stdscr.getch()
+
+            if key == ord('q') or key == 27:  # q or ESC
+                return None
+            elif key == ord('s'):
+                # Save and exit
+                result_ignored = {
+                    'brew_formulae': set(),
+                    'brew_casks': set(),
+                    'npm_packages': set(),
+                    'pip_packages': set()
+                }
+                result_kept_deps = {
+                    'brew_formulae': set()
+                }
+
+                for key, state in package_states.items():
+                    if state == 'keep':
+                        cat_key, pkg = key.split(':', 1)
+                        if cat_key == 'keep_deps_brew':
+                            result_kept_deps['brew_formulae'].add(pkg)
+                        else:
+                            result_ignored[cat_key].add(pkg)
+
+                return result_ignored, result_kept_deps
+            elif key == curses.KEY_UP:
+                current_row = max(0, current_row - 1)
+            elif key == curses.KEY_DOWN:
+                current_row = min(len(menu_items) - 1, current_row + 1)
+            elif key == ord('\n') or key == curses.KEY_ENTER or key == ord('\t') or key == 9:
+                # Toggle category expansion
+                if current_row < len(menu_items):
+                    item_type, cat_idx, pkg = menu_items[current_row]
+                    if item_type == 'category':
+                        categories[cat_idx]['expanded'] = not categories[cat_idx]['expanded']
+                    elif item_type == 'package':
+                        categories[cat_idx]['expanded'] = False
+            elif key == ord(' '):
+                # Toggle package state
+                if current_row < len(menu_items):
+                    item_type, cat_idx, pkg = menu_items[current_row]
+                    if item_type == 'package':
+                        cat = categories[cat_idx]
+                        key = f"{cat['key']}:{pkg}"
+                        current_state = package_states.get(key, 'keep')
+                        # Toggle between keep and remove
+                        package_states[key] = 'remove' if current_state == 'keep' else 'keep'
+
+    return curses.wrapper(menu_main)
+
+
+def manage_ignored_packages():
+    """Manage ignored and kept packages interactively."""
+    print("=== Manage Ignored/Kept Packages ===\n")
+
+    # Load current ignored packages
+    ignored_config = load_ignored_packages()
+    ignored_packages = {
+        'brew_formulae': ignored_config.get('brew_formulae', []),
+        'brew_casks': ignored_config.get('brew_casks', []),
+        'npm_packages': ignored_config.get('npm_packages', []),
+        'pip_packages': ignored_config.get('pip_packages', [])
+    }
+    keep_dependencies = ignored_config.get('keep_dependencies', {})
+
+    # Count packages
+    total_ignored = (len(ignored_packages['brew_formulae']) +
+                     len(ignored_packages['brew_casks']) +
+                     len(ignored_packages['npm_packages']) +
+                     len(ignored_packages['pip_packages']))
+    total_kept = len(keep_dependencies.get('brew_formulae', []))
+
+    print(f"Currently managing:")
+    print(f"  {total_ignored} ignored packages")
+    print(f"  {total_kept} kept dependency packages")
+
+    if total_ignored == 0 and total_kept == 0:
+        print("\nNo ignored or kept packages to manage.")
+        return
+
+    print("\nLaunching interactive menu...")
+    print("(Arrow keys: navigate | Enter/Tab: expand/collapse | Space: toggle | s: save | q: quit)\n")
+
+    # Show interactive menu
+    result = interactive_manage_ignored(ignored_packages, keep_dependencies)
+
+    if result is None:
+        print("\nCancelled.")
+        return
+
+    result_ignored, result_kept_deps = result
+
+    # Save changes
+    print("\nSaving changes...")
+    save_ignored_packages(result_ignored, result_kept_deps)
+    print(f"Updated: ~/.config/setup-tools/ignored_packages.toml")
+
+    print("\n✓ Management complete!")
 
 
 def main():
     parser = argparse.ArgumentParser(description='setup development environment in layers')
     parser.add_argument('-c', '--check', action='store_true', help='only check what would be installed')
-    parser.add_argument('-l', '--layer', type=int, choices=[1, 2, 3, 4], help='run specific layer only')
+    parser.add_argument('-l', '--layer', type=int, choices=[0, 1, 2, 3, 4], help='run specific layer only')
     parser.add_argument('-s', '--sync', action='store_true', help='sync installed packages with setup.toml')
+    parser.add_argument('-m', '--manage-ignored', action='store_true', help='manage ignored and kept packages')
     args = parser.parse_args()
 
     # macOS only for now
@@ -1085,6 +1382,11 @@ def main():
 
     config = load_config(config_path)
 
+    # Handle manage-ignored mode
+    if args.manage_ignored:
+        manage_ignored_packages()
+        return
+
     # Handle sync mode
     if args.sync:
         sync_packages(config_path, config)
@@ -1098,10 +1400,10 @@ def main():
         else:
             print("  homebrew would be installed")
 
-    # Setup shell
-    setup_shell(config, home, args.check)
-
     # Run layers
+    if args.layer is None or args.layer == 0:
+        layer0_shell(config, home, args.check)
+
     if args.layer is None or args.layer == 1:
         layer1_base_packages(config, args.check)
 
