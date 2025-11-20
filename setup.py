@@ -7,6 +7,7 @@ import shutil
 import glob
 import argparse
 import json
+import importlib
 
 # Python 3.11+ has tomllib built-in, older versions need tomli
 try:
@@ -21,8 +22,8 @@ except ModuleNotFoundError:
         if result.returncode == 0:
             print("✓ tomli installed successfully")
 
-            # Add tomli to ignored packages so it doesn't show up in sync
-            import tomli as tomllib
+            # Dynamically import the newly installed tomli module
+            tomllib = importlib.import_module('tomli')
             ignored_path = os.path.expanduser("~/.config/setup-tools/ignored_packages.toml")
             os.makedirs(os.path.dirname(ignored_path), exist_ok=True)
 
