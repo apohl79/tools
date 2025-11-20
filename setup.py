@@ -349,7 +349,7 @@ def install_brew_packages(packages, check_only=False):
         if not check_only:
             print("  installing...")
             for package in missing:
-                print(f"    installing {package}...")
+                #print(f"    installing {package}...")
                 run_command(f"brew install {package}")
     else:
         print(f"  all {len(packages)} packages already installed")
@@ -371,7 +371,7 @@ def install_npm_packages(packages, check_only=False):
     if missing:
         print(f"  missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
-            print("  installing...")
+            #print("  installing...")
             for package in missing:
                 print(f"    installing {package}...")
                 run_command(f"npm install -g {package}")
@@ -396,7 +396,7 @@ def install_pip_packages(packages, check_only=False):
         if not check_only:
             print("  installing...")
             for package in missing:
-                print(f"    installing {package}...")
+                #print(f"    installing {package}...")
                 run_command(f"pip3 install {package}")
     else:
         print(f"  all {len(packages)} packages already installed")
