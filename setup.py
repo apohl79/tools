@@ -9,6 +9,10 @@ import argparse
 import json
 import importlib
 
+# ANSI color codes
+GREEN = '\033[92m'
+RESET = '\033[0m'
+
 # Python 3.11+ has tomllib built-in, older versions need tomli
 try:
     import tomllib
@@ -411,7 +415,7 @@ def apply_symlinks(symlinks, script_dir, home, check_only=False):
 
 def layer0_shell(config, home, check_only=False):
     """Layer 0: Setup oh-my-zsh and powerlevel10k."""
-    print("\n=== Layer 0: Shell Setup ===")
+    print(f"\n{GREEN}=== Layer 0: Shell Setup ==={RESET}")
 
     oh_my_zsh_path = os.path.join(home, ".oh-my-zsh", "oh-my-zsh.sh")
     zsh_custom = os.environ.get("ZSH_CUSTOM", os.path.join(home, ".oh-my-zsh/custom"))
@@ -444,7 +448,7 @@ def layer0_shell(config, home, check_only=False):
 
 def layer1_base_packages(config, check_only=False):
     """Layer 1: Install all base system packages."""
-    print("\n=== Layer 1: Base System Packages ===")
+    print(f"\n{GREEN}=== Layer 1: Base System Packages ==={RESET}")
 
     # Add homebrew taps
     if not check_only:
@@ -468,7 +472,7 @@ def layer1_base_packages(config, check_only=False):
 
 def layer2_emacs(config, home, check_only=False):
     """Layer 2: Install Emacs."""
-    print("\n=== Layer 2: Emacs Installation ===")
+    print(f"\n{GREEN}=== Layer 2: Emacs Installation ==={RESET}")
 
     needs_emacs = not command_exists("emacs")
 
@@ -506,7 +510,7 @@ def layer2_emacs(config, home, check_only=False):
 
 def layer3_doom(config, script_dir, home, check_only=False):
     """Layer 3: Install Doom Emacs and setup config."""
-    print("\n=== Layer 3: Doom Emacs ===")
+    print(f"\n{GREEN}=== Layer 3: Doom Emacs ==={RESET}")
 
     # First, determine and setup emacs config symlink
     existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
@@ -594,7 +598,7 @@ def layer3_doom(config, script_dir, home, check_only=False):
 
 def layer4_symlinks(config, script_dir, home, check_only=False):
     """Layer 4: Setup general symlinks."""
-    print("\n=== Layer 4: Symlinks ===")
+    print(f"\n{GREEN}=== Layer 4: Symlinks ==={RESET}")
 
     # Apply all general symlinks (zsh, p10k, editorconfig, etc.)
     apply_symlinks(config['layer4']['symlinks'], script_dir, home, check_only)
@@ -623,7 +627,7 @@ def layer4_symlinks(config, script_dir, home, check_only=False):
 
 def layer5_sudo(config, script_dir, home, check_only=False):
     """Layer 5: Configure sudo (Touch ID or custom binary)."""
-    print("\n=== Layer 5: Sudo Configuration ===")
+    print(f"\n{GREEN}=== Layer 5: Sudo Configuration ==={RESET}")
 
     # Check Touch ID status
     pam_file = config['layer5']['touchid']['pam_file']
@@ -1342,7 +1346,7 @@ def interactive_package_menu(diffs, current_ignored):
 
 def sync_packages(config_path, config):
     """Sync installed packages with setup.toml."""
-    print("=== Package Sync ===\n")
+    print(f"{GREEN}=== Package Sync ==={RESET}\n")
     print("Scanning installed packages...")
 
     # Get all installed packages
@@ -1626,7 +1630,7 @@ def interactive_manage_ignored(ignored_packages, keep_dependencies):
 
 def manage_ignored_packages():
     """Manage ignored and kept packages interactively."""
-    print("=== Manage Ignored/Kept Packages ===\n")
+    print(f"{GREEN}=== Manage Ignored/Kept Packages ==={RESET}\n")
 
     # Load current ignored packages
     ignored_config = load_ignored_packages()
@@ -1759,12 +1763,12 @@ def main():
         return
 
     # Install Command Line Tools if not present (required for Homebrew)
-    print("=== Command Line Tools ===")
+    print(f"{GREEN}=== Command Line Tools ==={RESET}")
     install_command_line_tools(args.check)
 
     # Install Homebrew if not present
     if not command_exists("brew"):
-        print("\n=== Installing Homebrew ===")
+        print(f"\n{GREEN}=== Installing Homebrew ==={RESET}")
         if not args.check:
             run_command('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
         else:
