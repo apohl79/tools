@@ -16,7 +16,6 @@ brew_taps = [
 # All brew packages (formulae and casks) to install
 brew_packages = [
     "arc",
-    "arduino-ide",
     "awk",
     "base64",
     "basedpyright",
@@ -33,8 +32,6 @@ brew_packages = [
     "cryptomator",
     "dbus",
     "dcfldd",
-    "docker",
-    "docker-desktop",
     "dos2unix",
     "drawio",
     "editorconfig",
@@ -111,7 +108,7 @@ brew_packages = [
     "protoc-gen-grpc-web",
     "pytest",
     "python-packaging",
-    "python@3.11",
+    "python@3.14",
     "raycast",
     "reaper",
     "rectangle",
