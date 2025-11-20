@@ -80,11 +80,11 @@ except ModuleNotFoundError:
                     # Add new section
                     if file_content and not file_content.endswith('\n\n'):
                         file_content += '\n\n' if file_content.endswith('\n') else '\n\n'
-                    file_content += 'pip_packages = [\n    "tomli",\n]\n'
+                    file_content += 'pip_packages = [\n"tomli",\n]\n'
                     with open(ignored_path, 'w') as f:
                         f.write(file_content)
 
-                print("  Added tomli to ignored packages")
+                print("Added tomli to ignored packages")
         else:
             print("✗ Failed to install tomli")
             print("Please install manually with: pip3 install tomli")
@@ -101,16 +101,16 @@ def link(name, source, target):
     """create a symlink if it doesn't exist."""
     # Use lexists to detect both valid symlinks and broken symlinks
     if not os.path.lexists(target):
-        print(f"  linking {name} ({source} -> {target})")
+        print(f"linking {name} ({source} -> {target})")
         os.symlink(source, target)
     elif os.path.islink(target):
         # Symlink exists - check if it points to the correct location
         if os.readlink(target) == source:
-            print(f"  skipping {name} (already linked correctly)")
+            print(f"skipping {name} (already linked correctly)")
         else:
-            print(f"  skipping {name} (symlink exists but points to {os.readlink(target)})")
+            print(f"skipping {name} (symlink exists but points to {os.readlink(target)})")
     else:
-        print(f"  skipping {name} (exists as regular file/directory)")
+        print(f"skipping {name} (exists as regular file/directory)")
 
 
 def link_force(name, source, target):
@@ -345,14 +345,14 @@ def install_brew_packages(packages, check_only=False):
             missing.append(pkg)
 
     if missing:
-        print(f"  missing ({len(missing)}): {', '.join(missing)}")
+        print(f"missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
-            print("  installing...")
+            print("installing...")
             for package in missing:
-                #print(f"    installing {package}...")
+                #print(f"installing {package}...")
                 run_command(f"brew install {package}")
     else:
-        print(f"  all {len(packages)} packages already installed")
+        print(f"all {len(packages)} packages already installed")
 
 
 def install_npm_packages(packages, check_only=False):
@@ -369,14 +369,14 @@ def install_npm_packages(packages, check_only=False):
             missing.append(pkg)
 
     if missing:
-        print(f"  missing ({len(missing)}): {', '.join(missing)}")
+        print(f"missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
-            #print("  installing...")
+            #print("installing...")
             for package in missing:
-                print(f"    installing {package}...")
+                print(f"installing {package}...")
                 run_command(f"npm install -g {package}")
     else:
-        print(f"  all {len(packages)} packages already installed")
+        print(f"all {len(packages)} packages already installed")
 
 
 def install_pip_packages(packages, check_only=False):
@@ -392,14 +392,14 @@ def install_pip_packages(packages, check_only=False):
             missing.append(pkg)
 
     if missing:
-        print(f"  missing ({len(missing)}): {', '.join(missing)}")
+        print(f"missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
-            print("  installing...")
+            print("installing...")
             for package in missing:
-                #print(f"    installing {package}...")
+                #print(f"installing {package}...")
                 run_command(f"pip3 install {package}")
     else:
-        print(f"  all {len(packages)} packages already installed")
+        print(f"all {len(packages)} packages already installed")
 
 
 def apply_symlinks(symlinks, script_dir, home, check_only=False):
@@ -412,16 +412,16 @@ def apply_symlinks(symlinks, script_dir, home, check_only=False):
 
         if os.path.exists(target):
             if check_symlink(source, target):
-                print(f"  ✓ {symlink['name']} is correctly linked")
+                print(f"✓ {symlink['name']} is correctly linked")
             else:
-                print(f"  ✗ {symlink['name']} exists but points to wrong location")
+                print(f"✗ {symlink['name']} exists but points to wrong location")
                 needs_update.append(symlink)
         else:
-            print(f"  ✗ {symlink['name']} is missing")
+            print(f"✗ {symlink['name']} is missing")
             needs_update.append(symlink)
 
     if needs_update and not check_only:
-        print("\n  updating symlinks...")
+        print("\nupdating symlinks...")
         for symlink in needs_update:
             source = symlink['source'].format(script_dir=script_dir, home=home)
             target = symlink['target'].format(script_dir=script_dir, home=home)
@@ -441,27 +441,27 @@ def layer0_shell(config, home, check_only=False):
     p10k_path = os.path.join(zsh_custom, "themes/powerlevel10k")
 
     if os.path.exists(oh_my_zsh_path):
-        print("  ✓ oh-my-zsh is installed")
+        print("✓ oh-my-zsh is installed")
         if os.path.exists(p10k_path):
-            print("  ✓ powerlevel10k theme is installed")
+            print("✓ powerlevel10k theme is installed")
         else:
-            print("  ✗ powerlevel10k theme is missing")
+            print("✗ powerlevel10k theme is missing")
             if not check_only:
-                print("  installing powerlevel10k...")
+                print("installing powerlevel10k...")
                 run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
     else:
-        print("  ✗ oh-my-zsh is not installed")
+        print("✗ oh-my-zsh is not installed")
         if not check_only:
             for path in [os.path.join(home, ".oh-my-zsh"), "/etc/oh-my-zsh"]:
                 if os.path.exists(path):
                     shutil.rmtree(path)
 
-            print("  installing oh-my-zsh...")
+            print("installing oh-my-zsh...")
             env = os.environ.copy()
             env["RUNZSH"] = "no"
             run_command(f'sh -c "$(curl -fsSL {config["layer0"]["oh_my_zsh_url"]})"', env=env)
 
-            print("  installing powerlevel10k...")
+            print("installing powerlevel10k...")
             run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
 
 
@@ -499,77 +499,77 @@ def layer1_sudo(config, script_dir, home, check_only=False):
 
     # Report status
     if touchid_enabled:
-        print("  ✓ Touch ID for sudo is enabled")
+        print("✓ Touch ID for sudo is enabled")
     else:
-        print("  ✗ Touch ID for sudo is not enabled")
+        print("✗ Touch ID for sudo is not enabled")
 
     if custom_sudo_installed:
-        print("  ✓ Custom sudo binary is installed")
+        print("✓ Custom sudo binary is installed")
     else:
-        print("  ✗ Custom sudo binary is not installed")
+        print("✗ Custom sudo binary is not installed")
 
     if check_only:
         return
 
     # Ask user what they want to do
-    print("\n  Choose sudo configuration:")
-    print("   1) Enable Touch ID for sudo (recommended)")
-    print("   2) Install custom sudo binary")
-    print("   3) None (remove both configurations)")
-    print("   4) Skip")
+    print("\nChoose sudo configuration:")
+    print("1) Enable Touch ID for sudo (recommended)")
+    print("2) Install custom sudo binary")
+    print("3) None (remove both configurations)")
+    print("4) Skip")
 
-    choice = input("\n  Select option [1]: ").strip()
+    choice = input("\nSelect option [1]: ").strip()
     if not choice:
         choice = "1"
 
     if choice == "4":
-        print("  Skipping sudo configuration")
+        print("Skipping sudo configuration")
         return
 
     # Option 1: Enable Touch ID (remove custom sudo if exists)
     if choice == "1":
         if custom_sudo_installed:
-            print("\n  Removing custom sudo binary...")
+            print("\nRemoving custom sudo binary...")
             if not remove_custom_sudo(custom_sudo_config, script_dir, home):
                 print("\n✗ Failed to remove custom sudo")
                 sys.exit(1)
         if not touchid_enabled:
-            print("\n  Enabling Touch ID for sudo...")
+            print("\nEnabling Touch ID for sudo...")
             if not enable_touchid_sudo(config['layer1']['touchid']):
                 print("\n✗ Failed to enable Touch ID for sudo")
                 sys.exit(1)
         else:
-            print("\n  Touch ID is already enabled")
+            print("\nTouch ID is already enabled")
 
     # Option 2: Install custom sudo (remove Touch ID if exists)
     elif choice == "2":
         if touchid_enabled:
-            print("\n  Disabling Touch ID for sudo...")
+            print("\nDisabling Touch ID for sudo...")
             if not disable_touchid_sudo(config['layer1']['touchid']):
                 print("\n✗ Failed to disable Touch ID for sudo")
                 sys.exit(1)
         if not custom_sudo_installed:
-            print("\n  Installing custom sudo binary...")
+            print("\nInstalling custom sudo binary...")
             if not install_custom_sudo(custom_sudo_config, script_dir, home):
                 print("\n✗ Custom sudo installation failed")
                 sys.exit(1)
         else:
-            print("\n  Custom sudo is already installed")
+            print("\nCustom sudo is already installed")
 
     # Option 3: None (remove both)
     elif choice == "3":
         if touchid_enabled:
-            print("\n  Disabling Touch ID for sudo...")
+            print("\nDisabling Touch ID for sudo...")
             if not disable_touchid_sudo(config['layer1']['touchid']):
                 print("\n✗ Failed to disable Touch ID for sudo")
                 sys.exit(1)
         if custom_sudo_installed:
-            print("\n  Removing custom sudo binary...")
+            print("\nRemoving custom sudo binary...")
             if not remove_custom_sudo(custom_sudo_config, script_dir, home):
                 print("\n✗ Failed to remove custom sudo")
                 sys.exit(1)
         if not touchid_enabled and not custom_sudo_installed:
-            print("\n  No sudo configurations to remove")
+            print("\nNo sudo configurations to remove")
 
 
 def layer2_base_packages(config, check_only=False):
@@ -580,7 +580,7 @@ def layer2_base_packages(config, check_only=False):
     if not check_only:
         for tap in config['layer2']['brew_taps']:
             if not is_brew_tap_added(tap):
-                print(f"  adding tap: {tap}")
+                print(f"adding tap: {tap}")
                 run_command(f"brew tap {tap}")
 
     # Install brew packages
@@ -603,16 +603,16 @@ def layer3_emacs(config, home, check_only=False):
     needs_emacs = not command_exists("emacs")
 
     if needs_emacs:
-        print("  ✗ Emacs not found")
+        print("✗ Emacs not found")
         if not check_only:
             emacs_formula = config['layer3']['formula']
             options = ' '.join(config['layer3']['options'])
             install_cmd = f"brew install {options} {emacs_formula}"
-            print(f"  installing {emacs_formula}...")
+            print(f"installing {emacs_formula}...")
             run_command(install_cmd)
             run_command("defaults write org.gnu.Emacs TransparentTitleBar DARK")
     else:
-        print("  ✓ Emacs is already installed")
+        print("✓ Emacs is already installed")
 
     # Install dictionaries
     spelling_dir = os.path.join(home, "Library/Spelling")
@@ -625,13 +625,13 @@ def layer3_emacs(config, home, check_only=False):
             missing_dicts.append(dict_entry)
 
     if missing_dicts:
-        print(f"\n  dictionaries: {len(missing_dicts)} missing")
+        print(f"\ndictionaries: {len(missing_dicts)} missing")
         if not check_only:
-            print("  installing dictionaries...")
+            print("installing dictionaries...")
             for dict_entry in missing_dicts:
                 run_command(f"wget -nc {dict_entry['url']} -O {spelling_dir}/{dict_entry['filename']}")
     else:
-        print("  ✓ all dictionaries installed")
+        print("✓ all dictionaries installed")
 
 
 def layer4_doom(config, script_dir, home, check_only=False):
@@ -645,26 +645,26 @@ def layer4_doom(config, script_dir, home, check_only=False):
     emacs_choice = None
     if existing_doom or existing_light:
         setup_type = "doom" if existing_doom else "light"
-        print(f"  detected existing {setup_type} Emacs setup")
+        print(f"detected existing {setup_type} Emacs setup")
         if not check_only:
             use_existing = input(f"  continue with {setup_type} setup? [Y/n]: ").strip()
             if not use_existing or use_existing.lower() in ["y", "yes"]:
                 emacs_choice = setup_type
             else:
-                print("\n  choose emacs setup:")
-                print("   1) doom")
-                print("   2) light")
-                print("   3) skip")
+                print("\nchoose emacs setup:")
+                print("1) doom")
+                print("2) light")
+                print("3) skip")
                 choice = input("  > ").strip()
                 emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
         else:
             emacs_choice = setup_type
     else:
         if not check_only:
-            print("\n  choose emacs setup:")
-            print("   1) doom")
-            print("   2) light")
-            print("   3) skip")
+            print("\nchoose emacs setup:")
+            print("1) doom")
+            print("2) light")
+            print("3) skip")
             choice = input("  > ").strip()
             emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
         else:
@@ -683,15 +683,15 @@ def layer4_doom(config, script_dir, home, check_only=False):
                 os.makedirs(config_dir)
 
         if not check_only:
-            print(f"  setting up {emacs_choice} config...")
+            print(f"setting up {emacs_choice} config...")
             link(emacs_link['name'], source, target)
 
     # Skip Doom installation if user chose light or skip
     if emacs_choice != "doom":
         if emacs_choice == "light":
-            print("  skipping Doom Emacs (using light config)")
+            print("skipping Doom Emacs (using light config)")
         else:
-            print("  skipping Doom Emacs installation")
+            print("skipping Doom Emacs installation")
         return
 
     # Now install Doom Emacs
@@ -699,20 +699,20 @@ def layer4_doom(config, script_dir, home, check_only=False):
     doom_bin = os.path.join(emacs_config_path, "bin/doom")
 
     if os.path.exists(emacs_config_path):
-        print("  ✓ Doom Emacs is installed")
+        print("✓ Doom Emacs is installed")
         if not os.path.exists(doom_bin):
-            print("  ✗ doom binary not found")
+            print("✗ doom binary not found")
             if not check_only:
                 repair = input("  repair Doom Emacs installation? [Y/n]: ").strip()
                 if not repair or repair.lower() in ["y", "yes"]:
-                    print("  running doom sync...")
+                    print("running doom sync...")
                     env = os.environ.copy()
                     env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
                     run_command(f"{doom_bin} sync", env=env)
     else:
-        print("  ✗ Doom Emacs not found")
+        print("✗ Doom Emacs not found")
         if not check_only:
-            print("  installing Doom Emacs...")
+            print("installing Doom Emacs...")
             run_command(f"git clone --depth 1 {config['layer4']['repo']} {emacs_config_path}")
 
             env = os.environ.copy()
@@ -746,7 +746,7 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
     if command_exists("jenv") and not check_only:
         result = subprocess.run(['jenv', 'versions'], capture_output=True, text=True)
         if '21' not in result.stdout:
-            print("\n  configuring java 21...")
+            print("\nconfiguring java 21...")
             run_command("jenv add /opt/homebrew/opt/openjdk@21")
             run_command("jenv global 21")
 
@@ -770,7 +770,7 @@ def enable_touchid_sudo(touchid_config):
                 break
 
         if insert_index == -1:
-            print(f"  ✗ Could not find insertion point: {insert_after}")
+            print(f"✗ Could not find insertion point: {insert_after}")
             return False
 
         # Insert the Touch ID line
@@ -782,14 +782,14 @@ def enable_touchid_sudo(touchid_config):
         process.communicate(input=new_content.encode())
 
         if process.returncode == 0:
-            print("  ✓ Touch ID for sudo enabled successfully")
+            print("✓ Touch ID for sudo enabled successfully")
             return True
         else:
-            print("  ✗ Failed to write PAM configuration")
+            print("✗ Failed to write PAM configuration")
             return False
 
     except Exception as e:
-        print(f"  ✗ Error enabling Touch ID: {e}")
+        print(f"✗ Error enabling Touch ID: {e}")
         return False
 
 
@@ -808,7 +808,7 @@ def disable_touchid_sudo(touchid_config):
 
         # Check if anything was removed
         if len(new_lines) == len(lines):
-            print("  Touch ID was not enabled")
+            print("Touch ID was not enabled")
             return True
 
         new_content = '\n'.join(new_lines)
@@ -818,14 +818,14 @@ def disable_touchid_sudo(touchid_config):
         process.communicate(input=new_content.encode())
 
         if process.returncode == 0:
-            print("  ✓ Touch ID for sudo disabled successfully")
+            print("✓ Touch ID for sudo disabled successfully")
             return True
         else:
-            print("  ✗ Failed to write PAM configuration")
+            print("✗ Failed to write PAM configuration")
             return False
 
     except Exception as e:
-        print(f"  ✗ Error disabling Touch ID: {e}")
+        print(f"✗ Error disabling Touch ID: {e}")
         return False
 
 
@@ -836,31 +836,31 @@ def install_custom_sudo(custom_sudo_config, script_dir, home):
 
     # Check if source file exists
     if not os.path.exists(source_file):
-        print(f"  ✗ Source file not found: {source_file}")
+        print(f"✗ Source file not found: {source_file}")
         return False
 
     # Compile the binary
-    print("  Compiling custom sudo...")
+    print("Compiling custom sudo...")
     compile_cmd = custom_sudo_config['compile_command'].format(
         source=source_file,
         target=target_binary
     )
 
     if not run_command(compile_cmd, prompt_on_error=False):
-        print("  ✗ Failed to compile custom sudo")
+        print("✗ Failed to compile custom sudo")
         return False
 
     # Install with proper permissions
-    print("  Setting SUID permissions (requires sudo)...")
+    print("Setting SUID permissions (requires sudo)...")
     for install_cmd in custom_sudo_config['install_commands']:
         # Use absolute path to system sudo to avoid using the newly compiled one
         cmd = install_cmd.format(target=target_binary)
         cmd = cmd.replace('sudo ', '/usr/bin/sudo ', 1)  # Replace first occurrence only
         if not run_command(cmd, prompt_on_error=False):
-            print(f"  ✗ Failed to execute: {cmd}")
+            print(f"✗ Failed to execute: {cmd}")
             return False
 
-    print("  ✓ Custom sudo installed successfully")
+    print("✓ Custom sudo installed successfully")
     return True
 
 
@@ -869,20 +869,20 @@ def remove_custom_sudo(custom_sudo_config, script_dir, home):
     target_binary = custom_sudo_config['target_binary'].format(script_dir=script_dir, home=home)
 
     if not os.path.exists(target_binary):
-        print("  Custom sudo binary was not installed")
+        print("Custom sudo binary was not installed")
         return True
 
     try:
         # Remove the binary (may be owned by root, so use system sudo)
         result = subprocess.run(['/usr/bin/sudo', 'rm', target_binary], capture_output=True, text=True)
         if result.returncode == 0:
-            print("  ✓ Custom sudo binary removed successfully")
+            print("✓ Custom sudo binary removed successfully")
             return True
         else:
-            print(f"  ✗ Failed to remove custom sudo: {result.stderr}")
+            print(f"✗ Failed to remove custom sudo: {result.stderr}")
             return False
     except Exception as e:
-        print(f"  ✗ Error removing custom sudo: {e}")
+        print(f"✗ Error removing custom sudo: {e}")
         return False
 
 
@@ -1399,10 +1399,10 @@ def sync_packages(config_path, config):
     installed['brew_formulae'] = installed['brew_formulae'] - layer_specific_packages
 
     # Debug: Show counts of installed packages
-    print(f"  Found {len(installed['brew_formulae'])} brew formulae")
-    print(f"  Found {len(installed['brew_casks'])} brew casks")
-    print(f"  Found {len(installed['npm'])} npm packages")
-    print(f"  Found {len(installed['pip'])} pip packages")
+    print(f"Found {len(installed['brew_formulae'])} brew formulae")
+    print(f"Found {len(installed['brew_casks'])} brew casks")
+    print(f"Found {len(installed['npm'])} npm packages")
+    print(f"Found {len(installed['pip'])} pip packages")
 
     # Load current config packages
     config_packages = {
@@ -1411,9 +1411,9 @@ def sync_packages(config_path, config):
         'pip_packages': config['layer1'].get('pip_packages', [])
     }
 
-    print(f"  Config has {len(config_packages['brew_packages'])} brew packages")
-    print(f"  Config has {len(config_packages['npm_packages'])} npm packages")
-    print(f"  Config has {len(config_packages['pip_packages'])} pip packages")
+    print(f"Config has {len(config_packages['brew_packages'])} brew packages")
+    print(f"Config has {len(config_packages['npm_packages'])} npm packages")
+    print(f"Config has {len(config_packages['pip_packages'])} pip packages")
 
     # Load ignored packages from ~/.config/setup-tools/ignored_packages.toml
     ignored_config = load_ignored_packages()
@@ -1450,7 +1450,7 @@ def sync_packages(config_path, config):
         to_remove_deps = len(diffs[cat_key].get('to_remove_deps', set()))
         if to_add or to_remove or to_remove_deps:
             deps_str = f", {to_remove_deps} dependencies to clean" if to_remove_deps > 0 else ""
-            print(f"  {cat_name}: +{to_add} to add to config, -{to_remove} to remove from config{deps_str}")
+            print(f"{cat_name}: +{to_add} to add to config, -{to_remove} to remove from config{deps_str}")
 
     print("\nLaunching interactive menu...")
     print("(Arrow keys: navigate | Enter/Tab: expand/collapse | Space: cycle state | s: save | q: quit)\n")
@@ -1681,8 +1681,8 @@ def manage_ignored_packages():
     total_kept = len(keep_dependencies.get('brew_formulae', []))
 
     print(f"Currently managing:")
-    print(f"  {total_ignored} ignored packages")
-    print(f"  {total_kept} kept dependency packages")
+    print(f"{total_ignored} ignored packages")
+    print(f"{total_kept} kept dependency packages")
 
     if total_ignored == 0 and total_kept == 0:
         print("\nNo ignored or kept packages to manage.")
@@ -1714,23 +1714,23 @@ def install_command_line_tools(check_only=False):
     result = subprocess.run(['xcode-select', '-p'], capture_output=True, text=True)
 
     if result.returncode == 0:
-        print("  ✓ Command Line Tools are already installed")
+        print("✓ Command Line Tools are already installed")
         return True
 
-    print("  ✗ Command Line Tools not found")
+    print("✗ Command Line Tools not found")
 
     if check_only:
-        print("  Command Line Tools would be installed")
+        print("Command Line Tools would be installed")
         return False
 
-    print("  Installing Command Line Tools...")
-    print("  A dialog will appear - please follow the prompts to install")
+    print("Installing Command Line Tools...")
+    print("A dialog will appear - please follow the prompts to install")
 
     # Trigger the installation dialog
     subprocess.run(['xcode-select', '--install'])
 
-    print("\n  Waiting for Command Line Tools installation to complete...")
-    print("  (This script will continue once installation is done)")
+    print("\nWaiting for Command Line Tools installation to complete...")
+    print("(This script will continue once installation is done)")
 
     # Wait for installation to complete
     import time
@@ -1739,13 +1739,13 @@ def install_command_line_tools(check_only=False):
     while waited < max_wait:
         result = subprocess.run(['xcode-select', '-p'], capture_output=True, text=True)
         if result.returncode == 0:
-            print("  ✓ Command Line Tools installed successfully")
+            print("✓ Command Line Tools installed successfully")
             return True
         time.sleep(5)
         waited += 5
 
-    print("  ✗ Command Line Tools installation timed out")
-    print("  Please install manually with: xcode-select --install")
+    print("✗ Command Line Tools installation timed out")
+    print("Please install manually with: xcode-select --install")
     return False
 
 
@@ -1803,7 +1803,7 @@ def main():
         if not args.check:
             run_command('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
         else:
-            print("  homebrew would be installed")
+            print("homebrew would be installed")
 
     # Run layers
     if args.layer is None or args.layer == 0:
