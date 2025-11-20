@@ -18,8 +18,6 @@ brew_packages = [
     "arc",
     "arduino-ide",
     "awk",
-    "awscli",
-    "balenaetcher",
     "base64",
     "basedpyright",
     "bentobox",
