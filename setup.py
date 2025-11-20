@@ -535,6 +535,236 @@ def layer4_symlinks(config, script_dir, home, check_only=False):
             run_command("jenv global 21")
 
 
+def layer5_sudo(config, script_dir, home, check_only=False):
+    """Layer 5: Configure sudo (Touch ID or custom binary)."""
+    print("\n=== Layer 5: Sudo Configuration ===")
+
+    # Check Touch ID status
+    pam_file = config['layer5']['touchid']['pam_file']
+    pam_line = config['layer5']['touchid']['pam_line']
+    touchid_enabled = False
+
+    if os.path.exists(pam_file):
+        try:
+            with open(pam_file, 'r') as f:
+                content = f.read()
+                touchid_enabled = pam_line in content
+        except PermissionError:
+            # Can't read the file, try with system sudo
+            result = subprocess.run(['/usr/bin/sudo', 'cat', pam_file], capture_output=True, text=True)
+            if result.returncode == 0:
+                touchid_enabled = pam_line in result.stdout
+
+    # Check custom sudo status
+    custom_sudo_config = config['layer5']['custom_sudo']
+    source_file = custom_sudo_config['source_file'].format(script_dir=script_dir, home=home)
+    target_binary = custom_sudo_config['target_binary'].format(script_dir=script_dir, home=home)
+    custom_sudo_installed = False
+
+    if os.path.exists(target_binary):
+        stat_info = os.stat(target_binary)
+        is_suid = (stat_info.st_mode & 0o4000) != 0
+        is_root = stat_info.st_uid == 0
+        custom_sudo_installed = is_suid and is_root
+
+    # Report status
+    if touchid_enabled:
+        print("  ✓ Touch ID for sudo is enabled")
+    else:
+        print("  ✗ Touch ID for sudo is not enabled")
+
+    if custom_sudo_installed:
+        print("  ✓ Custom sudo binary is installed")
+    else:
+        print("  ✗ Custom sudo binary is not installed")
+
+    if check_only:
+        return
+
+    # Ask user what they want to do
+    print("\n  Choose sudo configuration:")
+    print("   1) Enable Touch ID for sudo (recommended)")
+    print("   2) Install custom sudo binary")
+    print("   3) None (remove both configurations)")
+    print("   4) Skip")
+
+    choice = input("\n  Select option [1]: ").strip()
+    if not choice:
+        choice = "1"
+
+    if choice == "4":
+        print("  Skipping sudo configuration")
+        return
+
+    # Option 1: Enable Touch ID (remove custom sudo if exists)
+    if choice == "1":
+        if custom_sudo_installed:
+            print("\n  Removing custom sudo binary...")
+            remove_custom_sudo(custom_sudo_config, script_dir, home)
+        if not touchid_enabled:
+            print("\n  Enabling Touch ID for sudo...")
+            enable_touchid_sudo(config['layer5']['touchid'])
+        else:
+            print("\n  Touch ID is already enabled")
+
+    # Option 2: Install custom sudo (remove Touch ID if exists)
+    elif choice == "2":
+        if touchid_enabled:
+            print("\n  Disabling Touch ID for sudo...")
+            disable_touchid_sudo(config['layer5']['touchid'])
+        if not custom_sudo_installed:
+            print("\n  Installing custom sudo binary...")
+            install_custom_sudo(custom_sudo_config, script_dir, home)
+        else:
+            print("\n  Custom sudo is already installed")
+
+    # Option 3: None (remove both)
+    elif choice == "3":
+        if touchid_enabled:
+            print("\n  Disabling Touch ID for sudo...")
+            disable_touchid_sudo(config['layer5']['touchid'])
+        if custom_sudo_installed:
+            print("\n  Removing custom sudo binary...")
+            remove_custom_sudo(custom_sudo_config, script_dir, home)
+        if not touchid_enabled and not custom_sudo_installed:
+            print("\n  No sudo configurations to remove")
+
+
+def enable_touchid_sudo(touchid_config):
+    """Enable Touch ID authentication for sudo."""
+    pam_file = touchid_config['pam_file']
+    pam_line = touchid_config['pam_line']
+    insert_after = touchid_config['insert_after']
+
+    try:
+        # Read current content (use system sudo)
+        result = subprocess.run(['/usr/bin/sudo', 'cat', pam_file], capture_output=True, text=True, check=True)
+        lines = result.stdout.split('\n')
+
+        # Find insertion point
+        insert_index = -1
+        for i, line in enumerate(lines):
+            if insert_after in line:
+                insert_index = i + 1
+                break
+
+        if insert_index == -1:
+            print(f"  ✗ Could not find insertion point: {insert_after}")
+            return False
+
+        # Insert the Touch ID line
+        lines.insert(insert_index, pam_line)
+        new_content = '\n'.join(lines)
+
+        # Write back using system sudo
+        process = subprocess.Popen(['/usr/bin/sudo', 'tee', pam_file], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process.communicate(input=new_content.encode())
+
+        if process.returncode == 0:
+            print("  ✓ Touch ID for sudo enabled successfully")
+            return True
+        else:
+            print("  ✗ Failed to write PAM configuration")
+            return False
+
+    except Exception as e:
+        print(f"  ✗ Error enabling Touch ID: {e}")
+        return False
+
+
+def disable_touchid_sudo(touchid_config):
+    """Disable Touch ID authentication for sudo."""
+    pam_file = touchid_config['pam_file']
+    pam_line = touchid_config['pam_line']
+
+    try:
+        # Read current content (use system sudo)
+        result = subprocess.run(['/usr/bin/sudo', 'cat', pam_file], capture_output=True, text=True, check=True)
+        lines = result.stdout.split('\n')
+
+        # Remove the Touch ID line if present
+        new_lines = [line for line in lines if pam_line not in line]
+
+        # Check if anything was removed
+        if len(new_lines) == len(lines):
+            print("  Touch ID was not enabled")
+            return True
+
+        new_content = '\n'.join(new_lines)
+
+        # Write back using system sudo
+        process = subprocess.Popen(['/usr/bin/sudo', 'tee', pam_file], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process.communicate(input=new_content.encode())
+
+        if process.returncode == 0:
+            print("  ✓ Touch ID for sudo disabled successfully")
+            return True
+        else:
+            print("  ✗ Failed to write PAM configuration")
+            return False
+
+    except Exception as e:
+        print(f"  ✗ Error disabling Touch ID: {e}")
+        return False
+
+
+def install_custom_sudo(custom_sudo_config, script_dir, home):
+    """Install custom sudo binary."""
+    source_file = custom_sudo_config['source_file'].format(script_dir=script_dir, home=home)
+    target_binary = custom_sudo_config['target_binary'].format(script_dir=script_dir, home=home)
+
+    # Check if source file exists
+    if not os.path.exists(source_file):
+        print(f"  ✗ Source file not found: {source_file}")
+        return False
+
+    # Compile the binary
+    print("  Compiling custom sudo...")
+    compile_cmd = custom_sudo_config['compile_command'].format(
+        source=source_file,
+        target=target_binary
+    )
+
+    if not run_command(compile_cmd):
+        print("  ✗ Failed to compile custom sudo")
+        return False
+
+    # Install with proper permissions
+    print("  Setting SUID permissions (requires sudo)...")
+    for install_cmd in custom_sudo_config['install_commands']:
+        # Use absolute path to system sudo to avoid using the newly compiled one
+        cmd = install_cmd.format(target=target_binary)
+        cmd = cmd.replace('sudo ', '/usr/bin/sudo ', 1)  # Replace first occurrence only
+        if not run_command(cmd):
+            print(f"  ✗ Failed to execute: {cmd}")
+            return False
+
+    print("  ✓ Custom sudo installed successfully")
+    return True
+
+
+def remove_custom_sudo(custom_sudo_config, script_dir, home):
+    """Remove custom sudo binary."""
+    target_binary = custom_sudo_config['target_binary'].format(script_dir=script_dir, home=home)
+
+    if not os.path.exists(target_binary):
+        print("  Custom sudo binary was not installed")
+        return True
+
+    try:
+        # Remove the binary (may be owned by root, so use system sudo)
+        result = subprocess.run(['/usr/bin/sudo', 'rm', target_binary], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("  ✓ Custom sudo binary removed successfully")
+            return True
+        else:
+            print(f"  ✗ Failed to remove custom sudo: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"  ✗ Error removing custom sudo: {e}")
+        return False
+
+
 def get_all_installed_packages():
     """Get all installed packages categorized by type."""
     packages = {
@@ -723,7 +953,7 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
         content.append(f'    "{pkg}",\n')
     content.append("]\n\n")
 
-    # Copy layer2, layer3, and layer4 sections from original
+    # Copy layer2, layer3, layer4, and layer5 sections from original
     in_layer2_or_later = False
     for line in lines:
         if line.startswith("# Layer 2:") or line.startswith("[layer2]"):
@@ -1360,7 +1590,7 @@ def manage_ignored_packages():
 def main():
     parser = argparse.ArgumentParser(description='setup development environment in layers')
     parser.add_argument('-c', '--check', action='store_true', help='only check what would be installed')
-    parser.add_argument('-l', '--layer', type=int, choices=[0, 1, 2, 3, 4], help='run specific layer only')
+    parser.add_argument('-l', '--layer', type=int, choices=[0, 1, 2, 3, 4, 5], help='run specific layer only')
     parser.add_argument('-s', '--sync', action='store_true', help='sync installed packages with setup.toml')
     parser.add_argument('-m', '--manage-ignored', action='store_true', help='manage ignored and kept packages')
     args = parser.parse_args()
@@ -1424,6 +1654,9 @@ def main():
 
     if args.layer is None or args.layer == 4:
         layer4_symlinks(config, script_dir, home, args.check)
+
+    if args.layer is None or args.layer == 5:
+        layer5_sudo(config, script_dir, home, args.check)
 
     # Summary
     if args.check:

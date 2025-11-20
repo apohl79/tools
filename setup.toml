@@ -252,3 +252,24 @@ target = "{home}/.config/doom"
 name = "emacs"
 source = "{script_dir}/.emacs"
 target = "{home}/.emacs"
+
+# Layer 5: Sudo configuration
+[layer5]
+name = "Sudo Configuration"
+
+# Touch ID for standard sudo (recommended)
+[layer5.touchid]
+enabled = true
+pam_file = "/etc/pam.d/sudo"
+pam_line = "auth       sufficient     pam_tid.so"
+insert_after = "auth       include        sudo_local"
+
+# Custom sudo binary (alternative)
+[layer5.custom_sudo]
+source_file = "{script_dir}/sudo/sudo.cpp"
+target_binary = "{home}/bin/sudo"
+compile_command = "clang++ --std=c++14 -O3 {source} -o {target}"
+install_commands = [
+    "sudo chown root: {target}",
+    "sudo chmod +s {target}"
+]
