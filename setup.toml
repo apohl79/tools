@@ -4,8 +4,29 @@ name = "Shell Setup"
 oh_my_zsh_url = "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
 powerlevel10k_repo = "https://github.com/romkatv/powerlevel10k.git"
 
-# Layer 1: Base system packages
+# Layer 1: Sudo configuration
 [layer1]
+name = "Sudo Configuration"
+
+# Touch ID for standard sudo (recommended)
+[layer1.touchid]
+enabled = true
+pam_file = "/etc/pam.d/sudo"
+pam_line = "auth       sufficient     pam_tid.so"
+insert_after = "auth       include        sudo_local"
+
+# Custom sudo binary (alternative)
+[layer1.custom_sudo]
+source_file = "{script_dir}/sudo/sudo.cpp"
+target_binary = "{home}/bin/sudo"
+compile_command = "clang++ --std=c++14 -O3 {source} -o {target}"
+install_commands = [
+    "sudo chown root: {target}",
+    "sudo chmod +s {target}"
+]
+
+# Layer 2: Base system packages
+[layer2]
 name = "Base System Packages"
 
 # Homebrew taps to add before installing packages
@@ -166,8 +187,8 @@ pip_packages = [
     "wheel",
 ]
 
-# Layer 2: Emacs installation
-[layer2]
+# Layer 3: Emacs installation
+[layer3]
 name = "Emacs Installation"
 formula = "emacs-plus@30"
 options = [
@@ -178,95 +199,74 @@ options = [
 ]
 
 # Spelling dictionaries to download
-[[layer2.dictionaries]]
+[[layer3.dictionaries]]
 filename = "de_DE_frami.aff"
 url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.aff"
 
-[[layer2.dictionaries]]
+[[layer3.dictionaries]]
 filename = "de_DE_frami.dic"
 url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.dic"
 
-[[layer2.dictionaries]]
+[[layer3.dictionaries]]
 filename = "en_US.aff"
 url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.aff"
 
-[[layer2.dictionaries]]
+[[layer3.dictionaries]]
 filename = "en_US.dic"
 url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.dic"
 
-# Layer 3: Doom Emacs
-[layer3]
+# Layer 4: Doom Emacs
+[layer4]
 name = "Doom Emacs"
 repo = "https://github.com/doomemacs/doomemacs"
 install_path = "{home}/.config/emacs"
 
-# Layer 4: Symlinks and Shell
-[layer4]
+# Layer 5: Symlinks and Shell
+[layer5]
 name = "Symlinks"
 
 # {script_dir} = directory containing setup.py
 # {home} = user's home directory
-[[layer4.symlinks]]
+[[layer5.symlinks]]
 name = "tools"
 source = "{script_dir}"
 target = "{home}/bin/tools"
 
-[[layer4.symlinks]]
+[[layer5.symlinks]]
 name = "zsh"
 source = "{script_dir}/.zshrc"
 target = "{home}/.zshrc"
 force = true
 
-[[layer4.symlinks]]
+[[layer5.symlinks]]
 name = "powerlevel10k"
 source = "{script_dir}/.p10k.zsh"
 target = "{home}/.p10k.zsh"
 force = true
 
-[[layer4.symlinks]]
+[[layer5.symlinks]]
 name = "profile"
 source = "{home}/.zshrc"
 target = "{home}/.profile"
 force = true
 
-[[layer4.symlinks]]
+[[layer5.symlinks]]
 name = "clang-format"
 source = "{script_dir}/.clang-format"
 target = "{home}/.clang-format"
 
-[[layer4.symlinks]]
+[[layer5.symlinks]]
 name = "editorconfig"
 source = "{script_dir}/.editorconfig"
 target = "{home}/.editorconfig"
 
 # Emacs configuration symlinks (chosen during setup)
-[layer4.emacs_symlinks.doom]
+[layer5.emacs_symlinks.doom]
 name = "doom"
 source = "{script_dir}/.doom.d"
 target = "{home}/.config/doom"
 
-[layer4.emacs_symlinks.light]
+[layer5.emacs_symlinks.light]
 name = "emacs"
 source = "{script_dir}/.emacs"
 target = "{home}/.emacs"
-
-# Layer 5: Sudo configuration
-[layer5]
-name = "Sudo Configuration"
-
-# Touch ID for standard sudo (recommended)
-[layer5.touchid]
-enabled = true
-pam_file = "/etc/pam.d/sudo"
-pam_line = "auth       sufficient     pam_tid.so"
-insert_after = "auth       include        sudo_local"
-
-# Custom sudo binary (alternative)
-[layer5.custom_sudo]
-source_file = "{script_dir}/sudo/sudo.cpp"
-target_binary = "{home}/bin/sudo"
-compile_command = "clang++ --std=c++14 -O3 {source} -o {target}"
-install_commands = [
-    "sudo chown root: {target}",
-    "sudo chmod +s {target}"
-]

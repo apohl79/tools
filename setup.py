@@ -465,192 +465,13 @@ def layer0_shell(config, home, check_only=False):
             run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
 
 
-def layer1_base_packages(config, check_only=False):
-    """Layer 1: Install all base system packages."""
-    print(f"\n{GREEN}=== Layer 1: Base System Packages ==={RESET}")
-
-    # Add homebrew taps
-    if not check_only:
-        for tap in config['layer1']['brew_taps']:
-            if not is_brew_tap_added(tap):
-                print(f"  adding tap: {tap}")
-                run_command(f"brew tap {tap}")
-
-    # Install brew packages
-    print("\nbrew packages:")
-    install_brew_packages(config['layer1']['brew_packages'], check_only)
-
-    # Install npm packages
-    print("\nnpm packages:")
-    install_npm_packages(config['layer1']['npm_packages'], check_only)
-
-    # Install pip packages
-    print("\npython packages:")
-    install_pip_packages(config['layer1']['pip_packages'], check_only)
-
-
-def layer2_emacs(config, home, check_only=False):
-    """Layer 2: Install Emacs."""
-    print(f"\n{GREEN}=== Layer 2: Emacs Installation ==={RESET}")
-
-    needs_emacs = not command_exists("emacs")
-
-    if needs_emacs:
-        print("  ✗ Emacs not found")
-        if not check_only:
-            emacs_formula = config['layer2']['formula']
-            options = ' '.join(config['layer2']['options'])
-            install_cmd = f"brew install {options} {emacs_formula}"
-            print(f"  installing {emacs_formula}...")
-            run_command(install_cmd)
-            run_command("defaults write org.gnu.Emacs TransparentTitleBar DARK")
-    else:
-        print("  ✓ Emacs is already installed")
-
-    # Install dictionaries
-    spelling_dir = os.path.join(home, "Library/Spelling")
-    os.makedirs(spelling_dir, exist_ok=True)
-
-    missing_dicts = []
-    for dict_entry in config['layer2']['dictionaries']:
-        dict_path = os.path.join(spelling_dir, dict_entry['filename'])
-        if not os.path.exists(dict_path):
-            missing_dicts.append(dict_entry)
-
-    if missing_dicts:
-        print(f"\n  dictionaries: {len(missing_dicts)} missing")
-        if not check_only:
-            print("  installing dictionaries...")
-            for dict_entry in missing_dicts:
-                run_command(f"wget -nc {dict_entry['url']} -O {spelling_dir}/{dict_entry['filename']}")
-    else:
-        print("  ✓ all dictionaries installed")
-
-
-def layer3_doom(config, script_dir, home, check_only=False):
-    """Layer 3: Install Doom Emacs and setup config."""
-    print(f"\n{GREEN}=== Layer 3: Doom Emacs ==={RESET}")
-
-    # First, determine and setup emacs config symlink
-    existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
-    existing_light = os.path.exists(os.path.join(home, ".emacs"))
-
-    emacs_choice = None
-    if existing_doom or existing_light:
-        setup_type = "doom" if existing_doom else "light"
-        print(f"  detected existing {setup_type} Emacs setup")
-        if not check_only:
-            use_existing = input(f"  continue with {setup_type} setup? [Y/n]: ").strip()
-            if not use_existing or use_existing.lower() in ["y", "yes"]:
-                emacs_choice = setup_type
-            else:
-                print("\n  choose emacs setup:")
-                print("   1) doom")
-                print("   2) light")
-                print("   3) skip")
-                choice = input("  > ").strip()
-                emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
-        else:
-            emacs_choice = setup_type
-    else:
-        if not check_only:
-            print("\n  choose emacs setup:")
-            print("   1) doom")
-            print("   2) light")
-            print("   3) skip")
-            choice = input("  > ").strip()
-            emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
-        else:
-            emacs_choice = None
-
-    # Apply emacs config symlink if chosen
-    if emacs_choice:
-        emacs_link = config['layer4']['emacs_symlinks'][emacs_choice]
-        source = emacs_link['source'].format(script_dir=script_dir, home=home)
-        target = emacs_link['target'].format(script_dir=script_dir, home=home)
-
-        # Create .config directory if needed for doom
-        if emacs_choice == "doom":
-            config_dir = os.path.join(home, ".config")
-            if not os.path.exists(config_dir):
-                os.makedirs(config_dir)
-
-        if not check_only:
-            print(f"  setting up {emacs_choice} config...")
-            link(emacs_link['name'], source, target)
-
-    # Skip Doom installation if user chose light or skip
-    if emacs_choice != "doom":
-        if emacs_choice == "light":
-            print("  skipping Doom Emacs (using light config)")
-        else:
-            print("  skipping Doom Emacs installation")
-        return
-
-    # Now install Doom Emacs
-    emacs_config_path = config['layer3']['install_path'].format(home=home)
-    doom_bin = os.path.join(emacs_config_path, "bin/doom")
-
-    if os.path.exists(emacs_config_path):
-        print("  ✓ Doom Emacs is installed")
-        if not os.path.exists(doom_bin):
-            print("  ✗ doom binary not found")
-            if not check_only:
-                repair = input("  repair Doom Emacs installation? [Y/n]: ").strip()
-                if not repair or repair.lower() in ["y", "yes"]:
-                    print("  running doom sync...")
-                    env = os.environ.copy()
-                    env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
-                    run_command(f"{doom_bin} sync", env=env)
-    else:
-        print("  ✗ Doom Emacs not found")
-        if not check_only:
-            print("  installing Doom Emacs...")
-            run_command(f"git clone --depth 1 {config['layer3']['repo']} {emacs_config_path}")
-
-            env = os.environ.copy()
-            env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
-
-            run_command(f"{doom_bin} install --force --env --install --fonts --hooks", env=env)
-            run_command(f"{doom_bin} sync", env=env)
-
-
-def layer4_symlinks(config, script_dir, home, check_only=False):
-    """Layer 4: Setup general symlinks."""
-    print(f"\n{GREEN}=== Layer 4: Symlinks ==={RESET}")
-
-    # Apply all general symlinks (zsh, p10k, editorconfig, etc.)
-    apply_symlinks(config['layer4']['symlinks'], script_dir, home, check_only)
-
-    # Setup jdtls links if present
-    # Use link_force to update symlinks when jdtls version changes
-    if not check_only and command_exists("jenv"):
-        jdtls_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/config_mac")
-        if jdtls_patterns:
-            jdtls_dir = os.path.join(home, "tools/jdtls")
-            os.makedirs(jdtls_dir, exist_ok=True)
-            link_force("jdtls/config_mac", jdtls_patterns[0], os.path.join(jdtls_dir, "config_mac"))
-
-        jdtls_plugin_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/plugins")
-        if jdtls_plugin_patterns:
-            link_force("jdtls/plugins", jdtls_plugin_patterns[0], os.path.join(home, "tools/jdtls/plugins"))
-
-    # Configure Java if jenv is installed
-    if command_exists("jenv") and not check_only:
-        result = subprocess.run(['jenv', 'versions'], capture_output=True, text=True)
-        if '21' not in result.stdout:
-            print("\n  configuring java 21...")
-            run_command("jenv add /opt/homebrew/opt/openjdk@21")
-            run_command("jenv global 21")
-
-
-def layer5_sudo(config, script_dir, home, check_only=False):
-    """Layer 5: Configure sudo (Touch ID or custom binary)."""
-    print(f"\n{GREEN}=== Layer 5: Sudo Configuration ==={RESET}")
+def layer1_sudo(config, script_dir, home, check_only=False):
+    """Layer 1: Configure sudo (Touch ID or custom binary)."""
+    print(f"\n{GREEN}=== Layer 1: Sudo Configuration ==={RESET}")
 
     # Check Touch ID status
-    pam_file = config['layer5']['touchid']['pam_file']
-    pam_line = config['layer5']['touchid']['pam_line']
+    pam_file = config['layer1']['touchid']['pam_file']
+    pam_line = config['layer1']['touchid']['pam_line']
     touchid_enabled = False
 
     if os.path.exists(pam_file):
@@ -665,7 +486,7 @@ def layer5_sudo(config, script_dir, home, check_only=False):
                 touchid_enabled = pam_line in result.stdout
 
     # Check custom sudo status
-    custom_sudo_config = config['layer5']['custom_sudo']
+    custom_sudo_config = config['layer1']['custom_sudo']
     source_file = custom_sudo_config['source_file'].format(script_dir=script_dir, home=home)
     target_binary = custom_sudo_config['target_binary'].format(script_dir=script_dir, home=home)
     custom_sudo_installed = False
@@ -714,7 +535,7 @@ def layer5_sudo(config, script_dir, home, check_only=False):
                 sys.exit(1)
         if not touchid_enabled:
             print("\n  Enabling Touch ID for sudo...")
-            if not enable_touchid_sudo(config['layer5']['touchid']):
+            if not enable_touchid_sudo(config['layer1']['touchid']):
                 print("\n✗ Failed to enable Touch ID for sudo")
                 sys.exit(1)
         else:
@@ -724,7 +545,7 @@ def layer5_sudo(config, script_dir, home, check_only=False):
     elif choice == "2":
         if touchid_enabled:
             print("\n  Disabling Touch ID for sudo...")
-            if not disable_touchid_sudo(config['layer5']['touchid']):
+            if not disable_touchid_sudo(config['layer1']['touchid']):
                 print("\n✗ Failed to disable Touch ID for sudo")
                 sys.exit(1)
         if not custom_sudo_installed:
@@ -739,7 +560,7 @@ def layer5_sudo(config, script_dir, home, check_only=False):
     elif choice == "3":
         if touchid_enabled:
             print("\n  Disabling Touch ID for sudo...")
-            if not disable_touchid_sudo(config['layer5']['touchid']):
+            if not disable_touchid_sudo(config['layer1']['touchid']):
                 print("\n✗ Failed to disable Touch ID for sudo")
                 sys.exit(1)
         if custom_sudo_installed:
@@ -749,6 +570,185 @@ def layer5_sudo(config, script_dir, home, check_only=False):
                 sys.exit(1)
         if not touchid_enabled and not custom_sudo_installed:
             print("\n  No sudo configurations to remove")
+
+
+def layer2_base_packages(config, check_only=False):
+    """Layer 2: Install all base system packages."""
+    print(f"\n{GREEN}=== Layer 2: Base System Packages ==={RESET}")
+
+    # Add homebrew taps
+    if not check_only:
+        for tap in config['layer2']['brew_taps']:
+            if not is_brew_tap_added(tap):
+                print(f"  adding tap: {tap}")
+                run_command(f"brew tap {tap}")
+
+    # Install brew packages
+    print("\nbrew packages:")
+    install_brew_packages(config['layer2']['brew_packages'], check_only)
+
+    # Install npm packages
+    print("\nnpm packages:")
+    install_npm_packages(config['layer2']['npm_packages'], check_only)
+
+    # Install pip packages
+    print("\npython packages:")
+    install_pip_packages(config['layer2']['pip_packages'], check_only)
+
+
+def layer3_emacs(config, home, check_only=False):
+    """Layer 3: Install Emacs."""
+    print(f"\n{GREEN}=== Layer 3: Emacs Installation ==={RESET}")
+
+    needs_emacs = not command_exists("emacs")
+
+    if needs_emacs:
+        print("  ✗ Emacs not found")
+        if not check_only:
+            emacs_formula = config['layer3']['formula']
+            options = ' '.join(config['layer3']['options'])
+            install_cmd = f"brew install {options} {emacs_formula}"
+            print(f"  installing {emacs_formula}...")
+            run_command(install_cmd)
+            run_command("defaults write org.gnu.Emacs TransparentTitleBar DARK")
+    else:
+        print("  ✓ Emacs is already installed")
+
+    # Install dictionaries
+    spelling_dir = os.path.join(home, "Library/Spelling")
+    os.makedirs(spelling_dir, exist_ok=True)
+
+    missing_dicts = []
+    for dict_entry in config['layer3']['dictionaries']:
+        dict_path = os.path.join(spelling_dir, dict_entry['filename'])
+        if not os.path.exists(dict_path):
+            missing_dicts.append(dict_entry)
+
+    if missing_dicts:
+        print(f"\n  dictionaries: {len(missing_dicts)} missing")
+        if not check_only:
+            print("  installing dictionaries...")
+            for dict_entry in missing_dicts:
+                run_command(f"wget -nc {dict_entry['url']} -O {spelling_dir}/{dict_entry['filename']}")
+    else:
+        print("  ✓ all dictionaries installed")
+
+
+def layer4_doom(config, script_dir, home, check_only=False):
+    """Layer 4: Install Doom Emacs and setup config."""
+    print(f"\n{GREEN}=== Layer 4: Doom Emacs ==={RESET}")
+
+    # First, determine and setup emacs config symlink
+    existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
+    existing_light = os.path.exists(os.path.join(home, ".emacs"))
+
+    emacs_choice = None
+    if existing_doom or existing_light:
+        setup_type = "doom" if existing_doom else "light"
+        print(f"  detected existing {setup_type} Emacs setup")
+        if not check_only:
+            use_existing = input(f"  continue with {setup_type} setup? [Y/n]: ").strip()
+            if not use_existing or use_existing.lower() in ["y", "yes"]:
+                emacs_choice = setup_type
+            else:
+                print("\n  choose emacs setup:")
+                print("   1) doom")
+                print("   2) light")
+                print("   3) skip")
+                choice = input("  > ").strip()
+                emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
+        else:
+            emacs_choice = setup_type
+    else:
+        if not check_only:
+            print("\n  choose emacs setup:")
+            print("   1) doom")
+            print("   2) light")
+            print("   3) skip")
+            choice = input("  > ").strip()
+            emacs_choice = "doom" if choice == "1" else "light" if choice == "2" else None
+        else:
+            emacs_choice = None
+
+    # Apply emacs config symlink if chosen
+    if emacs_choice:
+        emacs_link = config['layer5']['emacs_symlinks'][emacs_choice]
+        source = emacs_link['source'].format(script_dir=script_dir, home=home)
+        target = emacs_link['target'].format(script_dir=script_dir, home=home)
+
+        # Create .config directory if needed for doom
+        if emacs_choice == "doom":
+            config_dir = os.path.join(home, ".config")
+            if not os.path.exists(config_dir):
+                os.makedirs(config_dir)
+
+        if not check_only:
+            print(f"  setting up {emacs_choice} config...")
+            link(emacs_link['name'], source, target)
+
+    # Skip Doom installation if user chose light or skip
+    if emacs_choice != "doom":
+        if emacs_choice == "light":
+            print("  skipping Doom Emacs (using light config)")
+        else:
+            print("  skipping Doom Emacs installation")
+        return
+
+    # Now install Doom Emacs
+    emacs_config_path = config['layer4']['install_path'].format(home=home)
+    doom_bin = os.path.join(emacs_config_path, "bin/doom")
+
+    if os.path.exists(emacs_config_path):
+        print("  ✓ Doom Emacs is installed")
+        if not os.path.exists(doom_bin):
+            print("  ✗ doom binary not found")
+            if not check_only:
+                repair = input("  repair Doom Emacs installation? [Y/n]: ").strip()
+                if not repair or repair.lower() in ["y", "yes"]:
+                    print("  running doom sync...")
+                    env = os.environ.copy()
+                    env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
+                    run_command(f"{doom_bin} sync", env=env)
+    else:
+        print("  ✗ Doom Emacs not found")
+        if not check_only:
+            print("  installing Doom Emacs...")
+            run_command(f"git clone --depth 1 {config['layer4']['repo']} {emacs_config_path}")
+
+            env = os.environ.copy()
+            env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
+
+            run_command(f"{doom_bin} install --force --env --install --fonts --hooks", env=env)
+            run_command(f"{doom_bin} sync", env=env)
+
+
+def layer5_symlinks(config, script_dir, home, check_only=False):
+    """Layer 5: Setup general symlinks."""
+    print(f"\n{GREEN}=== Layer 5: Symlinks ==={RESET}")
+
+    # Apply all general symlinks (zsh, p10k, editorconfig, etc.)
+    apply_symlinks(config['layer5']['symlinks'], script_dir, home, check_only)
+
+    # Setup jdtls links if present
+    # Use link_force to update symlinks when jdtls version changes
+    if not check_only and command_exists("jenv"):
+        jdtls_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/config_mac")
+        if jdtls_patterns:
+            jdtls_dir = os.path.join(home, "tools/jdtls")
+            os.makedirs(jdtls_dir, exist_ok=True)
+            link_force("jdtls/config_mac", jdtls_patterns[0], os.path.join(jdtls_dir, "config_mac"))
+
+        jdtls_plugin_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/plugins")
+        if jdtls_plugin_patterns:
+            link_force("jdtls/plugins", jdtls_plugin_patterns[0], os.path.join(home, "tools/jdtls/plugins"))
+
+    # Configure Java if jenv is installed
+    if command_exists("jenv") and not check_only:
+        result = subprocess.run(['jenv', 'versions'], capture_output=True, text=True)
+        if '21' not in result.stdout:
+            print("\n  configuring java 21...")
+            run_command("jenv add /opt/homebrew/opt/openjdk@21")
+            run_command("jenv global 21")
 
 
 def enable_touchid_sudo(touchid_config):
@@ -1010,7 +1010,7 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
 
     # Update brew packages
     brew_packages = sorted(
-        (set(config['layer1']['brew_packages']) |
+        (set(config['layer2']['brew_packages']) |
          package_updates['brew_formulae']['add'] |
          package_updates['brew_casks']['add']) -
         package_updates['brew_formulae']['remove'] -
@@ -1019,14 +1019,14 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
 
     # Update npm packages
     npm_packages = sorted(
-        (set(config['layer1']['npm_packages']) |
+        (set(config['layer2']['npm_packages']) |
          package_updates['npm']['add']) -
         package_updates['npm']['remove']
     )
 
     # Update pip packages
     pip_packages = sorted(
-        (set(config['layer1']['pip_packages']) |
+        (set(config['layer2']['pip_packages']) |
          package_updates['pip']['add']) -
         package_updates['pip']['remove']
     )
@@ -1034,25 +1034,25 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
     # Build new TOML content
     content = []
 
-    # Copy Layer 0 from original file
-    in_layer0 = False
+    # Copy Layer 0 and Layer 1 from original file
+    in_layer0_or_1 = False
     for line in lines:
         if line.startswith("# Layer 0:") or line.startswith("[layer0]"):
-            in_layer0 = True
-        elif line.startswith("# Layer 1:") or line.startswith("[layer1]"):
-            in_layer0 = False
+            in_layer0_or_1 = True
+        elif line.startswith("# Layer 2:") or line.startswith("[layer2]"):
+            in_layer0_or_1 = False
             break
-        if in_layer0:
+        if in_layer0_or_1:
             content.append(line)
 
-    # Layer 1
-    content.append("# Layer 1: Base system packages\n")
-    content.append("[layer1]\n")
+    # Layer 2 (Base system packages)
+    content.append("# Layer 2: Base system packages\n")
+    content.append("[layer2]\n")
     content.append('name = "Base System Packages"\n\n')
 
     content.append("# Homebrew taps to add before installing packages\n")
     content.append("brew_taps = [\n")
-    for tap in config['layer1']['brew_taps']:
+    for tap in config['layer2']['brew_taps']:
         content.append(f'    "{tap}",\n')
     content.append("]\n\n")
 
@@ -1074,12 +1074,12 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
         content.append(f'    "{pkg}",\n')
     content.append("]\n\n")
 
-    # Copy layer2, layer3, layer4, and layer5 sections from original
-    in_layer2_or_later = False
+    # Copy layer3, layer4, and layer5 sections from original
+    in_layer3_or_later = False
     for line in lines:
-        if line.startswith("# Layer 2:") or line.startswith("[layer2]"):
-            in_layer2_or_later = True
-        if in_layer2_or_later:
+        if line.startswith("# Layer 3:") or line.startswith("[layer3]"):
+            in_layer3_or_later = True
+        if in_layer3_or_later:
             content.append(line)
 
     # Write updated content
@@ -1383,13 +1383,13 @@ def sync_packages(config_path, config):
     # Get all installed packages
     installed = get_all_installed_packages()
 
-    # Filter out packages that are installed in other layers (layer 2+)
-    # These are handled specially and shouldn't be in layer 1
+    # Filter out packages that are installed in other layers (layer 3+)
+    # These are handled specially and shouldn't be in layer 2
     layer_specific_packages = set()
 
-    # Layer 2: Emacs formula
-    if 'layer2' in config:
-        emacs_formula = config['layer2'].get('formula', '')
+    # Layer 3: Emacs formula
+    if 'layer3' in config:
+        emacs_formula = config['layer3'].get('formula', '')
         if emacs_formula:
             # Normalize emacs formula name (strip tap prefix and options)
             emacs_name = emacs_formula.split('/')[-1] if '/' in emacs_formula else emacs_formula
@@ -1810,19 +1810,19 @@ def main():
         layer0_shell(config, home, args.check)
 
     if args.layer is None or args.layer == 1:
-        layer1_base_packages(config, args.check)
+        layer1_sudo(config, script_dir, home, args.check)
 
     if args.layer is None or args.layer == 2:
-        layer2_emacs(config, home, args.check)
+        layer2_base_packages(config, args.check)
 
     if args.layer is None or args.layer == 3:
-        layer3_doom(config, script_dir, home, args.check)
+        layer3_emacs(config, home, args.check)
 
     if args.layer is None or args.layer == 4:
-        layer4_symlinks(config, script_dir, home, args.check)
+        layer4_doom(config, script_dir, home, args.check)
 
     if args.layer is None or args.layer == 5:
-        layer5_sudo(config, script_dir, home, args.check)
+        layer5_symlinks(config, script_dir, home, args.check)
 
     # Summary
     if args.check:
