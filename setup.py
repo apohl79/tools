@@ -121,15 +121,25 @@ def link_force(name, source, target):
     link(name, source, target)
 
 
-def run_command(cmd, shell=True, check=False, env=None):
-    """run a shell command and return success status."""
+def run_command(cmd, shell=True, check=False, env=None, stream_output=True):
+    """run a shell command and return success status.
+
+    Args:
+        stream_output: If True, stream output in real-time. If False, capture and print after completion.
+    """
     try:
-        result = subprocess.run(cmd, shell=shell, check=check, capture_output=True, text=True, env=env)
-        if result.stdout:
-            print(result.stdout, end='')
-        if result.stderr and result.returncode != 0:
-            print(result.stderr, end='', file=sys.stderr)
-        return result.returncode == 0
+        if stream_output:
+            # Stream output in real-time (no capture)
+            result = subprocess.run(cmd, shell=shell, check=check, env=env)
+            return result.returncode == 0
+        else:
+            # Capture output and print after completion
+            result = subprocess.run(cmd, shell=shell, check=check, capture_output=True, text=True, env=env)
+            if result.stdout:
+                print(result.stdout, end='')
+            if result.stderr and result.returncode != 0:
+                print(result.stderr, end='', file=sys.stderr)
+            return result.returncode == 0
     except subprocess.CalledProcessError:
         return False
 
