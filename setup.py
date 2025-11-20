@@ -1587,6 +1587,47 @@ def manage_ignored_packages():
     print("\n✓ Management complete!")
 
 
+def install_command_line_tools(check_only=False):
+    """Install Xcode Command Line Tools if not present."""
+    # Check if Command Line Tools are installed
+    result = subprocess.run(['xcode-select', '-p'], capture_output=True, text=True)
+
+    if result.returncode == 0:
+        print("  ✓ Command Line Tools are already installed")
+        return True
+
+    print("  ✗ Command Line Tools not found")
+
+    if check_only:
+        print("  Command Line Tools would be installed")
+        return False
+
+    print("  Installing Command Line Tools...")
+    print("  A dialog will appear - please follow the prompts to install")
+
+    # Trigger the installation dialog
+    subprocess.run(['xcode-select', '--install'])
+
+    print("\n  Waiting for Command Line Tools installation to complete...")
+    print("  (This script will continue once installation is done)")
+
+    # Wait for installation to complete
+    import time
+    max_wait = 600  # 10 minutes max
+    waited = 0
+    while waited < max_wait:
+        result = subprocess.run(['xcode-select', '-p'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("  ✓ Command Line Tools installed successfully")
+            return True
+        time.sleep(5)
+        waited += 5
+
+    print("  ✗ Command Line Tools installation timed out")
+    print("  Please install manually with: xcode-select --install")
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(description='setup development environment in layers')
     parser.add_argument('-c', '--check', action='store_true', help='only check what would be installed')
@@ -1631,9 +1672,13 @@ def main():
         sync_packages(config_path, config)
         return
 
+    # Install Command Line Tools if not present (required for Homebrew)
+    print("=== Command Line Tools ===")
+    install_command_line_tools(args.check)
+
     # Install Homebrew if not present
     if not command_exists("brew"):
-        print("=== Installing Homebrew ===")
+        print("\n=== Installing Homebrew ===")
         if not args.check:
             run_command('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
         else:
