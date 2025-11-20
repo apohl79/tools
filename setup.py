@@ -5,9 +5,84 @@ import subprocess
 import platform
 import shutil
 import glob
-import tomllib
 import argparse
 import json
+
+# Python 3.11+ has tomllib built-in, older versions need tomli
+try:
+    import tomllib
+except ModuleNotFoundError:
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:
+        print("tomli module not found (required for Python < 3.11)")
+        print("Installing tomli automatically...")
+        result = subprocess.run([sys.executable, '-m', 'pip', 'install', 'tomli'], capture_output=True, text=True)
+        if result.returncode == 0:
+            print("✓ tomli installed successfully")
+
+            # Add tomli to ignored packages so it doesn't show up in sync
+            import tomli as tomllib
+            ignored_path = os.path.expanduser("~/.config/setup-tools/ignored_packages.toml")
+            os.makedirs(os.path.dirname(ignored_path), exist_ok=True)
+
+            # Load existing ignored packages if file exists
+            ignored = {'pip_packages': set()}
+            if os.path.exists(ignored_path):
+                try:
+                    with open(ignored_path, 'rb') as f:
+                        existing = tomllib.load(f)
+                        ignored['pip_packages'] = set(existing.get('pip_packages', []))
+                except:
+                    pass
+
+            # Add tomli to ignored pip packages
+            if 'tomli' not in ignored['pip_packages']:
+                ignored['pip_packages'].add('tomli')
+
+                # Read the full file to preserve other sections
+                file_content = ""
+                if os.path.exists(ignored_path):
+                    with open(ignored_path, 'r') as f:
+                        file_content = f.read()
+
+                # Find and update pip_packages section, or add it
+                if 'pip_packages = [' in file_content:
+                    # Update existing section
+                    lines = file_content.split('\n')
+                    new_lines = []
+                    in_pip_section = False
+                    for line in lines:
+                        if 'pip_packages = [' in line:
+                            in_pip_section = True
+                            new_lines.append(line)
+                            # Add tomli if not already there
+                            if '    "tomli",' not in file_content:
+                                new_lines.append('    "tomli",')
+                        elif in_pip_section and line.strip() == ']':
+                            in_pip_section = False
+                            new_lines.append(line)
+                        elif not (in_pip_section and '"tomli"' in line):
+                            new_lines.append(line)
+                        elif in_pip_section and '"tomli"' in line:
+                            # Keep existing tomli line
+                            new_lines.append(line)
+
+                    with open(ignored_path, 'w') as f:
+                        f.write('\n'.join(new_lines))
+                else:
+                    # Add new section
+                    if file_content and not file_content.endswith('\n\n'):
+                        file_content += '\n\n' if file_content.endswith('\n') else '\n\n'
+                    file_content += 'pip_packages = [\n    "tomli",\n]\n'
+                    with open(ignored_path, 'w') as f:
+                        f.write(file_content)
+
+                print("  Added tomli to ignored packages")
+        else:
+            print("✗ Failed to install tomli")
+            print("Please install manually with: pip3 install tomli")
+            sys.exit(1)
 
 
 def get_script_dir():
