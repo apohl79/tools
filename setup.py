@@ -126,25 +126,40 @@ def link_force(name, source, target):
     link(name, source, target)
 
 
-def run_command(cmd, shell=True, check=True, env=None, stream_output=True):
-    """run a shell command and exit on failure.
+def run_command(cmd, shell=True, check=False, env=None, stream_output=True, prompt_on_error=True):
+    """run a shell command and optionally prompt on failure.
 
     Args:
-        check: If True, raise CalledProcessError on non-zero exit (default: True)
+        check: If True, raise CalledProcessError on non-zero exit (default: False for prompting)
         stream_output: If True, stream output in real-time. If False, capture and print after completion.
+        prompt_on_error: If True, prompt user to continue or abort on error (default: True)
     """
     if stream_output:
         # Stream output in real-time (no capture)
-        result = subprocess.run(cmd, shell=shell, check=check, env=env)
-        return result.returncode == 0
+        result = subprocess.run(cmd, shell=shell, check=False, env=env)
+        success = result.returncode == 0
     else:
         # Capture output and print after completion
-        result = subprocess.run(cmd, shell=shell, check=check, capture_output=True, text=True, env=env)
+        result = subprocess.run(cmd, shell=shell, check=False, capture_output=True, text=True, env=env)
         if result.stdout:
             print(result.stdout, end='')
         if result.stderr and result.returncode != 0:
             print(result.stderr, end='', file=sys.stderr)
-        return result.returncode == 0
+        success = result.returncode == 0
+
+    # Handle failure
+    if not success:
+        if prompt_on_error:
+            print(f"\n{RED}✗ Command failed with exit code {result.returncode}{RESET}")
+            response = input(f"Continue anyway? [y/N]: ").strip().lower()
+            if response not in ['y', 'yes']:
+                print(f"\n{RED}Aborting setup.{RESET}")
+                sys.exit(result.returncode)
+        elif check:
+            # If check is True and prompting is disabled, raise exception
+            raise subprocess.CalledProcessError(result.returncode, cmd)
+
+    return success
 
 
 def command_exists(cmd):
@@ -333,7 +348,9 @@ def install_brew_packages(packages, check_only=False):
         print(f"  missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
             print("  installing...")
-            run_command(f"brew install {' '.join(missing)}")
+            for package in missing:
+                print(f"    installing {package}...")
+                run_command(f"brew install {package}")
     else:
         print(f"  all {len(packages)} packages already installed")
 
@@ -356,6 +373,7 @@ def install_npm_packages(packages, check_only=False):
         if not check_only:
             print("  installing...")
             for package in missing:
+                print(f"    installing {package}...")
                 run_command(f"npm install -g {package}")
     else:
         print(f"  all {len(packages)} packages already installed")
@@ -377,7 +395,9 @@ def install_pip_packages(packages, check_only=False):
         print(f"  missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
             print("  installing...")
-            run_command(f"pip3 install {' '.join(missing)}")
+            for package in missing:
+                print(f"    installing {package}...")
+                run_command(f"pip3 install {package}")
     else:
         print(f"  all {len(packages)} packages already installed")
 
@@ -826,7 +846,7 @@ def install_custom_sudo(custom_sudo_config, script_dir, home):
         target=target_binary
     )
 
-    if not run_command(compile_cmd, check=False):
+    if not run_command(compile_cmd, prompt_on_error=False):
         print("  ✗ Failed to compile custom sudo")
         return False
 
@@ -836,7 +856,7 @@ def install_custom_sudo(custom_sudo_config, script_dir, home):
         # Use absolute path to system sudo to avoid using the newly compiled one
         cmd = install_cmd.format(target=target_binary)
         cmd = cmd.replace('sudo ', '/usr/bin/sudo ', 1)  # Replace first occurrence only
-        if not run_command(cmd, check=False):
+        if not run_command(cmd, prompt_on_error=False):
             print(f"  ✗ Failed to execute: {cmd}")
             return False
 
@@ -1818,6 +1838,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        print(f"\n\n{RED}Setup interrupted by user{RESET}")
+        sys.exit(130)
     except subprocess.CalledProcessError as e:
         print(f"\n{RED}✗ Command failed with exit code {e.returncode}: {e.cmd}{RESET}", file=sys.stderr)
         sys.exit(e.returncode)
