@@ -187,6 +187,12 @@ pip_packages = [
     "wheel",
 ]
 
+# Post-install commands to run after packages are installed
+post_install_commands = [
+    "sudo cp -f $(brew --prefix dbus)/org.freedesktop.dbus-system.plist /Library/LaunchDaemons",
+    "sudo launchctl bootstrap system /Library/LaunchDaemons/org.freedesktop.dbus-system.plist",
+]
+
 # Layer 3: Emacs installation
 [layer3]
 name = "Emacs Installation"

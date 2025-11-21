@@ -672,6 +672,14 @@ def layer2_base_packages(config, check_only=False):
     print("\npython packages:")
     install_pip_packages(config['layer2']['pip_packages'], check_only)
 
+    # Run post-install commands
+    post_install_commands = config['layer2'].get('post_install_commands', [])
+    if post_install_commands and not check_only:
+        print("\npost-install commands:")
+        for cmd in post_install_commands:
+            print(f"running: {cmd}")
+            run_command(cmd)
+
 
 def layer3_emacs(config, home, check_only=False):
     """Layer 3: Install Emacs."""
