@@ -231,10 +231,41 @@ def get_installed_npm_packages():
     return set()
 
 
+def get_pip_command():
+    """Get the correct pip command for the Homebrew Python installation."""
+    # Look for versioned python3.X commands in /opt/homebrew/bin or /usr/local/bin
+    import re
+    import glob
+
+    # Check common Homebrew locations
+    homebrew_paths = ['/opt/homebrew/bin', '/usr/local/bin']
+
+    for brew_path in homebrew_paths:
+        if os.path.exists(brew_path):
+            # Find all python3.X binaries
+            python_bins = glob.glob(os.path.join(brew_path, 'python3.*'))
+            if python_bins:
+                # Sort to get the highest version
+                python_bins.sort(reverse=True)
+                for python_bin in python_bins:
+                    # Extract version from filename (e.g., python3.14 -> 3.14)
+                    version_match = re.search(r'python(3\.\d+)', os.path.basename(python_bin))
+                    if version_match:
+                        version = version_match.group(1)
+                        pip_cmd = f"pip{version}"
+                        # Check if this pip exists
+                        if shutil.which(pip_cmd):
+                            return pip_cmd
+
+    # Fallback to pip3
+    return "pip3"
+
+
 def get_installed_pip_packages():
     """get list of installed pip packages."""
     try:
-        result = subprocess.run(['pip3', 'list', '--format=json'], capture_output=True, text=True)
+        pip_cmd = get_pip_command()
+        result = subprocess.run([pip_cmd, 'list', '--format=json'], capture_output=True, text=True)
         if result.returncode == 0:
             packages = json.loads(result.stdout)
             return {pkg['name'].lower() for pkg in packages}
@@ -350,7 +381,7 @@ def install_brew_packages(packages, check_only=False):
             print("installing...")
             for package in missing:
                 #print(f"installing {package}...")
-                run_command(f"brew install {package}")
+                run_command(f"brew install -f {package}")
     else:
         print(f"all {len(packages)} packages already installed")
 
@@ -374,7 +405,7 @@ def install_npm_packages(packages, check_only=False):
             #print("installing...")
             for package in missing:
                 print(f"installing {package}...")
-                run_command(f"npm install -g {package}")
+                run_command(f"npm install -g {package} --force")
     else:
         print(f"all {len(packages)} packages already installed")
 
@@ -383,6 +414,9 @@ def install_pip_packages(packages, check_only=False):
     """install missing pip packages."""
     if not packages:
         return
+
+    # Get the correct pip command
+    pip_cmd = get_pip_command()
 
     installed = get_installed_pip_packages()
     missing = []
@@ -394,10 +428,10 @@ def install_pip_packages(packages, check_only=False):
     if missing:
         print(f"missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
-            print("installing...")
+            print(f"using {pip_cmd} for installation...")
             for package in missing:
                 #print(f"installing {package}...")
-                run_command(f"pip3 install {package}")
+                run_command(f"{pip_cmd} install {package}")
     else:
         print(f"all {len(packages)} packages already installed")
 
@@ -722,12 +756,102 @@ def layer4_doom(config, script_dir, home, check_only=False):
             run_command(f"{doom_bin} sync", env=env)
 
 
+def setup_python_symlinks(check_only=False):
+    """Create python3 and pip3 symlinks to versioned Homebrew Python."""
+    import re
+
+    # Determine Homebrew bin directory
+    homebrew_paths = ['/opt/homebrew/bin', '/usr/local/bin']
+    homebrew_bin = None
+
+    for path in homebrew_paths:
+        if os.path.exists(path):
+            homebrew_bin = path
+            break
+
+    if not homebrew_bin:
+        print("✗ Homebrew bin directory not found")
+        return
+
+    # Find all versioned Python installations
+    python_bins = glob.glob(os.path.join(homebrew_bin, 'python3.*'))
+    if not python_bins:
+        print("✗ No Homebrew Python installation found")
+        return
+
+    # Sort to get the highest version
+    python_bins.sort(reverse=True)
+    latest_python = python_bins[0]
+    version_match = re.search(r'python(3\.\d+)', os.path.basename(latest_python))
+
+    if not version_match:
+        print("✗ Could not determine Python version")
+        return
+
+    version = version_match.group(1)
+    python_target = f"python{version}"
+    pip_target = f"pip{version}"
+
+    python3_link = os.path.join(homebrew_bin, "python3")
+    pip3_link = os.path.join(homebrew_bin, "pip3")
+
+    # Check if pip exists
+    pip_target_path = os.path.join(homebrew_bin, pip_target)
+    if not os.path.exists(pip_target_path):
+        print(f"✗ {pip_target} not found")
+        return
+
+    # Report current status
+    python3_needs_update = True
+    pip3_needs_update = True
+
+    if os.path.islink(python3_link):
+        if os.readlink(python3_link) == python_target:
+            print(f"✓ python3 -> {python_target}")
+            python3_needs_update = False
+        else:
+            print(f"✗ python3 -> {os.readlink(python3_link)} (should be {python_target})")
+    elif os.path.exists(python3_link):
+        print(f"✗ python3 exists but is not a symlink")
+    else:
+        print(f"✗ python3 symlink missing")
+
+    if os.path.islink(pip3_link):
+        if os.readlink(pip3_link) == pip_target:
+            print(f"✓ pip3 -> {pip_target}")
+            pip3_needs_update = False
+        else:
+            print(f"✗ pip3 -> {os.readlink(pip3_link)} (should be {pip_target})")
+    elif os.path.exists(pip3_link):
+        print(f"✗ pip3 exists but is not a symlink")
+    else:
+        print(f"✗ pip3 symlink missing")
+
+    # Create/update symlinks if needed
+    if not check_only and (python3_needs_update or pip3_needs_update):
+        if python3_needs_update:
+            if os.path.lexists(python3_link):
+                os.remove(python3_link)
+            os.symlink(python_target, python3_link)
+            print(f"created python3 -> {python_target}")
+
+        if pip3_needs_update:
+            if os.path.lexists(pip3_link):
+                os.remove(pip3_link)
+            os.symlink(pip_target, pip3_link)
+            print(f"created pip3 -> {pip_target}")
+
+
 def layer5_symlinks(config, script_dir, home, check_only=False):
     """Layer 5: Setup general symlinks."""
     print(f"\n{GREEN}=== Layer 5: Symlinks ==={RESET}")
 
     # Apply all general symlinks (zsh, p10k, editorconfig, etc.)
     apply_symlinks(config['layer5']['symlinks'], script_dir, home, check_only)
+
+    # Setup Python symlinks (python3 -> python3.X, pip3 -> pip3.X)
+    print("\npython symlinks:")
+    setup_python_symlinks(check_only)
 
     # Setup jdtls links if present
     # Use link_force to update symlinks when jdtls version changes
