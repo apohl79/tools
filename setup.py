@@ -714,6 +714,7 @@ def layer3_emacs(config, home, check_only=False):
                         print(f"detected emacs version: {emacs_version}")
 
                         # Get the expected cache path from brew
+                        print("calculating cache path...")
                         cache_path_result = subprocess.run(['brew', '--cache', '-s', emacs_formula],
                                                           capture_output=True, text=True)
                         if cache_path_result.returncode != 0:
