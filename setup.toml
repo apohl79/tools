@@ -230,7 +230,7 @@ install_path = "{home}/.config/emacs"
 
 # Layer 5: Symlinks and Shell
 [layer5]
-name = "Symlinks"
+name = "Symlinks & Java"
 
 # {script_dir} = directory containing setup.py
 # {home} = user's home directory
