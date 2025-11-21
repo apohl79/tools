@@ -170,7 +170,6 @@ npm_packages = [
 # Python packages
 pip_packages = [
     "numpy",
-    "typing_extensions",
 ]
 
 # Post-install commands to run after packages are installed
