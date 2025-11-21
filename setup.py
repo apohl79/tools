@@ -525,6 +525,7 @@ def layer0_shell(config, home, check_only=False):
             print("✗ powerlevel10k theme is missing")
             if not check_only:
                 print("installing powerlevel10k...")
+                set_terminal_title("powerlevel10k")
                 run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
     else:
         print("✗ oh-my-zsh is not installed")
@@ -534,11 +535,13 @@ def layer0_shell(config, home, check_only=False):
                     shutil.rmtree(path)
 
             print("installing oh-my-zsh...")
+            set_terminal_title("oh-my-zsh")
             env = os.environ.copy()
             env["RUNZSH"] = "no"
             run_command(f'sh -c "$(curl -fsSL {config["layer0"]["oh_my_zsh_url"]})"', env=env)
 
             print("installing powerlevel10k...")
+            set_terminal_title("powerlevel10k")
             run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
 
 
@@ -676,7 +679,8 @@ def layer2_base_packages(config, check_only=False):
     post_install_commands = config['layer2'].get('post_install_commands', [])
     if post_install_commands and not check_only:
         print("\npost-install commands:")
-        for cmd in post_install_commands:
+        for i, cmd in enumerate(post_install_commands, 1):
+            set_terminal_title(f"post-install ({i}/{len(post_install_commands)})")
             print(f"running: {cmd}")
             run_command(cmd)
 
@@ -694,7 +698,9 @@ def layer3_emacs(config, home, check_only=False):
             options = ' '.join(config['layer3']['options'])
             install_cmd = f"brew install {options} {emacs_formula}"
             print(f"installing {emacs_formula}...")
+            set_terminal_title(f"brew / {emacs_formula}")
             run_command(install_cmd)
+            set_terminal_title("emacs config")
             run_command("defaults write org.gnu.Emacs TransparentTitleBar DARK")
     else:
         print("✓ Emacs is already installed")
@@ -713,7 +719,8 @@ def layer3_emacs(config, home, check_only=False):
         print(f"\ndictionaries: {len(missing_dicts)} missing")
         if not check_only:
             print("installing dictionaries...")
-            for dict_entry in missing_dicts:
+            for i, dict_entry in enumerate(missing_dicts, 1):
+                set_terminal_title(f"dictionary ({i}/{len(missing_dicts)})")
                 run_command(f"wget -nc {dict_entry['url']} -O {spelling_dir}/{dict_entry['filename']}")
     else:
         print("✓ all dictionaries installed")
@@ -791,6 +798,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
                 repair = input("  repair Doom Emacs installation? [Y/n]: ").strip()
                 if not repair or repair.lower() in ["y", "yes"]:
                     print("running doom sync...")
+                    set_terminal_title("doom sync")
                     env = os.environ.copy()
                     env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
                     run_command(f"{doom_bin} sync", env=env)
@@ -798,12 +806,15 @@ def layer4_doom(config, script_dir, home, check_only=False):
         print("✗ Doom Emacs not found")
         if not check_only:
             print("installing Doom Emacs...")
+            set_terminal_title("doom clone")
             run_command(f"git clone --depth 1 {config['layer4']['repo']} {emacs_config_path}")
 
             env = os.environ.copy()
             env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
 
+            set_terminal_title("doom install")
             run_command(f"{doom_bin} install --force --env --install --fonts --hooks", env=env)
+            set_terminal_title("doom sync")
             run_command(f"{doom_bin} sync", env=env)
 
 
@@ -1901,6 +1912,7 @@ def install_command_line_tools(check_only=False):
     print("Installing Command Line Tools...")
     print("A dialog will appear - please follow the prompts to install")
 
+    set_terminal_title("xcode cli tools")
     # Trigger the installation dialog
     subprocess.run(['xcode-select', '--install'])
 
@@ -1976,6 +1988,7 @@ def main():
     if not command_exists("brew"):
         print(f"\n{GREEN}=== Installing Homebrew ==={RESET}\n")
         if not args.check:
+            set_terminal_title("homebrew install")
             run_command('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
         else:
             print("homebrew would be installed")
