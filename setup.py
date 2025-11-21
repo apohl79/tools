@@ -517,7 +517,8 @@ def apply_symlinks(symlinks, script_dir, home, check_only=False):
 
 def layer0_shell(config, home, check_only=False):
     """Layer 0: Setup oh-my-zsh and powerlevel10k."""
-    print(f"\n{GREEN}=== Layer 0: Shell Setup ==={RESET}\n")
+    layer_name = config['layer0'].get('name', 'Shell Setup')
+    print(f"\n{GREEN}=== Layer 0: {layer_name} ==={RESET}\n")
 
     oh_my_zsh_path = os.path.join(home, ".oh-my-zsh", "oh-my-zsh.sh")
     zsh_custom = os.environ.get("ZSH_CUSTOM", os.path.join(home, ".oh-my-zsh/custom"))
@@ -553,7 +554,8 @@ def layer0_shell(config, home, check_only=False):
 
 def layer1_sudo(config, script_dir, home, check_only=False):
     """Layer 1: Configure sudo (Touch ID or custom binary)."""
-    print(f"\n{GREEN}=== Layer 1: Sudo Configuration ==={RESET}\n")
+    layer_name = config['layer1'].get('name', 'Sudo Configuration')
+    print(f"\n{GREEN}=== Layer 1: {layer_name} ==={RESET}\n")
 
     # Check Touch ID status
     pam_file = config['layer1']['touchid']['pam_file']
@@ -660,7 +662,8 @@ def layer1_sudo(config, script_dir, home, check_only=False):
 
 def layer2_base_packages(config, check_only=False):
     """Layer 2: Install all base system packages."""
-    print(f"\n{GREEN}=== Layer 2: Base System Packages ==={RESET}")
+    layer_name = config['layer2'].get('name', 'Base System Packages')
+    print(f"\n{GREEN}=== Layer 2: {layer_name} ==={RESET}")
 
     # Add homebrew taps
     if not check_only:
@@ -693,7 +696,8 @@ def layer2_base_packages(config, check_only=False):
 
 def layer3_emacs(config, home, check_only=False):
     """Layer 3: Install Emacs."""
-    print(f"\n{GREEN}=== Layer 3: Emacs Installation ==={RESET}\n")
+    layer_name = config['layer3'].get('name', 'Emacs Installation')
+    print(f"\n{GREEN}=== Layer 3: {layer_name} ==={RESET}\n")
 
     # Check if Emacs is installed via Homebrew
     emacs_formula = config['layer3']['formula']
@@ -802,7 +806,8 @@ def layer3_emacs(config, home, check_only=False):
 
 def layer4_doom(config, script_dir, home, check_only=False):
     """Layer 4: Install Doom Emacs and setup config."""
-    print(f"\n{GREEN}=== Layer 4: Doom Emacs ==={RESET}\n")
+    layer_name = config['layer4'].get('name', 'Doom Emacs')
+    print(f"\n{GREEN}=== Layer 4: {layer_name} ==={RESET}\n")
 
     # First, determine and setup emacs config symlink
     existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
@@ -980,7 +985,8 @@ def setup_python_symlinks(check_only=False):
 
 def layer5_symlinks(config, script_dir, home, check_only=False):
     """Layer 5: Setup general symlinks."""
-    print(f"\n{GREEN}=== Layer 5: Symlinks ==={RESET}")
+    layer_name = config['layer5'].get('name', 'Symlinks')
+    print(f"\n{GREEN}=== Layer 5: {layer_name} ==={RESET}\n")
 
     # Apply all general symlinks (zsh, p10k, editorconfig, etc.)
     apply_symlinks(config['layer5']['symlinks'], script_dir, home, check_only)
