@@ -660,7 +660,7 @@ def layer1_sudo(config, script_dir, home, check_only=False):
             print("\nNo sudo configurations to remove")
 
 
-def layer2_base_packages(config, check_only=False):
+def layer2_base_packages(config, home, check_only=False):
     """Layer 2: Install all base system packages."""
     layer_name = config['layer2'].get('name', 'Base System Packages')
     print(f"\n{GREEN}=== Layer 2: {layer_name} ==={RESET}")
@@ -687,11 +687,15 @@ def layer2_base_packages(config, check_only=False):
     # Run post-install commands
     post_install_commands = config['layer2'].get('post_install_commands', [])
     if post_install_commands and not check_only:
-        print("\npost-install commands:")
+        # Get brew prefix for variable substitution
+        brew_prefix_result = subprocess.run(['brew', '--prefix'], capture_output=True, text=True)
+        brew_prefix = brew_prefix_result.stdout.strip() if brew_prefix_result.returncode == 0 else '/usr/local'
+
         for i, cmd in enumerate(post_install_commands, 1):
             set_terminal_title(f"post-install ({i}/{len(post_install_commands)})")
-            print(f"running: {cmd}")
-            run_command(cmd)
+            # Substitute variables in command
+            cmd_formatted = cmd.format(home=home, brew_prefix=brew_prefix)
+            run_command(cmd_formatted)
 
 
 def layer3_emacs(config, home, check_only=False):
@@ -795,11 +799,15 @@ def layer3_emacs(config, home, check_only=False):
     # Run post-install commands
     post_install_commands = config['layer3'].get('post_install_commands', [])
     if post_install_commands and not check_only:
-        print("post-install commands:")
+        # Get brew prefix for variable substitution
+        brew_prefix_result = subprocess.run(['brew', '--prefix'], capture_output=True, text=True)
+        brew_prefix = brew_prefix_result.stdout.strip() if brew_prefix_result.returncode == 0 else '/usr/local'
+
         for i, cmd in enumerate(post_install_commands, 1):
             set_terminal_title(f"emacs post-install ({i}/{len(post_install_commands)})")
-            print(f"running: {cmd}")
-            run_command(cmd)
+            # Substitute variables in command
+            cmd_formatted = cmd.format(home=home, brew_prefix=brew_prefix)
+            run_command(cmd_formatted)
     elif check_only:
         print("skipping post-install commands (check mode)")
 
@@ -2181,7 +2189,7 @@ def main():
         layer1_sudo(config, script_dir, home, args.check)
 
     if args.layer is None or args.layer == 2:
-        layer2_base_packages(config, args.check)
+        layer2_base_packages(config, home, args.check)
 
     if args.layer is None or args.layer == 3:
         layer3_emacs(config, home, args.check)

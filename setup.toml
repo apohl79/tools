@@ -184,7 +184,8 @@ options = [
 # Post-install commands to run after Emacs is installed
 post_install_commands = [
     "brew services start d12frosted/emacs-plus/emacs-plus@30",
-    "osascript -e 'tell application \"Finder\" to make alias file to posix file \"/usr/local/Cellar/emacs-plus@30/30.2/Emacs.app\" at posix file \"/Applications\" with properties {name:\"Emacs.app\"}'",
+    "rm -rf /Applications/Emacs.app",
+    "osascript -e 'tell application \"Finder\" to make alias file to posix file \"{brew_prefix}/Cellar/emacs-plus@30/30.2/Emacs.app\" at posix file \"/Applications\" with properties {{name:\"Emacs.app\"}}'",
 ]
 
 # Spelling dictionaries to download
@@ -216,6 +217,7 @@ name = "Symlinks & Java"
 
 # {script_dir} = directory containing setup.py
 # {home} = user's home directory
+# {brew_prefix} = homebrew prefix (/opt/homebrew or /usr/local)
 [[layer5.symlinks]]
 name = "tools"
 source = "{script_dir}"
