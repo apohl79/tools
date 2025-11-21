@@ -1018,11 +1018,32 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
 
             added_versions = []
             for pkg in java_packages:
-                # Extract version (openjdk@21 -> 21, openjdk -> latest)
+                # Extract or detect version
                 if '@' in pkg:
+                    # Explicit version in package name (openjdk@21 -> 21)
                     version = pkg.split('@')[1]
                 else:
-                    version = "latest"
+                    # No version specified - get it from brew info
+                    info_result = subprocess.run(['brew', 'info', '--json=v2', pkg],
+                                                capture_output=True, text=True)
+                    if info_result.returncode == 0:
+                        try:
+                            info = json.loads(info_result.stdout)
+                            formulae = info.get('formulae', [])
+                            if formulae:
+                                # Get the major version from stable version (e.g., "23.0.1" -> "23")
+                                full_version = formulae[0]['versions']['stable']
+                                version = full_version.split('.')[0]
+                            else:
+                                version = None
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            version = None
+                    else:
+                        version = None
+
+                    if not version:
+                        print(f"✗ could not detect version for {pkg}")
+                        continue
 
                 if version not in installed_versions:
                     print(f"adding java {version} ({pkg})...")
@@ -1035,16 +1056,14 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
                         java_home = os.path.join(brew_prefix, 'libexec/openjdk.jdk/Contents/Home')
                         if os.path.exists(java_home):
                             run_command(f"jenv add {java_home}")
-                            if version != "latest":
-                                added_versions.append(int(version))
+                            added_versions.append(int(version))
                         else:
                             print(f"✗ Java Home not found at {java_home}")
                     else:
                         print(f"✗ {pkg} not found via brew")
                 else:
                     print(f"✓ java {version} already added")
-                    if version != "latest":
-                        added_versions.append(int(version))
+                    added_versions.append(int(version))
 
             # Set highest version as global
             if added_versions:
