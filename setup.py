@@ -409,12 +409,18 @@ def install_brew_packages(packages, check_only=False):
     for pkg in packages:
         # Strip tap prefix if present (e.g., "getsentry/tools/sentry-cli" -> "sentry-cli")
         pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
-        # Strip version suffix (e.g., "python@3.13" -> "python")
-        pkg_base = pkg_name.split('@')[0]
 
-        # Check if package or its base name is installed
-        if pkg_name not in installed_all and pkg_base not in installed_all:
-            missing.append(pkg)
+        # For versioned packages (e.g., openjdk@21), only check exact version
+        # For non-versioned packages, check both exact and base name
+        if '@' in pkg_name:
+            # Versioned package - must match exactly
+            if pkg_name not in installed_all:
+                missing.append(pkg)
+        else:
+            # Non-versioned package - check base name too
+            pkg_base = pkg_name.split('@')[0]
+            if pkg_name not in installed_all and pkg_base not in installed_all:
+                missing.append(pkg)
 
     if missing:
         print(f"missing ({len(missing)}): {', '.join(missing)}")
@@ -1024,10 +1030,15 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
                     prefix_result = subprocess.run(['brew', '--prefix', pkg],
                                                  capture_output=True, text=True)
                     if prefix_result.returncode == 0:
-                        java_path = prefix_result.stdout.strip()
-                        run_command(f"jenv add {java_path}")
-                        if version != "latest":
-                            added_versions.append(int(version))
+                        brew_prefix = prefix_result.stdout.strip()
+                        # OpenJDK's Java Home is in libexec/openjdk.jdk/Contents/Home
+                        java_home = os.path.join(brew_prefix, 'libexec/openjdk.jdk/Contents/Home')
+                        if os.path.exists(java_home):
+                            run_command(f"jenv add {java_home}")
+                            if version != "latest":
+                                added_versions.append(int(version))
+                        else:
+                            print(f"✗ Java Home not found at {java_home}")
                     else:
                         print(f"✗ {pkg} not found via brew")
                 else:
