@@ -29,10 +29,27 @@ class ProgressTracker:
         self.current_task = ""
         self.enabled = True
         self.visible = False
+        self.term_height = self._get_terminal_height()
+
+    def _get_terminal_height(self):
+        """Get terminal height in rows."""
+        try:
+            import fcntl
+            import termios
+            import struct
+            # Get terminal size
+            h, w = struct.unpack('hh', fcntl.ioctl(0, termios.TIOCGWINSZ, '1234'))
+            return h
+        except:
+            return 24  # Default fallback
 
     def set_total(self, total):
         self.total_tasks = total
         self.completed_tasks = 0
+        if total > 0:
+            # Set scrolling region to exclude bottom line
+            sys.stdout.write(f"\033[0;{self.term_height - 1}r")
+            sys.stdout.flush()
 
     def start_task(self, task_description):
         self.current_task = task_description
@@ -51,25 +68,34 @@ class ProgressTracker:
         filled = int((bar_width * self.completed_tasks) / self.total_tasks)
         bar = '█' * filled + '░' * (bar_width - filled)
 
-        status_line = f"{CYAN}[{bar}] {percentage}% | {self.current_task}{RESET}{CLEAR_LINE}"
+        status_line = f"{CYAN}[{bar}] {percentage}% | {self.current_task}{RESET}"
 
-        # Print status bar
-        if self.visible:
-            # Move to saved position and print
-            print(f"\r{status_line}", end='', flush=True)
-        else:
-            # First time - just print
-            print(f"\n{status_line}", end='', flush=True)
-            self.visible = True
+        # Save cursor position, move to bottom line, print status, restore cursor
+        sys.stdout.write(SAVE_CURSOR)
+        sys.stdout.write(f"\033[{self.term_height};0H")  # Move to last row, column 0
+        sys.stdout.write(CLEAR_LINE)
+        sys.stdout.write(status_line)
+        sys.stdout.write(RESTORE_CURSOR)
+        sys.stdout.flush()
+
+        self.visible = True
 
     def clear(self):
         if self.visible:
-            print(f"\r{CLEAR_LINE}", end='', flush=True)
-            self.visible = False
+            sys.stdout.write(SAVE_CURSOR)
+            sys.stdout.write(f"\033[{self.term_height};0H")  # Move to last row
+            sys.stdout.write(CLEAR_LINE)
+            sys.stdout.write(RESTORE_CURSOR)
+            sys.stdout.flush()
 
     def finish(self):
         if self.visible:
-            print()  # New line after status bar
+            # Clear the status line
+            sys.stdout.write(f"\033[{self.term_height};0H")  # Move to last row
+            sys.stdout.write(CLEAR_LINE)
+            # Reset scrolling region to full screen
+            sys.stdout.write(f"\033[0;{self.term_height}r")
+            sys.stdout.flush()
             self.visible = False
 
 # Global instance
