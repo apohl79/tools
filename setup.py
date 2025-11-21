@@ -303,11 +303,10 @@ def get_pip_command():
 
 
 def get_installed_pip_packages():
-    """get list of user-installed pip packages."""
+    """get list of installed pip packages."""
     try:
         pip_cmd = get_pip_command()
-        # List user-installed packages only
-        result = subprocess.run([pip_cmd, 'list', '--user', '--format=json'], capture_output=True, text=True)
+        result = subprocess.run([pip_cmd, 'list', '--format=json'], capture_output=True, text=True)
         if result.returncode == 0:
             packages = json.loads(result.stdout)
             return {pkg['name'].lower() for pkg in packages}
@@ -454,7 +453,7 @@ def install_npm_packages(packages, check_only=False):
 
 
 def install_pip_packages(packages, check_only=False):
-    """install missing pip packages to user site-packages."""
+    """install missing pip packages."""
     if not packages:
         return
 
@@ -471,10 +470,10 @@ def install_pip_packages(packages, check_only=False):
     if missing:
         print(f"missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
-            print(f"using {pip_cmd} --user for installation...")
+            print(f"using {pip_cmd} for installation...")
             for package in missing:
                 progress.start_task(f"pip / {package}")
-                run_command(f"{pip_cmd} install --user {package}")
+                run_command(f"{pip_cmd} install --break-system-packages {package}")
                 progress.complete_task()
     else:
         print(f"all {len(packages)} packages already installed")
