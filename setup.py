@@ -713,55 +713,40 @@ def layer3_emacs(config, home, check_only=False):
                         emacs_version = formulae[0]['versions']['stable']
                         print(f"detected emacs version: {emacs_version}")
 
-                        # Try to manually download and cache Emacs tarball
-                        print("attempting manual download from mirror (ftp.gnu.org may be down)...")
-                        set_terminal_title("emacs manual download")
-
-                        tarball = f"emacs-{emacs_version}.tar.xz"
-                        mirror_url = f"https://ftp.fau.de/gnu/emacs/{tarball}"
-                        tmp_path = f"/tmp/{tarball}"
-
-                        # Download from mirror
-                        download_result = subprocess.run(['curl', '-L', mirror_url, '-o', tmp_path],
-                                                        capture_output=True, text=True)
-
-                        if download_result.returncode == 0 and os.path.exists(tmp_path):
-                            print("✓ downloaded from mirror")
-
-                            # Calculate SHA256
-                            sha_result = subprocess.run(['shasum', '-a', '256', tmp_path],
-                                                       capture_output=True, text=True)
-                            if sha_result.returncode == 0:
-                                sha256 = sha_result.stdout.split()[0]
-                                print(f"SHA256: {sha256}")
-
-                                # Get brew cache directory
-                                cache_result = subprocess.run(['brew', '--cache'],
-                                                            capture_output=True, text=True)
-                                if cache_result.returncode == 0:
-                                    brew_cache = cache_result.stdout.strip()
-                                    downloads_dir = os.path.join(brew_cache, 'downloads')
-                                    os.makedirs(downloads_dir, exist_ok=True)
-
-                                    # Move to downloads with hash prefix
-                                    hashed_name = f"{sha256}--{tarball}"
-                                    dest_path = os.path.join(downloads_dir, hashed_name)
-                                    shutil.move(tmp_path, dest_path)
-
-                                    # Create symlink in cache root
-                                    # Format: formula-name--version.tar.xz
-                                    symlink_name = f"{formula_name}--{emacs_version}.tar.xz"
-                                    symlink_path = os.path.join(brew_cache, symlink_name)
-                                    symlink_target = f"downloads/{hashed_name}"
-                                    if os.path.exists(symlink_path) or os.path.islink(symlink_path):
-                                        os.remove(symlink_path)
-                                    os.symlink(symlink_target, symlink_path)
-
-                                    print(f"✓ cached at {symlink_path}")
-                            else:
-                                print("✗ failed to calculate SHA256, will let brew download")
+                        # Get the expected cache path from brew
+                        cache_path_result = subprocess.run(['brew', '--cache', '-s', emacs_formula],
+                                                          capture_output=True, text=True)
+                        if cache_path_result.returncode != 0:
+                            print("✗ failed to get brew cache path, will let brew download")
                         else:
-                            print("✗ manual download failed, will let brew download")
+                            expected_cache_path = cache_path_result.stdout.strip()
+                            print(f"expected cache path: {expected_cache_path}")
+
+                            # Check if already cached
+                            if os.path.exists(expected_cache_path):
+                                print("✓ already cached")
+                            else:
+                                # Try to manually download and cache Emacs tarball
+                                print("attempting manual download from mirror (ftp.gnu.org may be down)...")
+                                set_terminal_title("emacs manual download")
+
+                                tarball = f"emacs-{emacs_version}.tar.xz"
+                                mirror_url = f"https://ftp.fau.de/gnu/emacs/{tarball}"
+                                tmp_path = f"/tmp/{tarball}"
+
+                                # Download from mirror
+                                download_result = subprocess.run(['curl', '-L', mirror_url, '-o', tmp_path],
+                                                                capture_output=True, text=True)
+
+                                if download_result.returncode == 0 and os.path.exists(tmp_path):
+                                    print("✓ downloaded from mirror")
+
+                                    # Move to the exact location brew expects
+                                    os.makedirs(os.path.dirname(expected_cache_path), exist_ok=True)
+                                    shutil.move(tmp_path, expected_cache_path)
+                                    print(f"✓ cached at {expected_cache_path}")
+                                else:
+                                    print("✗ manual download failed, will let brew download")
                 except (json.JSONDecodeError, KeyError, IndexError) as e:
                     print(f"✗ failed to parse brew info: {e}")
 
