@@ -725,6 +725,15 @@ def layer3_emacs(config, home, check_only=False):
     else:
         print("✓ all dictionaries installed")
 
+    # Run post-install commands
+    post_install_commands = config['layer3'].get('post_install_commands', [])
+    if post_install_commands and not check_only:
+        print("\npost-install commands:")
+        for i, cmd in enumerate(post_install_commands, 1):
+            set_terminal_title(f"emacs post-install ({i}/{len(post_install_commands)})")
+            print(f"running: {cmd}")
+            run_command(cmd)
+
 
 def layer4_doom(config, script_dir, home, check_only=False):
     """Layer 4: Install Doom Emacs and setup config."""

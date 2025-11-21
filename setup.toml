@@ -38,6 +38,7 @@ brew_taps = [
 brew_packages = [
     "arc",
     "awk",
+    "autoconf",
     "base64",
     "basedpyright",
     "bentobox",
@@ -84,6 +85,7 @@ brew_packages = [
     "iftop",
     "ilok-license-manager",
     "img2pdf",
+    "imagemagick",
     "iperf3",
     "isort",
     "isync",
@@ -94,10 +96,13 @@ brew_packages = [
     "keepassxc",
     "kubernetes-cli",
     "leiningen",
+    "libjpeg",
     "libpaho-mqtt",
+    "librsvg",
     "libxml2",
     "llvm",
     "lua-language-server",
+    "m4",
     "mailspring",
     "make",
     "markdown",
@@ -143,6 +148,7 @@ brew_packages = [
     "tor",
     "tor-browser",
     "tree",
+    "tree-sitter",
     "typescript-language-server",
     "uv",
     "vcpkg",
@@ -153,6 +159,7 @@ brew_packages = [
     "whatsapp",
     "wireshark",
     "wireshark-app",
+    "zlib",
 ]
 
 # NPM global packages
@@ -207,6 +214,11 @@ url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/en/en_U
 [[layer3.dictionaries]]
 filename = "en_US.dic"
 url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/en/en_US.dic"
+
+# Post-install commands to run after Emacs is installed
+post_install_commands = [
+    "osascript -e 'tell application \"Finder\" to make alias file to posix file \"/usr/local/Cellar/emacs-plus@30/30.2/Emacs.app\" at posix file \"/Applications\" with properties {name:\"Emacs.app\"}'",
+]
 
 # Layer 4: Doom Emacs
 [layer4]
