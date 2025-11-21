@@ -584,7 +584,7 @@ def layer0_shell(config, home, check_only=False):
             env["RUNZSH"] = "no"
             run_command(f'sh -c "$(curl -fsSL {config["layer0"]["oh_my_zsh_url"]})"', env=env)
 
-            print("installing powerlevel10k...")
+            print("installing powerlevel10k...")w
             run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
 
 
@@ -2007,12 +2007,12 @@ def main():
         return
 
     # Install Command Line Tools if not present (required for Homebrew)
-    print(f"{GREEN}=== Command Line Tools ==={RESET}")
+    print(f"{GREEN}=== Command Line Tools ==={RESET}\n")
     install_command_line_tools(args.check)
 
     # Install Homebrew if not present
     if not command_exists("brew"):
-        print(f"\n{GREEN}=== Installing Homebrew ==={RESET}")
+        print(f"\n{GREEN}=== Installing Homebrew ==={RESET}\n")
         if not args.check:
             run_command('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
         else:
