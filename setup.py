@@ -877,6 +877,11 @@ def layer4_doom(config, script_dir, home, check_only=False):
     emacs_config_path = config['layer4']['install_path'].format(home=home)
     doom_bin = os.path.join(emacs_config_path, "bin/doom")
 
+    # Get brew prefix for PATH
+    brew_prefix_result = subprocess.run(['brew', '--prefix'], capture_output=True, text=True)
+    brew_prefix = brew_prefix_result.stdout.strip() if brew_prefix_result.returncode == 0 else '/usr/local'
+    brew_bin = os.path.join(brew_prefix, 'bin')
+
     if os.path.exists(emacs_config_path):
         print("✓ Doom Emacs is installed")
         if not os.path.exists(doom_bin):
@@ -887,7 +892,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
                     print("running doom sync...")
                     set_terminal_title("doom sync")
                     env = os.environ.copy()
-                    env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
+                    env["PATH"] = f"{brew_bin}:" + env.get("PATH", "")
                     run_command(f"{doom_bin} sync", env=env)
     else:
         print("✗ Doom Emacs not found")
@@ -897,7 +902,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
             run_command(f"git clone --depth 1 {config['layer4']['repo']} {emacs_config_path}")
 
             env = os.environ.copy()
-            env["PATH"] = "/opt/homebrew/bin:" + env.get("PATH", "")
+            env["PATH"] = f"{brew_bin}:" + env.get("PATH", "")
 
             set_terminal_title("doom install")
             run_command(f"{doom_bin} install --force --env --install --fonts --hooks", env=env)
@@ -909,17 +914,17 @@ def setup_python_symlinks(check_only=False):
     """Create python3 and pip3 symlinks to versioned Homebrew Python."""
     import re
 
-    # Determine Homebrew bin directory
-    homebrew_paths = ['/opt/homebrew/bin', '/usr/local/bin']
-    homebrew_bin = None
+    # Get Homebrew bin directory
+    brew_prefix_result = subprocess.run(['brew', '--prefix'], capture_output=True, text=True)
+    if brew_prefix_result.returncode != 0:
+        print("✗ Could not determine Homebrew prefix")
+        return
 
-    for path in homebrew_paths:
-        if os.path.exists(path):
-            homebrew_bin = path
-            break
+    brew_prefix = brew_prefix_result.stdout.strip()
+    homebrew_bin = os.path.join(brew_prefix, 'bin')
 
-    if not homebrew_bin:
-        print("✗ Homebrew bin directory not found")
+    if not os.path.exists(homebrew_bin):
+        print(f"✗ Homebrew bin directory not found at {homebrew_bin}")
         return
 
     # Find all versioned Python installations
@@ -1006,13 +1011,17 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
     # Setup jdtls links if present
     # Use link_force to update symlinks when jdtls version changes
     if not check_only and command_exists("jenv"):
-        jdtls_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/config_mac")
+        # Get brew prefix for jdtls path
+        brew_prefix_result = subprocess.run(['brew', '--prefix'], capture_output=True, text=True)
+        brew_prefix = brew_prefix_result.stdout.strip() if brew_prefix_result.returncode == 0 else '/usr/local'
+
+        jdtls_patterns = glob.glob(f"{brew_prefix}/Cellar/jdtls/*/libexec/config_mac")
         if jdtls_patterns:
             jdtls_dir = os.path.join(home, "tools/jdtls")
             os.makedirs(jdtls_dir, exist_ok=True)
             link_force("jdtls/config_mac", jdtls_patterns[0], os.path.join(jdtls_dir, "config_mac"))
 
-        jdtls_plugin_patterns = glob.glob("/opt/homebrew/Cellar/jdtls/*/libexec/plugins")
+        jdtls_plugin_patterns = glob.glob(f"{brew_prefix}/Cellar/jdtls/*/libexec/plugins")
         if jdtls_plugin_patterns:
             link_force("jdtls/plugins", jdtls_plugin_patterns[0], os.path.join(home, "tools/jdtls/plugins"))
 
