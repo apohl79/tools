@@ -169,24 +169,16 @@ npm_packages = [
 
 # Python packages
 pip_packages = [
-    "certifi",
-    "cffi",
-    "cryptography",
-    "meson",
     "ndiff",
     "numpy",
-    "packaging",
-    "pip",
-    "pycparser",
-    "setuptools",
     "typing_extensions",
-    "wheel",
 ]
 
 # Post-install commands to run after packages are installed
 post_install_commands = [
     "sudo cp -f $(brew --prefix dbus)/org.freedesktop.dbus-system.plist /Library/LaunchDaemons",
     "sudo launchctl bootstrap system /Library/LaunchDaemons/org.freedesktop.dbus-system.plist",
+    "git clone https://github.com/microsoft/vcpkg ~/vcpkg",
 ]
 
 # Layer 3: Emacs installation
