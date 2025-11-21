@@ -194,19 +194,19 @@ options = [
 # Spelling dictionaries to download
 [[layer3.dictionaries]]
 filename = "de_DE_frami.aff"
-url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.aff"
+url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/de/de_DE_frami.aff"
 
 [[layer3.dictionaries]]
 filename = "de_DE_frami.dic"
-url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/de/de_DE_frami.dic"
+url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/de/de_DE_frami.dic"
 
 [[layer3.dictionaries]]
 filename = "en_US.aff"
-url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.aff"
+url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/en/en_US.aff"
 
 [[layer3.dictionaries]]
 filename = "en_US.dic"
-url = "https://cgit.freedesktop.org/libreoffice/dictionaries/plain/en/en_US.dic"
+url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/en/en_US.dic"
 
 # Layer 4: Doom Emacs
 [layer4]
