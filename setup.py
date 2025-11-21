@@ -749,9 +749,11 @@ def layer3_emacs(config, home, check_only=False):
                                     shutil.move(tmp_path, dest_path)
 
                                     # Create symlink in cache root
-                                    symlink_path = os.path.join(brew_cache, tarball)
+                                    # Format: formula-name--version.tar.xz
+                                    symlink_name = f"{formula_name}--{emacs_version}.tar.xz"
+                                    symlink_path = os.path.join(brew_cache, symlink_name)
                                     symlink_target = f"downloads/{hashed_name}"
-                                    if os.path.exists(symlink_path):
+                                    if os.path.exists(symlink_path) or os.path.islink(symlink_path):
                                         os.remove(symlink_path)
                                     os.symlink(symlink_target, symlink_path)
 
