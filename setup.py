@@ -21,51 +21,36 @@ SAVE_CURSOR = '\033[s'
 RESTORE_CURSOR = '\033[u'
 CLEAR_LINE = '\033[K'
 
-# Global progress tracker
+# Terminal title control
+def set_terminal_title(title):
+    """Set terminal window/tab title."""
+    print(f"\033]0;{title}\007", end='', flush=True)
+
+# Global progress tracking
 class ProgressTracker:
     def __init__(self):
         self.total_tasks = 0
         self.completed_tasks = 0
-        self.current_task = ""
-        self.enabled = True
-        self.visible = False
+        self.enabled = False
 
     def set_total(self, total):
         self.total_tasks = total
         self.completed_tasks = 0
+        self.enabled = total > 0
 
     def start_task(self, task_description):
-        self.current_task = task_description
-        self.update_display()
+        if not self.enabled:
+            return
+        percentage = int((self.completed_tasks / self.total_tasks) * 100)
+        set_terminal_title(f"[{percentage}%] {task_description}")
 
     def complete_task(self):
-        self.completed_tasks += 1
-        self.update_display()
-
-    def update_display(self):
-        if not self.enabled or self.total_tasks == 0:
+        if not self.enabled:
             return
-
-        percentage = int((self.completed_tasks / self.total_tasks) * 100)
-        bar_width = 30
-        filled = int((bar_width * self.completed_tasks) / self.total_tasks)
-        bar = '█' * filled + '░' * (bar_width - filled)
-
-        status_line = f"{CYAN}[{bar}] {percentage}% | {self.current_task}{RESET}{CLEAR_LINE}"
-
-        # Print status bar on same line (overwrite)
-        print(f"\r{status_line}", end='', flush=True)
-        self.visible = True
-
-    def clear(self):
-        if self.visible:
-            print(f"\r{CLEAR_LINE}", end='', flush=True)
-            self.visible = False
+        self.completed_tasks += 1
 
     def finish(self):
-        if self.visible:
-            print()  # New line after status bar
-            self.visible = False
+        set_terminal_title("complete")
 
 # Global instance
 progress = ProgressTracker()
@@ -190,9 +175,6 @@ def run_command(cmd, shell=True, check=False, env=None, stream_output=True, prom
         stream_output: If True, stream output in real-time. If False, capture and print after completion.
         prompt_on_error: If True, prompt user to continue or abort on error (default: True)
     """
-    # Clear progress bar before running command
-    progress.clear()
-
     if stream_output:
         # Stream output in real-time (no capture)
         result = subprocess.run(cmd, shell=shell, check=False, env=env)
@@ -206,19 +188,14 @@ def run_command(cmd, shell=True, check=False, env=None, stream_output=True, prom
             print(result.stderr, end='', file=sys.stderr)
         success = result.returncode == 0
 
-    # Restore progress bar after command completes
-    progress.update_display()
-
     # Handle failure
     if not success:
         if prompt_on_error:
-            progress.clear()
             print(f"\n{RED}✗ Command failed with exit code {result.returncode}{RESET}")
             response = input(f"Continue anyway? [y/N]: ").strip().lower()
             if response not in ['y', 'yes']:
                 print(f"\n{RED}Aborting setup.{RESET}")
                 sys.exit(result.returncode)
-            progress.update_display()
         elif check:
             # If check is True and prompting is disabled, raise exception
             raise subprocess.CalledProcessError(result.returncode, cmd)
@@ -2022,11 +1999,7 @@ def main():
                 if pkg.lower() not in installed_pip:
                     total_packages += 1
 
-        if total_packages > 0:
-            progress.set_total(total_packages)
-            progress.enabled = True
-        else:
-            progress.enabled = False
+        progress.set_total(total_packages)
 
     # Run layers
     if args.layer is None or args.layer == 0:
