@@ -785,11 +785,13 @@ def layer3_emacs(config, home, check_only=False):
     # Run post-install commands
     post_install_commands = config['layer3'].get('post_install_commands', [])
     if post_install_commands and not check_only:
-        print("\npost-install commands:")
+        print("post-install commands:")
         for i, cmd in enumerate(post_install_commands, 1):
             set_terminal_title(f"emacs post-install ({i}/{len(post_install_commands)})")
             print(f"running: {cmd}")
             run_command(cmd)
+    elif check_only:
+        print("skipping post-install commands (check mode)")
 
 
 def layer4_doom(config, script_dir, home, check_only=False):
@@ -1325,6 +1327,16 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
     for pkg in pip_packages:
         content.append(f'    "{pkg}",\n')
     content.append("]\n\n")
+
+    # Add layer2 post_install_commands if they exist
+    if 'post_install_commands' in config['layer2']:
+        content.append("# Post-install commands to run after packages are installed\n")
+        content.append("post_install_commands = [\n")
+        for cmd in config['layer2']['post_install_commands']:
+            # Escape quotes in the command
+            escaped_cmd = cmd.replace('"', '\\"')
+            content.append(f'    "{escaped_cmd}",\n')
+        content.append("]\n\n")
 
     # Copy layer3, layer4, and layer5 sections from original
     in_layer3_or_later = False
