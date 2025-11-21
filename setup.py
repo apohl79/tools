@@ -303,13 +303,14 @@ def get_pip_command():
 
 
 def get_installed_pip_packages():
-    """get list of installed pipx packages."""
+    """get list of user-installed pip packages."""
     try:
-        result = subprocess.run(['pipx', 'list', '--json'], capture_output=True, text=True)
+        pip_cmd = get_pip_command()
+        # List user-installed packages only
+        result = subprocess.run([pip_cmd, 'list', '--user', '--format=json'], capture_output=True, text=True)
         if result.returncode == 0:
-            data = json.loads(result.stdout)
-            # pipx json format: {"venvs": {"package-name": {...}, ...}}
-            return {pkg.lower() for pkg in data.get('venvs', {}).keys()}
+            packages = json.loads(result.stdout)
+            return {pkg['name'].lower() for pkg in packages}
     except (subprocess.SubprocessError, FileNotFoundError, json.JSONDecodeError):
         pass
     return set()
@@ -453,9 +454,12 @@ def install_npm_packages(packages, check_only=False):
 
 
 def install_pip_packages(packages, check_only=False):
-    """install missing pipx packages."""
+    """install missing pip packages to user site-packages."""
     if not packages:
         return
+
+    # Get the correct pip command
+    pip_cmd = get_pip_command()
 
     installed = get_installed_pip_packages()
     missing = []
@@ -467,9 +471,10 @@ def install_pip_packages(packages, check_only=False):
     if missing:
         print(f"missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
+            print(f"using {pip_cmd} --user for installation...")
             for package in missing:
-                progress.start_task(f"pipx / {package}")
-                run_command(f"pipx install {package}")
+                progress.start_task(f"pip / {package}")
+                run_command(f"{pip_cmd} install --user {package}")
                 progress.complete_task()
     else:
         print(f"all {len(packages)} packages already installed")
