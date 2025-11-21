@@ -1001,8 +1001,15 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
         result = subprocess.run(['jenv', 'versions'], capture_output=True, text=True)
         if '21' not in result.stdout:
             print("\nconfiguring java 21...")
-            run_command("jenv add /opt/homebrew/opt/openjdk@21")
-            run_command("jenv global 21")
+            # Get the correct brew prefix (works on both Intel and Apple Silicon)
+            prefix_result = subprocess.run(['brew', '--prefix', 'openjdk@21'],
+                                         capture_output=True, text=True)
+            if prefix_result.returncode == 0:
+                java_path = prefix_result.stdout.strip()
+                run_command(f"jenv add {java_path}")
+                run_command("jenv global 21")
+            else:
+                print("✗ openjdk@21 not found via brew")
 
 
 def enable_touchid_sudo(touchid_config):
