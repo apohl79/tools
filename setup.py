@@ -998,18 +998,48 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
 
     # Configure Java if jenv is installed
     if command_exists("jenv") and not check_only:
-        result = subprocess.run(['jenv', 'versions'], capture_output=True, text=True)
-        if '21' not in result.stdout:
-            print("\nconfiguring java 21...")
-            # Get the correct brew prefix (works on both Intel and Apple Silicon)
-            prefix_result = subprocess.run(['brew', '--prefix', 'openjdk@21'],
-                                         capture_output=True, text=True)
-            if prefix_result.returncode == 0:
-                java_path = prefix_result.stdout.strip()
-                run_command(f"jenv add {java_path}")
-                run_command("jenv global 21")
-            else:
-                print("✗ openjdk@21 not found via brew")
+        # Find all openjdk packages from brew packages
+        java_packages = []
+        for pkg in config.get('layer2', {}).get('brew_packages', []):
+            # Match openjdk@XX or just openjdk
+            if pkg == 'openjdk' or pkg.startswith('openjdk@'):
+                java_packages.append(pkg)
+
+        if java_packages:
+            print("\nconfiguring java versions...")
+            result = subprocess.run(['jenv', 'versions'], capture_output=True, text=True)
+            installed_versions = result.stdout if result.returncode == 0 else ""
+
+            added_versions = []
+            for pkg in java_packages:
+                # Extract version (openjdk@21 -> 21, openjdk -> latest)
+                if '@' in pkg:
+                    version = pkg.split('@')[1]
+                else:
+                    version = "latest"
+
+                if version not in installed_versions:
+                    print(f"adding java {version} ({pkg})...")
+                    # Get the correct brew prefix (works on both Intel and Apple Silicon)
+                    prefix_result = subprocess.run(['brew', '--prefix', pkg],
+                                                 capture_output=True, text=True)
+                    if prefix_result.returncode == 0:
+                        java_path = prefix_result.stdout.strip()
+                        run_command(f"jenv add {java_path}")
+                        if version != "latest":
+                            added_versions.append(int(version))
+                    else:
+                        print(f"✗ {pkg} not found via brew")
+                else:
+                    print(f"✓ java {version} already added")
+                    if version != "latest":
+                        added_versions.append(int(version))
+
+            # Set highest version as global
+            if added_versions:
+                highest = max(added_versions)
+                print(f"setting java {highest} as global...")
+                run_command(f"jenv global {highest}")
 
 
 def enable_touchid_sudo(touchid_config):
