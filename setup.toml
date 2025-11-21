@@ -38,7 +38,6 @@ brew_taps = [
 brew_packages = [
     "arc",
     "awk",
-    "autoconf",
     "base64",
     "basedpyright",
     "bentobox",
@@ -81,7 +80,6 @@ brew_packages = [
     "iftop",
     "ilok-license-manager",
     "img2pdf",
-    "imagemagick",
     "iperf3",
     "isort",
     "isync",
@@ -111,8 +109,6 @@ brew_packages = [
     "offlineimap",
     "ollama",
     "openjdk",
-    #"openjdk@21",
-    #"oracle-jdk",
     "owncloud",
     "packages",
     "pandoc",
@@ -131,8 +127,6 @@ brew_packages = [
     "ripgrep",
     "rsync",
     "ruff",
-    #"rust",
-    #"rustup",
     "shellcheck",
     "signal",
     "slack",
@@ -141,7 +135,6 @@ brew_packages = [
     "tor",
     "tor-browser",
     "tree",
-    "tree-sitter",
     "typescript-language-server",
     "uv",
     "vcpkg",
@@ -152,7 +145,6 @@ brew_packages = [
     "whatsapp",
     "wireshark",
     "wireshark-app",
-    "zlib",
 ]
 
 # NPM global packages
@@ -175,8 +167,6 @@ pip_packages = [
 
 # Post-install commands to run after packages are installed
 post_install_commands = [
-    "sudo cp -f $(brew --prefix dbus)/org.freedesktop.dbus-system.plist /Library/LaunchDaemons",
-    "sudo launchctl bootstrap system /Library/LaunchDaemons/org.freedesktop.dbus-system.plist",
     "git clone https://github.com/microsoft/vcpkg ~/vcpkg",
 ]
 

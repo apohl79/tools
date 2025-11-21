@@ -1743,9 +1743,9 @@ def sync_packages(config_path, config):
 
     # Load current config packages
     config_packages = {
-        'brew_packages': config['layer1'].get('brew_packages', []),
-        'npm_packages': config['layer1'].get('npm_packages', []),
-        'pip_packages': config['layer1'].get('pip_packages', [])
+        'brew_packages': config['layer2'].get('brew_packages', []),
+        'npm_packages': config['layer2'].get('npm_packages', []),
+        'pip_packages': config['layer2'].get('pip_packages', [])
     }
 
     print(f"Config has {len(config_packages['brew_packages'])} brew packages")
