@@ -118,6 +118,7 @@ brew_packages = [
     "nvm",
     "offlineimap",
     "ollama",
+    "openjdk",
     "openjdk@21",
     "oracle-jdk",
     "owncloud",
