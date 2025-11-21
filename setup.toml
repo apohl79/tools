@@ -168,7 +168,7 @@ npm_packages = [
     "@georgesg/arc-cli",
     "@tailwindcss/language-server",
     "@vtsls/language-server",
-    "npm",
+    "bash-language-server",
     "typescript-language-server",
     "vscode-langservers-extracted",
     "yaml-language-server",

@@ -700,6 +700,70 @@ def layer3_emacs(config, home, check_only=False):
         print("✗ Emacs not found")
         if not check_only:
             emacs_formula = config['layer3']['formula']
+
+            # Get Emacs version from brew info
+            print("checking emacs version...")
+            result = subprocess.run(['brew', 'info', '--json=v2', emacs_formula], capture_output=True, text=True)
+            if result.returncode == 0:
+                try:
+                    info = json.loads(result.stdout)
+                    # Extract version from formulae or casks
+                    formulae = info.get('formulae', [])
+                    if formulae:
+                        emacs_version = formulae[0]['versions']['stable']
+                        print(f"detected emacs version: {emacs_version}")
+
+                        # Try to manually download and cache Emacs tarball
+                        print("attempting manual download from mirror (ftp.gnu.org may be down)...")
+                        set_terminal_title("emacs manual download")
+
+                        tarball = f"emacs-{emacs_version}.tar.xz"
+                        mirror_url = f"https://ftp.fau.de/gnu/emacs/{tarball}"
+                        tmp_path = f"/tmp/{tarball}"
+
+                        # Download from mirror
+                        download_result = subprocess.run(['curl', '-L', mirror_url, '-o', tmp_path],
+                                                        capture_output=True, text=True)
+
+                        if download_result.returncode == 0 and os.path.exists(tmp_path):
+                            print("✓ downloaded from mirror")
+
+                            # Calculate SHA256
+                            sha_result = subprocess.run(['shasum', '-a', '256', tmp_path],
+                                                       capture_output=True, text=True)
+                            if sha_result.returncode == 0:
+                                sha256 = sha_result.stdout.split()[0]
+                                print(f"SHA256: {sha256}")
+
+                                # Get brew cache directory
+                                cache_result = subprocess.run(['brew', '--cache'],
+                                                            capture_output=True, text=True)
+                                if cache_result.returncode == 0:
+                                    brew_cache = cache_result.stdout.strip()
+                                    downloads_dir = os.path.join(brew_cache, 'downloads')
+                                    os.makedirs(downloads_dir, exist_ok=True)
+
+                                    # Move to downloads with hash prefix
+                                    hashed_name = f"{sha256}--{tarball}"
+                                    dest_path = os.path.join(downloads_dir, hashed_name)
+                                    shutil.move(tmp_path, dest_path)
+
+                                    # Create symlink in cache root
+                                    symlink_path = os.path.join(brew_cache, tarball)
+                                    symlink_target = f"downloads/{hashed_name}"
+                                    if os.path.exists(symlink_path):
+                                        os.remove(symlink_path)
+                                    os.symlink(symlink_target, symlink_path)
+
+                                    print(f"✓ cached at {symlink_path}")
+                            else:
+                                print("✗ failed to calculate SHA256, will let brew download")
+                        else:
+                            print("✗ manual download failed, will let brew download")
+                except (json.JSONDecodeError, KeyError, IndexError) as e:
+                    print(f"✗ failed to parse brew info: {e}")
+
+            # Install Emacs (will use cached file if available)
             options = ' '.join(config['layer3']['options'])
             install_cmd = f"brew install {options} {emacs_formula}"
             print(f"installing {emacs_formula}...")
