@@ -108,6 +108,7 @@ brew_packages = [
     "msmtp",
     "mu",
     "nasm",
+    "ndiff",
     "nmap",
     "nvm",
     "offlineimap",
