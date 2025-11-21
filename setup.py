@@ -687,7 +687,7 @@ def layer2_base_packages(config, check_only=False):
 
 def layer3_emacs(config, home, check_only=False):
     """Layer 3: Install Emacs."""
-    print(f"\n{GREEN}=== Layer 3: Emacs Installation ==={RESET}")
+    print(f"\n{GREEN}=== Layer 3: Emacs Installation ==={RESET}\n")
 
     # Check if Emacs is installed via Homebrew
     emacs_formula = config['layer3']['formula']
@@ -742,7 +742,7 @@ def layer3_emacs(config, home, check_only=False):
 
 def layer4_doom(config, script_dir, home, check_only=False):
     """Layer 4: Install Doom Emacs and setup config."""
-    print(f"\n{GREEN}=== Layer 4: Doom Emacs ==={RESET}")
+    print(f"\n{GREEN}=== Layer 4: Doom Emacs ==={RESET}\n")
 
     # First, determine and setup emacs config symlink
     existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
