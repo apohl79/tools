@@ -29,27 +29,58 @@ class ProgressTracker:
         self.current_task = ""
         self.enabled = True
         self.visible = False
-        self.term_height = self._get_terminal_height()
+        self.stdscr = None
+        self.progress_win = None
+        self.term_height = 24
 
-    def _get_terminal_height(self):
-        """Get terminal height in rows."""
+    def setup_curses(self):
+        """Initialize curses for progress bar display."""
+        if not self.enabled:
+            return
+
         try:
-            import fcntl
-            import termios
-            import struct
-            # Get terminal size
-            h, w = struct.unpack('hh', fcntl.ioctl(0, termios.TIOCGWINSZ, '1234'))
-            return h
-        except:
-            return 24  # Default fallback
+            import curses
+            # Initialize curses
+            self.stdscr = curses.initscr()
+            curses.noecho()
+            curses.cbreak()
+
+            # Get terminal dimensions
+            self.term_height, term_width = self.stdscr.getmaxyx()
+
+            # Create a window for the progress bar at the bottom
+            self.progress_win = curses.newwin(1, term_width, self.term_height - 1, 0)
+
+            # Set scrolling region to exclude the bottom line
+            # This allows normal print/subprocess output to scroll above the progress bar
+            print(f"\033[0;{self.term_height-1}r", end='', flush=True)
+
+            # Initialize color if available
+            if curses.has_colors():
+                curses.start_color()
+                curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
+        except Exception as e:
+            # If curses setup fails, fall back to simple mode
+            self.cleanup_curses()
+
+    def cleanup_curses(self):
+        """Cleanup curses and restore terminal."""
+        if self.stdscr:
+            try:
+                import curses
+                # Reset scrolling region
+                print(f"\033[0;{self.term_height}r", end='', flush=True)
+                curses.nocbreak()
+                curses.echo()
+                curses.endwin()
+            except:
+                pass
+            self.stdscr = None
+            self.progress_win = None
 
     def set_total(self, total):
         self.total_tasks = total
         self.completed_tasks = 0
-        if total > 0:
-            # Set scrolling region to exclude bottom line
-            sys.stdout.write(f"\033[0;{self.term_height - 1}r")
-            sys.stdout.flush()
 
     def start_task(self, task_description):
         self.current_task = task_description
@@ -68,35 +99,51 @@ class ProgressTracker:
         filled = int((bar_width * self.completed_tasks) / self.total_tasks)
         bar = '█' * filled + '░' * (bar_width - filled)
 
-        status_line = f"{CYAN}[{bar}] {percentage}% | {self.current_task}{RESET}"
+        status_line = f"[{bar}] {percentage}% | {self.current_task}"
 
-        # Save cursor position, move to bottom line, print status, restore cursor
-        sys.stdout.write(SAVE_CURSOR)
-        sys.stdout.write(f"\033[{self.term_height};0H")  # Move to last row, column 0
-        sys.stdout.write(CLEAR_LINE)
-        sys.stdout.write(status_line)
-        sys.stdout.write(RESTORE_CURSOR)
-        sys.stdout.flush()
+        if self.progress_win:
+            # Use curses to draw at bottom
+            try:
+                import curses
+                self.progress_win.clear()
+                self.progress_win.addstr(0, 0, status_line[:curses.COLS-1], curses.color_pair(1) if curses.has_colors() else 0)
+                self.progress_win.refresh()
+                self.visible = True
+            except:
+                # Fall back to simple print if curses fails
+                self._simple_update(status_line)
+        else:
+            self._simple_update(status_line)
 
+    def _simple_update(self, status_line):
+        """Fallback method without curses."""
+        print(f"\r{CYAN}{status_line}{RESET}{CLEAR_LINE}", end='', flush=True)
         self.visible = True
 
     def clear(self):
-        if self.visible:
-            sys.stdout.write(SAVE_CURSOR)
-            sys.stdout.write(f"\033[{self.term_height};0H")  # Move to last row
-            sys.stdout.write(CLEAR_LINE)
-            sys.stdout.write(RESTORE_CURSOR)
-            sys.stdout.flush()
+        if not self.visible:
+            return
+
+        if self.progress_win:
+            try:
+                self.progress_win.clear()
+                self.progress_win.refresh()
+                self.visible = False
+            except:
+                self._simple_clear()
+        else:
+            self._simple_clear()
+
+    def _simple_clear(self):
+        """Fallback clear without curses."""
+        print(f"\r{CLEAR_LINE}", end='', flush=True)
+        self.visible = False
 
     def finish(self):
-        if self.visible:
-            # Clear the status line
-            sys.stdout.write(f"\033[{self.term_height};0H")  # Move to last row
-            sys.stdout.write(CLEAR_LINE)
-            # Reset scrolling region to full screen
-            sys.stdout.write(f"\033[0;{self.term_height}r")
-            sys.stdout.flush()
-            self.visible = False
+        if self.visible and not self.progress_win:
+            print()  # New line after status bar (only in simple mode)
+        self.visible = False
+        self.cleanup_curses()
 
 # Global instance
 progress = ProgressTracker()
@@ -221,6 +268,10 @@ def run_command(cmd, shell=True, check=False, env=None, stream_output=True, prom
         stream_output: If True, stream output in real-time. If False, capture and print after completion.
         prompt_on_error: If True, prompt user to continue or abort on error (default: True)
     """
+    # In simple mode (no curses), clear progress bar before running command
+    if not progress.progress_win:
+        progress.clear()
+
     if stream_output:
         # Stream output in real-time (no capture)
         result = subprocess.run(cmd, shell=shell, check=False, env=env)
@@ -234,14 +285,20 @@ def run_command(cmd, shell=True, check=False, env=None, stream_output=True, prom
             print(result.stderr, end='', file=sys.stderr)
         success = result.returncode == 0
 
+    # In simple mode (no curses), restore progress bar after command completes
+    if not progress.progress_win:
+        progress.update_display()
+
     # Handle failure
     if not success:
         if prompt_on_error:
+            progress.clear()
             print(f"\n{RED}✗ Command failed with exit code {result.returncode}{RESET}")
             response = input(f"Continue anyway? [y/N]: ").strip().lower()
             if response not in ['y', 'yes']:
                 print(f"\n{RED}Aborting setup.{RESET}")
                 sys.exit(result.returncode)
+            progress.update_display()
         elif check:
             # If check is True and prompting is disabled, raise exception
             raise subprocess.CalledProcessError(result.returncode, cmd)
@@ -2048,6 +2105,7 @@ def main():
         if total_packages > 0:
             progress.set_total(total_packages)
             progress.enabled = True
+            progress.setup_curses()
         else:
             progress.enabled = False
 
