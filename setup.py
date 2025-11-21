@@ -12,7 +12,68 @@ import importlib
 # ANSI color codes
 GREEN = '\033[92m'
 RED = '\033[91m'
+BLUE = '\033[94m'
+CYAN = '\033[96m'
 RESET = '\033[0m'
+
+# ANSI cursor control
+SAVE_CURSOR = '\033[s'
+RESTORE_CURSOR = '\033[u'
+CLEAR_LINE = '\033[K'
+
+# Global progress tracker
+class ProgressTracker:
+    def __init__(self):
+        self.total_tasks = 0
+        self.completed_tasks = 0
+        self.current_task = ""
+        self.enabled = True
+        self.visible = False
+
+    def set_total(self, total):
+        self.total_tasks = total
+        self.completed_tasks = 0
+
+    def start_task(self, task_description):
+        self.current_task = task_description
+        self.update_display()
+
+    def complete_task(self):
+        self.completed_tasks += 1
+        self.update_display()
+
+    def update_display(self):
+        if not self.enabled or self.total_tasks == 0:
+            return
+
+        percentage = int((self.completed_tasks / self.total_tasks) * 100)
+        bar_width = 30
+        filled = int((bar_width * self.completed_tasks) / self.total_tasks)
+        bar = '█' * filled + '░' * (bar_width - filled)
+
+        status_line = f"{CYAN}[{bar}] {percentage}% | {self.current_task}{RESET}{CLEAR_LINE}"
+
+        # Print status bar
+        if self.visible:
+            # Move to saved position and print
+            print(f"\r{status_line}", end='', flush=True)
+        else:
+            # First time - just print
+            print(f"\n{status_line}", end='', flush=True)
+            self.visible = True
+
+    def clear(self):
+        if self.visible:
+            print(f"\r{CLEAR_LINE}", end='', flush=True)
+            self.visible = False
+
+    def finish(self):
+        if self.visible:
+            print()  # New line after status bar
+            self.visible = False
+
+# Global instance
+progress = ProgressTracker()
 
 # Python 3.11+ has tomllib built-in, older versions need tomli
 try:
@@ -380,8 +441,9 @@ def install_brew_packages(packages, check_only=False):
         if not check_only:
             print("installing...")
             for package in missing:
-                #print(f"installing {package}...")
+                progress.start_task(f"brew / {package}")
                 run_command(f"brew install -f {package}")
+                progress.complete_task()
     else:
         print(f"all {len(packages)} packages already installed")
 
@@ -402,10 +464,10 @@ def install_npm_packages(packages, check_only=False):
     if missing:
         print(f"missing ({len(missing)}): {', '.join(missing)}")
         if not check_only:
-            #print("installing...")
             for package in missing:
-                print(f"installing {package}...")
+                progress.start_task(f"npm / {package}")
                 run_command(f"npm install -g {package} --force")
+                progress.complete_task()
     else:
         print(f"all {len(packages)} packages already installed")
 
@@ -430,8 +492,9 @@ def install_pip_packages(packages, check_only=False):
         if not check_only:
             print(f"using {pip_cmd} for installation...")
             for package in missing:
-                #print(f"installing {package}...")
+                progress.start_task(f"pip / {package}")
                 run_command(f"{pip_cmd} install {package}")
+                progress.complete_task()
     else:
         print(f"all {len(packages)} packages already installed")
 
@@ -468,7 +531,7 @@ def apply_symlinks(symlinks, script_dir, home, check_only=False):
 
 def layer0_shell(config, home, check_only=False):
     """Layer 0: Setup oh-my-zsh and powerlevel10k."""
-    print(f"\n{GREEN}=== Layer 0: Shell Setup ==={RESET}")
+    print(f"\n{GREEN}=== Layer 0: Shell Setup ==={RESET}\n")
 
     oh_my_zsh_path = os.path.join(home, ".oh-my-zsh", "oh-my-zsh.sh")
     zsh_custom = os.environ.get("ZSH_CUSTOM", os.path.join(home, ".oh-my-zsh/custom"))
@@ -501,7 +564,7 @@ def layer0_shell(config, home, check_only=False):
 
 def layer1_sudo(config, script_dir, home, check_only=False):
     """Layer 1: Configure sudo (Touch ID or custom binary)."""
-    print(f"\n{GREEN}=== Layer 1: Sudo Configuration ==={RESET}")
+    print(f"\n{GREEN}=== Layer 1: Sudo Configuration ==={RESET}\n")
 
     # Check Touch ID status
     pam_file = config['layer1']['touchid']['pam_file']
@@ -1929,6 +1992,39 @@ def main():
         else:
             print("homebrew would be installed")
 
+    # Count total packages to install (for progress bar)
+    if not args.check and not args.sync and not args.manage_ignored:
+        total_packages = 0
+        # Count brew packages
+        if 'layer2' in config:
+            installed_formulae = get_all_brew_packages()
+            installed_casks = get_installed_brew_casks()
+            installed_all = installed_formulae | installed_casks
+            for pkg in config['layer2'].get('brew_packages', []):
+                pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
+                pkg_base = pkg_name.split('@')[0]
+                if pkg_name not in installed_all and pkg_base not in installed_all:
+                    total_packages += 1
+
+            # Count npm packages
+            installed_npm = get_installed_npm_packages()
+            for pkg in config['layer2'].get('npm_packages', []):
+                pkg_name = pkg.split('/')[-1] if '/' in pkg else pkg
+                if pkg not in installed_npm and pkg_name not in installed_npm:
+                    total_packages += 1
+
+            # Count pip packages
+            installed_pip = get_installed_pip_packages()
+            for pkg in config['layer2'].get('pip_packages', []):
+                if pkg.lower() not in installed_pip:
+                    total_packages += 1
+
+        if total_packages > 0:
+            progress.set_total(total_packages)
+            progress.enabled = True
+        else:
+            progress.enabled = False
+
     # Run layers
     if args.layer is None or args.layer == 0:
         layer0_shell(config, home, args.check)
@@ -1948,6 +2044,9 @@ def main():
     if args.layer is None or args.layer == 5:
         layer5_symlinks(config, script_dir, home, args.check)
 
+    # Finish progress bar
+    progress.finish()
+
     # Summary
     if args.check:
         print("\n" + "="*50)
@@ -1963,8 +2062,10 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
+        progress.finish()
         print(f"\n\n{RED}Setup interrupted by user{RESET}")
         sys.exit(130)
     except subprocess.CalledProcessError as e:
+        progress.finish()
         print(f"\n{RED}✗ Command failed with exit code {e.returncode}: {e.cmd}{RESET}", file=sys.stderr)
         sys.exit(e.returncode)
