@@ -169,7 +169,6 @@ npm_packages = [
 
 # Python packages
 pip_packages = [
-    "ndiff",
     "numpy",
     "typing_extensions",
 ]
