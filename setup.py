@@ -689,7 +689,12 @@ def layer3_emacs(config, home, check_only=False):
     """Layer 3: Install Emacs."""
     print(f"\n{GREEN}=== Layer 3: Emacs Installation ==={RESET}")
 
-    needs_emacs = not command_exists("emacs")
+    # Check if Emacs is installed via Homebrew
+    emacs_formula = config['layer3']['formula']
+    formula_name = emacs_formula.split('/')[-1] if '/' in emacs_formula else emacs_formula
+
+    result = subprocess.run(['brew', 'list', '--formula', formula_name], capture_output=True, text=True)
+    needs_emacs = result.returncode != 0
 
     if needs_emacs:
         print("✗ Emacs not found")
