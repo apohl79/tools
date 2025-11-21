@@ -106,7 +106,7 @@ if [ -x /opt/homebrew/bin/brew ]; then
     export XML_CATALOG_FILES=/usr/local/etc/xml/catalog
 fi
 
-export PATH=$HOME/bin:$HOME/bin/tools/ccscript:$HOME/bin/tools:/usr/local/bin:/usr/local/sbin:$HOME/.claude/local:$PATH
+export PATH=$HOME/bin:$HOME/bin/tools/ccscript:$HOME/bin/tools:$HOME/.local/bin:/usr/local/bin:/usr/local/sbin:$HOME/.claude/local:$PATH
 
 alias ll='ls -la --color=auto'
 
@@ -129,5 +129,6 @@ export PATH="/Users/andreas/.codeium/windsurf/bin:$PATH"
 alias git-branch-local-cleanup='git fetch --prune; git branch -vv | grep ": gone]" | awk "{print \$1}" | xargs git branch -D'
 alias cc='claude update && claude "read ./CLAUDE.md carefully. make sure you follow all of the defined rules and settings for code style, comments, testing, the development process and diagnostics like using an lsp via mcp when available. use you your builtin read tool to read file instead of using an mcp."'
 
-[ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
+export VCPKG_ROOT="$HOME/vcpkg"
 
+[ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
