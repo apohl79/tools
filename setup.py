@@ -584,7 +584,7 @@ def layer0_shell(config, home, check_only=False):
             env["RUNZSH"] = "no"
             run_command(f'sh -c "$(curl -fsSL {config["layer0"]["oh_my_zsh_url"]})"', env=env)
 
-            print("installing powerlevel10k...")w
+            print("installing powerlevel10k...")
             run_command(f"git clone --depth=1 {config['layer0']['powerlevel10k_repo']} {p10k_path}")
 
 
