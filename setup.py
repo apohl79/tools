@@ -741,27 +741,37 @@ def layer3_emacs(config, home, check_only=False):
                             if os.path.exists(expected_cache_path):
                                 print("✓ already cached")
                             else:
-                                # Try to manually download and cache Emacs tarball
-                                print("attempting manual download from mirror (ftp.gnu.org may be down)...")
-                                set_terminal_title("emacs manual download")
-
                                 tarball = f"emacs-{emacs_version}.tar.xz"
-                                mirror_url = f"https://ftp.fau.de/gnu/emacs/{tarball}"
-                                tmp_path = f"/tmp/{tarball}"
+                                official_url = f"https://ftpmirror.gnu.org/gnu/emacs/{tarball}"
 
-                                # Download from mirror
-                                download_result = subprocess.run(['curl', '-L', mirror_url, '-o', tmp_path],
-                                                                capture_output=True, text=True)
+                                # Check if official GNU mirror is available
+                                print("checking if official GNU mirror is available...")
+                                check_result = subprocess.run(['curl', '-I', '-s', '-f', '--max-time', '5', official_url],
+                                                            capture_output=True, text=True)
 
-                                if download_result.returncode == 0 and os.path.exists(tmp_path):
-                                    print("✓ downloaded from mirror")
-
-                                    # Move to the exact location brew expects
-                                    os.makedirs(os.path.dirname(expected_cache_path), exist_ok=True)
-                                    shutil.move(tmp_path, expected_cache_path)
-                                    print(f"✓ cached at {expected_cache_path}")
+                                if check_result.returncode == 0:
+                                    print("✓ official mirror is available, brew will use it")
                                 else:
-                                    print("✗ manual download failed, will let brew download")
+                                    # Official mirror is down, try manual download from alternative mirror
+                                    print("✗ official mirror unavailable, attempting manual download from alternative mirror...")
+                                    set_terminal_title("emacs manual download")
+
+                                    mirror_url = f"https://ftp.fau.de/gnu/emacs/{tarball}"
+                                    tmp_path = f"/tmp/{tarball}"
+
+                                    # Download from alternative mirror
+                                    download_result = subprocess.run(['curl', '-L', mirror_url, '-o', tmp_path],
+                                                                    capture_output=True, text=True)
+
+                                    if download_result.returncode == 0 and os.path.exists(tmp_path):
+                                        print("✓ downloaded from alternative mirror")
+
+                                        # Move to the exact location brew expects
+                                        os.makedirs(os.path.dirname(expected_cache_path), exist_ok=True)
+                                        shutil.move(tmp_path, expected_cache_path)
+                                        print(f"✓ cached at {expected_cache_path}")
+                                    else:
+                                        print("✗ manual download failed, will let brew download")
                 except (json.JSONDecodeError, KeyError, IndexError) as e:
                     print(f"✗ failed to parse brew info: {e}")
 
