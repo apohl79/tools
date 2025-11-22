@@ -207,13 +207,24 @@ url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/en/en_U
 
 # Layer 4: Doom Emacs
 [layer4]
-name = "Doom Emacs"
+name = "Emacs Setup"
 repo = "https://github.com/doomemacs/doomemacs"
 install_path = "{home}/.config/emacs"
 
+# Emacs configuration symlinks (chosen during setup)
+[layer4.emacs_symlinks.doom]
+name = "doom"
+source = "{script_dir}/.doom.d"
+target = "{home}/.config/doom"
+
+[layer4.emacs_symlinks.light]
+name = "emacs"
+source = "{script_dir}/.emacs"
+target = "{home}/.emacs"
+
 # Layer 5: Symlinks and Shell
 [layer5]
-name = "Symlinks & Java"
+name = "Symlinks"
 
 # {script_dir} = directory containing setup.py
 # {home} = user's home directory
@@ -250,14 +261,3 @@ target = "{home}/.clang-format"
 name = "editorconfig"
 source = "{script_dir}/.editorconfig"
 target = "{home}/.editorconfig"
-
-# Emacs configuration symlinks (chosen during setup)
-[layer5.emacs_symlinks.doom]
-name = "doom"
-source = "{script_dir}/.doom.d"
-target = "{home}/.config/doom"
-
-[layer5.emacs_symlinks.light]
-name = "emacs"
-source = "{script_dir}/.emacs"
-target = "{home}/.emacs"

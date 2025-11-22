@@ -851,7 +851,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
 
     # Apply emacs config symlink if chosen
     if emacs_choice:
-        emacs_link = config['layer5']['emacs_symlinks'][emacs_choice]
+        emacs_link = config['layer4']['emacs_symlinks'][emacs_choice]
         source = emacs_link['source'].format(script_dir=script_dir, home=home)
         target = emacs_link['target'].format(script_dir=script_dir, home=home)
 
