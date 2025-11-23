@@ -21,8 +21,8 @@ source_file = "{script_dir}/sudo/sudo.cpp"
 target_binary = "{home}/bin/sudo"
 compile_command = "clang++ --std=c++14 -O3 {source} -o {target}"
 install_commands = [
-    "sudo chown root: {target}",
-    "sudo chmod +s {target}"
+    "/usr/bin/sudo chown root: {target}",
+    "/usr/bin/sudo chmod +s {target}"
 ]
 
 # Layer 2: Base system packages
