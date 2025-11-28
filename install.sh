@@ -20,6 +20,7 @@ fi
 
 echo ""
 echo "Running setup script..."
+echo ""
 python3 setup.py
 
 echo ""
