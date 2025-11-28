@@ -125,7 +125,6 @@ brew_packages = [
     "tree",
     "typescript-language-server",
     "uv",
-    "vcpkg",
     "virtualenv",
     "vlc",
     "wezterm",
@@ -155,7 +154,7 @@ pip_packages = [
 
 # Post-install commands to run after packages are installed
 post_install_commands = [
-    "git clone https://github.com/microsoft/vcpkg ~/vcpkg",
+    #"if [ ! -d ~/vcpkg ]; then; git clone https://github.com/microsoft/vcpkg ~/vcpkg; fi",
 ]
 
 # Layer 3: Emacs installation
