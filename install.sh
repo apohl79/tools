@@ -20,7 +20,7 @@ fi
 
 echo ""
 echo "Running setup script..."
-python3 setup.py
+python3 setup.py </dev/tty
 
 echo ""
 echo "Installation complete!"
