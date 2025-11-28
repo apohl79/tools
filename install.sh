@@ -11,7 +11,7 @@ if [ -d "$TOOLS_DIR" ]; then
     echo "Directory $TOOLS_DIR already exists."
     echo "Updating existing installation..."
     cd "$TOOLS_DIR"
-    git pull
+    #git pull
 else
     echo "Cloning repository to $TOOLS_DIR..."
     git clone "$REPO_URL" "$TOOLS_DIR"
@@ -20,7 +20,7 @@ fi
 
 echo ""
 echo "Running setup script..."
-python3 setup.py </dev/tty
+python3 setup.py
 
 echo ""
 echo "Installation complete!"
