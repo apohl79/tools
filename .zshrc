@@ -97,6 +97,8 @@ unsetopt share_history
 export LANG=C
 export EDITOR=emacs
 
+export HOMEBREW_NO_ENV_HINTS=1
+
 if [ -x /opt/homebrew/bin/brew ]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
     export HOMEBREW_NO_EMOJI=1
@@ -130,6 +132,7 @@ alias git-branch-local-cleanup='git fetch --prune; git branch -vv | grep ": gone
 alias cc='claude update && claude "read ./CLAUDE.md carefully. make sure you follow all of the defined rules and settings for code style, comments, testing, the development process and diagnostics like using an lsp via mcp when available. use you your builtin read tool to read file instead of using an mcp."'
 
 export VCPKG_ROOT="$HOME/vcpkg"
+export GPG_TTY=$(tty)
 
 [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
 
