@@ -1,11 +1,15 @@
 # SSH agent, required from 10.12 on
-# PS1_OATH defined via vzm-env in .bashrc_local
-if [ -z "$WORK_SESSION" ]; then
-    #export SSH_AUTH_SOCK=$HOME/.yubiagent/sock
-    if [ -e $HOME/.ssh/id_rsa ]; then
-        ssh-add --apple-use-keychain
-    fi
+# Start ssh-agent if not already running
+if [ -z "$SSH_AUTH_SOCK" ]; then
+  eval "$(ssh-agent -s)" > /dev/null
 fi
+
+# Add SSH keys to agent
+for key in $HOME/.ssh/id_*; do
+  if [ -f "$key" ] && ! [[ "$key" =~ \.pub$ ]]; then
+    ssh-add --apple-use-keychain "$key" 2>/dev/null
+  fi
+done
 
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
