@@ -157,13 +157,13 @@ brew_packages = [
 npm_packages = [
     "@anthropic-ai/claude-code",
     #"@georgesg/arc-cli",
-    #"@tailwindcss/language-server",
-    #"@vtsls/language-server",
-    #"bash-language-server",
-    #"typescript-language-server",
-    #"vscode-langservers-extracted",
-    #"yaml-language-server",
-    #"yarn",
+    "@tailwindcss/language-server",
+    "@vtsls/language-server",
+    "bash-language-server",
+    "typescript-language-server",
+    "vscode-langservers-extracted",
+    "yaml-language-server",
+    "yarn",
 ]
 
 # Python packages
