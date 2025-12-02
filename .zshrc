@@ -106,7 +106,7 @@ if [ -x /opt/homebrew/bin/brew ]; then
     export XML_CATALOG_FILES=/usr/local/etc/xml/catalog
 fi
 
-export PATH=$HOME/bin:$HOME/bin/tools/ccscript:$HOME/bin/tools:$HOME/.local/bin:/usr/local/bin:/usr/local/sbin:$HOME/.claude/local:$PATH
+export PATH=$HOME/bin:$HOME/bin/tools/ccscript:$HOME/bin/tools:$HOME/.local/bin:$HOME/.config/emacs/bin:/usr/local/bin:/usr/local/sbin:$HOME/.claude/local:$PATH
 
 alias ll='ls -la --color=auto'
 
@@ -132,3 +132,5 @@ alias cc='claude update && claude "read ./CLAUDE.md carefully. make sure you fol
 export VCPKG_ROOT="$HOME/vcpkg"
 
 [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
+
+source ~/.safe-chain/scripts/init-posix.sh # Safe-chain Zsh initialization script

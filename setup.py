@@ -67,65 +67,10 @@ except ModuleNotFoundError:
         result = subprocess.run([sys.executable, '-m', 'pip', 'install', 'tomli'], capture_output=True, text=True)
         if result.returncode == 0:
             print("✓ tomli installed successfully")
-
-            # Dynamically import the newly installed tomli module
-            tomllib = importlib.import_module('tomli')
-            ignored_path = os.path.expanduser("~/.config/setup-tools/ignored_packages.toml")
-            os.makedirs(os.path.dirname(ignored_path), exist_ok=True)
-
-            # Load existing ignored packages if file exists
-            ignored = {'pip_packages': set()}
-            if os.path.exists(ignored_path):
-                try:
-                    with open(ignored_path, 'rb') as f:
-                        existing = tomllib.load(f)
-                        ignored['pip_packages'] = set(existing.get('pip_packages', []))
-                except:
-                    pass
-
-            # Add tomli to ignored pip packages
-            if 'tomli' not in ignored['pip_packages']:
-                ignored['pip_packages'].add('tomli')
-
-                # Read the full file to preserve other sections
-                file_content = ""
-                if os.path.exists(ignored_path):
-                    with open(ignored_path, 'r') as f:
-                        file_content = f.read()
-
-                # Find and update pip_packages section, or add it
-                if 'pip_packages = [' in file_content:
-                    # Update existing section
-                    lines = file_content.split('\n')
-                    new_lines = []
-                    in_pip_section = False
-                    for line in lines:
-                        if 'pip_packages = [' in line:
-                            in_pip_section = True
-                            new_lines.append(line)
-                            # Add tomli if not already there
-                            if '    "tomli",' not in file_content:
-                                new_lines.append('    "tomli",')
-                        elif in_pip_section and line.strip() == ']':
-                            in_pip_section = False
-                            new_lines.append(line)
-                        elif not (in_pip_section and '"tomli"' in line):
-                            new_lines.append(line)
-                        elif in_pip_section and '"tomli"' in line:
-                            # Keep existing tomli line
-                            new_lines.append(line)
-
-                    with open(ignored_path, 'w') as f:
-                        f.write('\n'.join(new_lines))
-                else:
-                    # Add new section
-                    if file_content and not file_content.endswith('\n\n'):
-                        file_content += '\n\n' if file_content.endswith('\n') else '\n\n'
-                    file_content += 'pip_packages = [\n"tomli",\n]\n'
-                    with open(ignored_path, 'w') as f:
-                        f.write(file_content)
-
-                print("Added tomli to ignored packages")
+            print("Restarting setup to load the new module...")
+            # Re-execute the script so Python properly loads the new module
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+            # Note: os.execv never returns, the process is replaced
         else:
             print("✗ Failed to install tomli")
             print("Please install manually with: pip3 install tomli")
@@ -513,6 +458,32 @@ def apply_symlinks(symlinks, script_dir, home, check_only=False):
                 link_force(symlink['name'], source, target)
             else:
                 link(symlink['name'], source, target)
+
+
+def apply_shell_symlinks(config, script_dir, home):
+    """Apply shell-related symlinks from layer0.symlinks and return True if any were created."""
+    symlinks_created = False
+
+    for symlink in config.get('layer0', {}).get('symlinks', []):
+        source = symlink['source'].format(script_dir=script_dir, home=home)
+        target = symlink['target'].format(script_dir=script_dir, home=home)
+
+        # Check if symlink needs to be created
+        if not os.path.lexists(target):
+            print(f"linking {symlink['name']} ({source} -> {target})")
+            if symlink.get('force', False):
+                link_force(symlink['name'], source, target)
+            else:
+                link(symlink['name'], source, target)
+            symlinks_created = True
+        elif os.path.islink(target) and os.readlink(target) != source:
+            # Symlink exists but points to wrong location
+            if symlink.get('force', False):
+                print(f"updating {symlink['name']} ({source} -> {target})")
+                link_force(symlink['name'], source, target)
+                symlinks_created = True
+
+    return symlinks_created
 
 
 def layer0_shell(config, home, check_only=False):
@@ -918,6 +889,23 @@ def layer4_doom(config, script_dir, home, check_only=False):
             run_command(f"{doom_bin} install --force --env --install --fonts --hooks", env=env)
             set_terminal_title("doom sync")
             run_command(f"{doom_bin} sync", env=env)
+
+    # Run post-install commands if configured
+    post_commands = config['layer4'].get('post_install_commands', [])
+    if post_commands and not check_only:
+        print("\nrunning post-install commands...")
+        env = os.environ.copy()
+        env["PATH"] = f"{brew_bin}:" + env.get("PATH", "")
+        # Add doom bin to PATH for convenience
+        env["PATH"] = f"{os.path.dirname(doom_bin)}:" + env["PATH"]
+
+        for cmd in post_commands:
+            if cmd.strip():  # Skip empty/comment-only entries
+                # Substitute variables in command (consistent with layer3)
+                cmd_formatted = cmd.format(home=home, brew_prefix=brew_prefix, script_dir=script_dir)
+                print(f"  executing: {cmd_formatted}")
+                set_terminal_title(f"post: {cmd_formatted[:20]}")
+                run_command(cmd_formatted, env=env)
 
 
 def setup_python_symlinks(check_only=False):
@@ -1433,8 +1421,8 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
         content.append("# Post-install commands to run after packages are installed\n")
         content.append("post_install_commands = [\n")
         for cmd in config['layer2']['post_install_commands']:
-            # Escape quotes in the command
-            escaped_cmd = cmd.replace('"', '\\"')
+            # Escape backslashes first, then quotes for proper TOML encoding
+            escaped_cmd = cmd.replace('\\', '\\\\').replace('"', '\\"')
             content.append(f'    "{escaped_cmd}",\n')
         content.append("]\n\n")
 
@@ -2094,22 +2082,18 @@ def install_command_line_tools(check_only=False):
     # Trigger the installation dialog
     subprocess.run(['xcode-select', '--install'])
 
-    print("\nWaiting for Command Line Tools installation to complete...")
-    print("(This script will continue once installation is done)")
+    print("\n" + "="*50)
+    print("Please complete the installation in the popup dialog.")
+    print("="*50)
+    input("\nPress Enter after the installation is complete...")
 
-    # Wait for installation to complete
-    import time
-    max_wait = 600  # 10 minutes max
-    waited = 0
-    while waited < max_wait:
-        result = subprocess.run(['xcode-select', '-p'], capture_output=True, text=True)
-        if result.returncode == 0:
-            print("✓ Command Line Tools installed successfully")
-            return True
-        time.sleep(5)
-        waited += 5
+    # Verify installation succeeded
+    result = subprocess.run(['xcode-select', '-p'], capture_output=True, text=True)
+    if result.returncode == 0:
+        print("✓ Command Line Tools installed successfully")
+        return True
 
-    print("✗ Command Line Tools installation timed out")
+    print("✗ Command Line Tools installation failed")
     print("Please install manually with: xcode-select --install")
     return False
 
@@ -2163,13 +2147,29 @@ def main():
     install_command_line_tools(args.check)
 
     # Install Homebrew if not present
+    homebrew_installed = False
     if not command_exists("brew"):
         print(f"\n{GREEN}=== Installing Homebrew ==={RESET}\n")
         if not args.check:
             set_terminal_title("homebrew install")
             run_command('/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"')
+            homebrew_installed = True
         else:
             print("homebrew would be installed")
+
+    # After Homebrew installation, apply shell symlinks so PATH is correct
+    # If symlinks were created, restart in a new shell to pick up the environment
+    if homebrew_installed and not args.check:
+        print(f"\n{GREEN}=== Setting up shell environment ==={RESET}\n")
+        if apply_shell_symlinks(config, script_dir, home):
+            print("\nShell configuration linked. Restarting setup in new shell...")
+            # Re-run setup.py in a new zsh shell to pick up the new environment
+            setup_script = os.path.join(script_dir, 'setup.py')
+            # Preserve any command-line arguments
+            args_str = ' '.join(sys.argv[1:]) if len(sys.argv) > 1 else ''
+            cmd = f'python3 {setup_script} {args_str}'.strip()
+            os.execv('/bin/zsh', ['/bin/zsh', '-l', '-c', cmd])
+            # Note: os.execv never returns
 
     # Count total packages to install (for progress bar)
     if not args.check and not args.sync and not args.manage_ignored:

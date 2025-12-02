@@ -4,6 +4,25 @@ name = "Shell Setup"
 oh_my_zsh_url = "https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh"
 powerlevel10k_repo = "https://github.com/romkatv/powerlevel10k.git"
 
+# Shell symlinks (applied early to ensure PATH is correct after Homebrew install)
+[[layer0.symlinks]]
+name = "zsh"
+source = "{script_dir}/.zshrc"
+target = "{home}/.zshrc"
+force = true
+
+[[layer0.symlinks]]
+name = "powerlevel10k"
+source = "{script_dir}/.p10k.zsh"
+target = "{home}/.p10k.zsh"
+force = true
+
+[[layer0.symlinks]]
+name = "profile"
+source = "{home}/.zshrc"
+target = "{home}/.profile"
+force = true
+
 # Layer 1: Sudo configuration
 [layer1]
 name = "Sudo Configuration"
@@ -137,14 +156,14 @@ brew_packages = [
 # NPM global packages
 npm_packages = [
     "@anthropic-ai/claude-code",
-    "@georgesg/arc-cli",
-    "@tailwindcss/language-server",
-    "@vtsls/language-server",
-    "bash-language-server",
-    "typescript-language-server",
-    "vscode-langservers-extracted",
-    "yaml-language-server",
-    "yarn",
+    #"@georgesg/arc-cli",
+    #"@tailwindcss/language-server",
+    #"@vtsls/language-server",
+    #"bash-language-server",
+    #"typescript-language-server",
+    #"vscode-langservers-extracted",
+    #"yaml-language-server",
+    #"yarn",
 ]
 
 # Python packages
@@ -170,7 +189,6 @@ options = [
 
 # Post-install commands to run after Emacs is installed
 post_install_commands = [
-    "brew services start d12frosted/emacs-plus/emacs-plus@30",
     "rm -rf /Applications/Emacs.app",
     "osascript -e 'tell application \"Finder\" to make alias file to posix file \"{brew_prefix}/Cellar/emacs-plus@30/30.2/Emacs.app\" at posix file \"/Applications\" with properties {{name:\"Emacs.app\"}}'",
 ]
@@ -198,6 +216,11 @@ name = "Emacs Setup"
 repo = "https://github.com/doomemacs/doomemacs"
 install_path = "{home}/.config/emacs"
 
+# Commands to run after Doom installation/sync
+post_install_commands = [
+    "brew services start d12frosted/emacs-plus/emacs-plus@30",
+]
+
 # Emacs configuration symlinks (chosen during setup)
 [layer4.emacs_symlinks.doom]
 name = "doom"
@@ -220,24 +243,6 @@ name = "Symlinks"
 name = "tools"
 source = "{script_dir}"
 target = "{home}/bin/tools"
-
-[[layer5.symlinks]]
-name = "zsh"
-source = "{script_dir}/.zshrc"
-target = "{home}/.zshrc"
-force = true
-
-[[layer5.symlinks]]
-name = "powerlevel10k"
-source = "{script_dir}/.p10k.zsh"
-target = "{home}/.p10k.zsh"
-force = true
-
-[[layer5.symlinks]]
-name = "profile"
-source = "{home}/.zshrc"
-target = "{home}/.profile"
-force = true
 
 [[layer5.symlinks]]
 name = "clang-format"

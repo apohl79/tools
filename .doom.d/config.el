@@ -92,7 +92,7 @@
 
   ;; Make URLs clickable with mouse and C-c RET
   (add-hook! 'markdown-mode-hook
-    #'goto-address-mode     ; Makes URLs clickable
+    #'goto-address-mode
     #'visual-line-mode))
 
 (use-package! pdf-tools
@@ -719,6 +719,15 @@
           (cmake "https://github.com/uyha/tree-sitter-cmake")
           (bash "https://github.com/tree-sitter/tree-sitter-bash")))
 
+  (defun my/treesit-install-all-grammars ()
+    "Install all tree-sitter grammars defined in `treesit-language-source-alist'."
+    (interactive)
+    (dolist (grammar treesit-language-source-alist)
+      (let ((lang (car grammar)))
+        (message "Installing tree-sitter grammar for %s..." lang)
+        (treesit-install-language-grammar lang)))
+    (message "All tree-sitter grammars installed!"))
+
   ;; Map major modes to their tree-sitter equivalents
   (setq major-mode-remap-alist
         '((c-mode . c-ts-mode)
@@ -887,12 +896,6 @@
  :user "app"
  :password "QR0_{HN4A@Ieu5Yb<Xb8"
  :sslmode nil)
-
-(load! "grpclient-mode")
-(load! "grpclient")
-(use-package! grpclient
-  :init
-  (add-to-list 'auto-mode-alist '("\\.grpc\\'" . grpclient-mode)))
 
 (use-package! claude-code-ide
   :config

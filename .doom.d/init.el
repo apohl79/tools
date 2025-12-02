@@ -26,6 +26,8 @@
 ;; Prevents the unstyled mode-line flash at startup
 (setq-default mode-line-format nil)
 
+;; Pre-load goto-addr to avoid void-variable errors
+(require 'goto-addr)
 
 (doom! :input
        ;;chinese

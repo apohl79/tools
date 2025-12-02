@@ -115,7 +115,7 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 
   ;; Make URLs clickable with mouse and C-c RET
   (add-hook! 'markdown-mode-hook
-    #'goto-address-mode     ; Makes URLs clickable
+    #'goto-address-mode
     #'visual-line-mode))
 #+end_src
 
@@ -956,6 +956,15 @@ FIXME: This does not work properly yet.
           (cmake "https://github.com/uyha/tree-sitter-cmake")
           (bash "https://github.com/tree-sitter/tree-sitter-bash")))
 
+  (defun my/treesit-install-all-grammars ()
+    "Install all tree-sitter grammars defined in `treesit-language-source-alist'."
+    (interactive)
+    (dolist (grammar treesit-language-source-alist)
+      (let ((lang (car grammar)))
+        (message "Installing tree-sitter grammar for %s..." lang)
+        (treesit-install-language-grammar lang)))
+    (message "All tree-sitter grammars installed!"))
+
   ;; Map major modes to their tree-sitter equivalents
   (setq major-mode-remap-alist
         '((c-mode . c-ts-mode)
@@ -1182,7 +1191,7 @@ Setup a default connection function for pgmacs
 
 ** gRPC
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp :tangle no
 (load! "grpclient-mode")
 (load! "grpclient")
 (use-package! grpclient
@@ -1260,4 +1269,3 @@ default. All API keys got into =~/.gptel/=.
         (gptel-make-anthropic "Claude" :stream t
                               :key #'gptel-claude-api-key)))
 #+end_src
-
