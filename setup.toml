@@ -253,3 +253,8 @@ target = "{home}/.clang-format"
 name = "editorconfig"
 source = "{script_dir}/.editorconfig"
 target = "{home}/.editorconfig"
+
+[[layer5.symlinks]]
+name = "hammerspoon"
+source = "{script_dir}/.hammerspoon"
+target = "{home}/.hammerspoon"
