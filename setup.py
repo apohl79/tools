@@ -2104,6 +2104,7 @@ def main():
     parser.add_argument('-l', '--layer', type=int, choices=[0, 1, 2, 3, 4, 5], help='run specific layer only')
     parser.add_argument('-s', '--sync', action='store_true', help='sync installed packages with setup.toml')
     parser.add_argument('-m', '--manage-ignored', action='store_true', help='manage ignored and kept packages')
+    parser.add_argument('-d', '--describe-layers', action='store_true', help='list all layers with their names')
     args = parser.parse_args()
 
     # macOS only for now
@@ -2131,6 +2132,21 @@ def main():
         sys.exit(1)
 
     config = load_config(config_path)
+
+    # Handle describe-layers mode
+    if args.describe_layers:
+        layers = [
+            (0, config.get('layer0', {}).get('name', 'Shell Setup')),
+            (1, config.get('layer1', {}).get('name', 'Sudo Configuration')),
+            (2, config.get('layer2', {}).get('name', 'Base System Packages')),
+            (3, config.get('layer3', {}).get('name', 'Emacs Installation')),
+            (4, config.get('layer4', {}).get('name', 'Doom Emacs')),
+            (5, config.get('layer5', {}).get('name', 'Symlinks')),
+        ]
+        print(f"{GREEN}Available layers:{RESET}\n")
+        for layer_num, layer_name in layers:
+            print(f"  Layer {layer_num}: {layer_name}")
+        return
 
     # Handle manage-ignored mode
     if args.manage_ignored:
