@@ -138,6 +138,18 @@ alias cc='claude update && claude "read ./CLAUDE.md carefully. make sure you fol
 export VCPKG_ROOT="$HOME/vcpkg"
 export GPG_TTY=$(tty)
 
+# commandline editing
+export VISUAL="emacs -nw"
+autoload -U edit-command-line
+zle -N edit-command-line
+bindkey '^xe' edit-command-line
+bindkey '^x^e' edit-command-line
+
+# NVM
+export NVM_DIR="$HOME/.nvm"
+[ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
+[ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
+
 [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
 
 source ~/.safe-chain/scripts/init-posix.sh # Safe-chain Zsh initialization script
