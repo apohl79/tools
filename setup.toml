@@ -258,3 +258,13 @@ target = "{home}/.editorconfig"
 name = "hammerspoon"
 source = "{script_dir}/.hammerspoon"
 target = "{home}/.hammerspoon"
+
+[[layer5.symlinks]]
+name = "wezterm"
+source = "{script_dir}/.wezterm.lua"
+target = "{home}/.wezterm.lua"
+
+[[layer5.symlinks]]
+name = "wezterm-terminfo"
+source = "{script_dir}/.terminfo"
+target = "{home}/.terminfo"

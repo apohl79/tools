@@ -2,7 +2,7 @@ log = hs.logger.new("init", 3)
 
 -- Create a meet room and add the link below to paste on CTRL+M
 hs.hotkey.bind({"ctrl"}, "M", function()
-    hs.eventtap.keyStrokes("https://meet.google.com/pfj-ryia-kaf")
+    hs.eventtap.keyStrokes("meet.google.com/aur-dvoi-hgr")
     --hs.eventtap.keyStroke({}, "return")
 end)
 
