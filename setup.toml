@@ -268,3 +268,8 @@ target = "{home}/.wezterm.lua"
 name = "wezterm-terminfo"
 source = "{script_dir}/.terminfo"
 target = "{home}/.terminfo"
+
+[[layer5.symlinks]]
+name = "claude-statusline"
+source = "{script_dir}/claude-statusline.sh"
+target = "{home}/.claude/statusline.sh"
