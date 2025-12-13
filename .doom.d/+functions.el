@@ -169,13 +169,13 @@ Otherwise call `indent-for-tab-command'."
     (if indent-region-function
         (funcall indent-region-function (region-beginning) (region-end))
       (indent-region (region-beginning) (region-end))))
-   
+
    ;; If at end of line, just indent this line
    ((= (point) (line-end-position))
     (if indent-line-function
         (funcall indent-line-function)
       (indent-according-to-mode)))
-   
+
    ;; Otherwise standard tab behavior
    (t
     (indent-for-tab-command))))
@@ -244,15 +244,15 @@ Otherwise call `indent-for-tab-command'."
   (interactive)
   (save-excursion
     (beginning-of-line)
-    (let* ((line (buffer-substring-no-properties 
-                  (line-beginning-position) 
+    (let* ((line (buffer-substring-no-properties
+                  (line-beginning-position)
                   (line-end-position)))
            (class-name (my/get-current-class-name))
            (method-sig (my/parse-method-signature line)))
       (if method-sig
           (let ((impl (my/format-method-implementation class-name method-sig)))
             (kill-new impl)
-            (message "Implementation copied to clipboard: %s::%s" 
+            (message "Implementation copied to clipboard: %s::%s"
                      class-name (nth 1 method-sig)))
         (message "No method signature found on current line")))))
 
@@ -267,7 +267,7 @@ Otherwise call `indent-for-tab-command'."
   ;; Handle pattern: [virtual] return_type method_name(params) [const];
   (when (string-match "^\\s-*\\(virtual\\s-+\\)?\\(.+?\\)\\s-+\\([a-zA-Z_][a-zA-Z0-9_]*\\)\\s-*(\\([^)]*\\))\\s-*\\(const\\)?\\s-*;" line)
     (list (string-trim (match-string 2 line))  ; return type
-          (string-trim (match-string 3 line))  ; method name  
+          (string-trim (match-string 3 line))  ; method name
           (string-trim (match-string 4 line))  ; parameters
           (match-string 5 line))))             ; const
 
@@ -315,7 +315,7 @@ Otherwise call `indent-for-tab-command'."
       (insert "\n\n\n\n")
 
       ;; Calculate padding to center "Loading Session..."
-      (let* ((text1 "Loading Session...")
+      (let* ((text1 "Restoring Session...")
              (text2 "Please wait while your workspace is restored")
              (text3 "0%")
              (padding1 (propertize " " 'display `(space :align-to (- center ,(/ (length text1) 2)))))
@@ -396,22 +396,28 @@ Otherwise call `indent-for-tab-command'."
 
                      (unwind-protect
                          (doom/quickload-session t)
+                       ;; Switch back to loading buffer immediately to prevent flash
+                       (when-let ((loading-buf (get-buffer "*session-loading*")))
+                         (switch-to-buffer loading-buf))
+
                        ;; Cleanup
                        (when (fboundp 'persp-add-buffer)
                          (advice-remove 'persp-add-buffer (lambda (&rest _) nil)))
-                       (setq frame-title-format original-title)
-                       (sit-for 0.1) ;; Ensure the final title update is visible
 
                        ;; Show doom dashboard after session loads
                        (run-with-timer 0.2 nil
                                        (lambda ()
-                                         ;; Kill the loading buffer
-                                         (when (get-buffer "*session-loading*")
-                                           (kill-buffer "*session-loading*"))
                                          ;; Show dashboard
                                          (switch-to-buffer (doom-fallback-buffer))
                                          (when (fboundp '+doom-dashboard-reload)
-                                           (+doom-dashboard-reload t)))))))))
+                                           (+doom-dashboard-reload t))
+                                         ;; Kill the loading buffer
+                                         (when (get-buffer "*session-loading*")
+                                           (kill-buffer "*session-loading*"))))
+
+                       (setq frame-title-format original-title)
+                       ;; Ensure the final title update is visible
+                       (sit-for 0.1))))))
 
 (defun my/update-treemacs-icons ()
   "Replace all image (png/svg) icons in treemacs with font based icons."
@@ -574,7 +580,7 @@ This prevents unnecessary terminal reflows when only height changes."
       ;; Check all windows for vterm buffers
       (dolist (window (window-list))
         (let ((buffer (window-buffer window)))
-          (when (and buffer 
+          (when (and buffer
                      (with-current-buffer buffer
                        (eq major-mode 'vterm-mode)))
             (let ((current-width (window-width window))
