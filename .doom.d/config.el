@@ -70,7 +70,7 @@
 
 (message "*** General / Org")
 
-(setq org-directory "~/Library/Mobile Documents/iCloud~com~appsonthemove~beorg/Documents/org/"
+(setq org-directory "~/ownCloud/org"
       org-support-shift-select t
       org-replace-disputed-keys t
       org-startup-indented t
