@@ -151,12 +151,12 @@
  "s-_" #'doom/decrease-font-size
 
 ;; claude-code
-(:prefix ("C-s-x" . "Claude")
-         "c" #'claude-code-ide
-         "r" #'claude-code-ide-resume
-         "k" #'claude-code-ide-stop
-         "RET" #'claude-code-ide-insert-newline
-         "ESC" #'claude-code-ide-send-escape)
+;;(:prefix ("C-s-x" . "Claude")
+;;         "c" #'claude-code-ide
+;;         "r" #'claude-code-ide-resume
+;;         "k" #'claude-code-ide-stop
+;;         "RET" #'claude-code-ide-insert-newline
+;;         "ESC" #'claude-code-ide-send-escape)
 
  ;; gptel/elysium
  (:leader :prefix ("C-s" . "LLM")
@@ -317,10 +317,12 @@
 
 (setq doom-theme 'doom-city-lights)
 
-(defvar my/fixed-font "Iosevka Comfy")
-;(defvar my/fixed-font "Noto Mono")
+;(defvar my/fixed-font "Iosevka Comfy")
+(defvar my/fixed-font "IosevkaTerm NFM Medium")
+
 (defvar my/unicode-font "JuliaMono")
-;(defvar my/unicode-font "Noto Mono")
+;(defvar my/unicode-font "IosevkaTerm NFM Medium")
+
 (defvar my/variable-font "Roboto")
 
 (setq doom-font
@@ -331,6 +333,9 @@
 ;; zoom in/out steps
 (setq doom-font-increment 1)
 
+;; Set line spacing to reduce gaps between vertical bars
+(setq line-spacing 0.1)
+
 ;; IMPORTANT: Set this to nil so custom fontset is used
 (setq use-default-font-for-symbols nil)
 
@@ -340,9 +345,9 @@
 
   (set-fontset-font t 'symbol nil)
 
-  ;; General unicode/symbol setup - use unicode font
-  (set-fontset-font t 'unicode (font-spec :family my/unicode-font) nil 'prepend)
-  (set-fontset-font t 'symbol (font-spec :family my/unicode-font) nil 'prepend)
+  ;; General unicode/symbol setup - use unicode font with smaller size for icons
+  (set-fontset-font t 'unicode (font-spec :family my/unicode-font :size 12) nil 'prepend)
+  (set-fontset-font t 'symbol (font-spec :family my/unicode-font :size 12) nil 'prepend)
 
   ;; Box-drawing and geometric shapes to align vterm buffer width properly
   (set-fontset-font t '(#x2500 . #x257F) (font-spec :family my/fixed-font) nil 'prepend)
@@ -364,11 +369,11 @@
   "Set buffer-local display table to replace Unicode spinners with ASCII in vterm."
   (let ((table (or buffer-display-table (make-display-table))))
     ;; · - U+00B7 (Middle Dot)
-    (aset table #x00B7 (vector ?*))
+    (aset table #x00B7 (vector ?⏺))
     ;; ✢ - U+2722 (Four Teardrop-Spoked Asterisk)
-    (aset table #x2722 (vector ?*))
+    (aset table #x2722 (vector ?⏺))
     ;; ✳ - U+2733 (Eight Spoked Asterisk)
-    (aset table #x2733 (vector ?*))
+    (aset table #x2733 (vector ?⏺))
     ;; ✶ - U+2736 (Six Pointed Black Star)
     (aset table #x2736 (vector ? ))
     ;; ✻ - U+273B (Teardrop-Spoked Asterisk)
@@ -900,10 +905,37 @@
 (use-package! claude-code-ide
   :config
   (setq claude-code-ide-window-width 105  ; Reduced to account for fringe/margins
-        claude-code-ide-use-side-window t
+        claude-code-ide-use-side-window 'nil
         claude-code-ide-vterm-render-delay 0.05
-        claude-code-ide-terminal-backend 'vterm)
+        claude-code-ide-terminal-backend 'vterm
+        claude-code-ide-cli-extra-flags "--dangerously-skip-permissions")
   (claude-code-ide-emacs-tools-setup))
+
+(use-package! claude-code
+  ;:bind-keymap ("C-s-x" . claude-code-command-map)
+  :bind ("C-s-x" . claude-code-transient)
+  :config
+  (defun my-claude-notify (title message)
+    "Display a macOS notification."
+    (call-process "osascript" nil nil nil
+                  "-e" (format "display notification \"%s\" with title \"%s\""
+                               message title)))
+
+  (setq claude-code-program-switches '("--dangerously-skip-permissions")
+        claude-code-notification-function #'my-claude-notify
+        ;claude-code-terminal-backend 'vterm
+        )
+
+  (add-to-list 'display-buffer-alist
+                 '("^\\*claude"
+                   (display-buffer-in-side-window)
+                   (side . right)
+                   (window-width . 110)))
+
+  (add-hook 'claude-code-process-environment-functions #'monet-start-server-function)
+  (monet-mode 1)
+
+  (claude-code-mode))
 
 (use-package! terraform
   :hook (terraform-mode . terraform-format-on-save-mode))

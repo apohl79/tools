@@ -58,6 +58,13 @@
 
 (package! claude-code-ide :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
 
+(package! inheritenv :recipe (:host github :repo "purcell/inheritenv"))
+(package! monet :recipe (:host github :repo "stevemolitor/monet"))
+(package! claude-code :recipe (:host github :repo "stevemolitor/claude-code.el"
+                                :branch "main"
+                                :depth 1
+                                :files ("*.el" (:exclude "images/*"))))
+
 ;; Highlight active buffer by dimming inactive ones
 (package! dimmer)
 
