@@ -1098,6 +1098,14 @@ Enable/disable vterm-copy-mode automatically when scrolling up/down via mouse.
               (vterm-reset-cursor-point))))
 
 ;(advice-add 'mwheel-scroll :after #'my/scroll-mouse-handler)
+
+(after! eat
+  (setq eat-kill-buffer-on-exit t
+        ;; Use xterm-256color instead of eat's custom terminfo for better powerlevel10k compatibility
+        eat-term-name "xterm-256color")
+  ;; Unbind the C-x n prefix in eat-mode to allow using it for other-window
+  (map! :map eat-mode-map
+        "C-x n" nil))
 #+end_src
 
 ** Compilation buffer
@@ -1228,17 +1236,24 @@ Setup a default connection function for pgmacs
 
   (setq claude-code-program-switches '("--dangerously-skip-permissions")
         claude-code-notification-function #'my-claude-notify
-        ;claude-code-terminal-backend 'vterm
-        )
+        claude-code-confirm-kill 'nil)
 
+  ;; Show the new buffer as side window
   (add-to-list 'display-buffer-alist
                  '("^\\*claude"
                    (display-buffer-in-side-window)
                    (side . right)
                    (window-width . 110)))
 
+  ;; Enable IDE integration support
   (add-hook 'claude-code-process-environment-functions #'monet-start-server-function)
   (monet-mode 1)
+
+  ;; Focus the new claude buffer
+  (add-hook 'claude-code-start-hook (lambda () (pop-to-buffer (current-buffer))))
+
+  (load-file "~/.config/emacs/.local/straight/repos/claude-code.el/examples/hooks/claude-code-auto-revert-hook.el")
+  (setup-claude-auto-revert :git-merge t)  ; git-merge strategy, auto-save enabled
 
   (claude-code-mode))
 #+end_src
