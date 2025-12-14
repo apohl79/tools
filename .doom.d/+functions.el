@@ -315,15 +315,17 @@ Otherwise call `indent-for-tab-command'."
       (insert "\n\n\n\n")
 
       ;; Calculate padding to center "Loading Session..."
-      (let* ((text1 "Restoring Session...")
+      (let* ((text1 "Restoring Session")
              (text2 "Please wait while your workspace is restored")
              (text3 "0%")
-             (padding1 (propertize " " 'display `(space :align-to (- center ,(/ (length text1) 2)))))
+             ;; text1 uses :height 1.5, so scale offset by 1.5 to account for wider characters
+             (padding1 (propertize " " 'display `(space :align-to (- center ,(round (* 1.5 (/ (length text1) 2.0)))))))
              (padding2 (propertize " " 'display `(space :align-to (- center ,(/ (length text2) 2)))))
-             (padding3 (propertize " " 'display `(space :align-to (- center ,(/ (length text3) 2))))))
+             ;; text3 uses :height 1.2, so scale offset by 1.2 to account for wider characters
+             (padding3 (propertize " " 'display `(space :align-to (- center ,(round (* 1.2 (/ (length text3) 2.0))))))))
 
         (insert padding1)
-        (insert (propertize text1 'face '(:height 1.5 :weight bold)))
+        (insert (propertize text1 'face `(:height 1.5 :weight bold :foreground ,(doom-color 'blue))))
         (insert "\n\n")
 
         (insert padding2)
@@ -333,7 +335,7 @@ Otherwise call `indent-for-tab-command'."
         ;; Insert progress line with a marker for updates
         (insert padding3)
         (setq-local progress-start-marker (point-marker))
-        (insert (propertize text3 'face '(:height 1.2)))
+        (insert (propertize text3 'face `(:height 1.2 :foreground ,(doom-color 'green))))
         (setq-local progress-end-marker (point-marker)))
 
       (setq buffer-read-only t))
@@ -388,7 +390,7 @@ Otherwise call `indent-for-tab-command'."
                                                 (delete-region progress-start-marker progress-end-marker)
                                                 ;; Insert new percentage
                                                 (goto-char progress-start-marker)
-                                                (insert (propertize percent-text 'face '(:height 1.2)))
+                                                (insert (propertize percent-text 'face `(:height 1.2 :foreground ,(doom-color 'green))))
                                                 ;; Update end marker
                                                 (set-marker progress-end-marker (point)))
                                               ;; Force redisplay
