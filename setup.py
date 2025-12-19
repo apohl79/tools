@@ -88,6 +88,10 @@ def link(name, source, target):
     # Use lexists to detect both valid symlinks and broken symlinks
     if not os.path.lexists(target):
         print(f"linking {name} ({source} -> {target})")
+        # Create parent directories if they don't exist
+        target_dir = os.path.dirname(target)
+        if target_dir:
+            os.makedirs(target_dir, exist_ok=True)
         os.symlink(source, target)
     elif os.path.islink(target):
         # Symlink exists - check if it points to the correct location
