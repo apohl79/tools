@@ -364,15 +364,18 @@ Otherwise call `indent-for-tab-command'."
                      ;; Advise persp-mode functions if available
                      (when (fboundp 'persp-add-buffer)
                        (advice-add 'persp-add-buffer :after
-                                (lambda (&rest _)
+                                (lambda (buffer &rest _)
                                   (setq current-count (1+ current-count))
-                                  (let ((percentage (if (> buffer-count 0)
-                                                      (min 100 (floor (* 100 (/ (float current-count) buffer-count))))
-                                                      0)))
+                                  (let* ((percentage (if (> buffer-count 0)
+                                                       (min 100 (floor (* 100 (/ (float current-count) buffer-count))))
+                                                       0))
+                                         (buffer-name (if (bufferp buffer)
+                                                         (buffer-name buffer)
+                                                         (format "%s" buffer))))
                                     (when (> percentage last-percentage)
                                       (setq last-percentage percentage)
-                                      (setq progress (format "Restoring session... %d%% (%d/%d)"
-                                                       percentage current-count buffer-count))
+                                      (setq progress (format "Restoring session... %d%% (%d/%d) - %s"
+                                                       percentage current-count buffer-count buffer-name))
                                       (message "%s" progress)
 
                                       ;; Update the loading buffer with the current percentage
@@ -718,4 +721,58 @@ This prevents unnecessary terminal reflows when only height changes."
             (when (and left top width height)
               (set-frame-position (selected-frame) left top)
               (set-frame-size (selected-frame) width height nil)))
-        (error nil)))))
+        (error nil))))
+
+;; Claude buffer display function
+(defun my/claude-display-buffer (buffer alist)
+  "Display BUFFER using regular window splits at 50% each.
+- If 1 window exists: split to create 2 windows, show buffer in one
+- If 2+ windows exist: show buffer in a window (prefer non-claude window, or opposite window)"
+  ;; Check if buffer is already displayed
+  (let ((existing-window (get-buffer-window buffer t)))
+    (if existing-window
+        (progn
+          (select-window existing-window)
+          existing-window)
+
+      ;; Count windows and find claude windows
+      (let* ((all-windows (window-list))
+             (window-count (length all-windows))
+             (claude-windows nil)
+             (non-claude-windows nil))
+
+        ;; Categorize windows
+        (dolist (window all-windows)
+          (if (string-match-p "^\\*claude" (buffer-name (window-buffer window)))
+              (push window claude-windows)
+            (push window non-claude-windows)))
+
+        (cond
+         ;; Only 1 window exists - split it
+         ((= window-count 1)
+          (let* ((main-window (car all-windows))
+                 (new-window (split-window main-window nil 'right)))
+            (set-window-buffer new-window buffer)
+            (select-window new-window)
+            new-window))
+
+         ;; 2+ windows exist and there's a non-claude window - use it
+         ((and (>= window-count 2) non-claude-windows)
+          (let ((target-window (car non-claude-windows)))
+            (set-window-buffer target-window buffer)
+            (select-window target-window)
+            target-window))
+
+         ;; 2+ windows exist, all are claude - use the opposite window from current
+         ((>= window-count 2)
+          (let* ((current-window (selected-window))
+                 (other-windows (remove current-window all-windows))
+                 (target-window (car other-windows)))
+            (set-window-buffer target-window buffer)
+            (select-window target-window)
+            target-window))
+
+         ;; Fallback - should not happen
+         (t
+          (set-window-buffer (selected-window) buffer)
+          (selected-window))))))))

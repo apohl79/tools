@@ -4,6 +4,17 @@
 input=$(cat)
 cwd=$(echo "$input" | jq -r ".workspace.current_dir")
 model=$(echo "$input" | jq -r ".model.display_name")
+# Calculate total current context including all token types
+tokens_percent=$(echo "$input" | jq -r '
+  ((.context_window.current_usage.input_tokens // 0) +
+   (.context_window.current_usage.cache_creation_input_tokens // 0) +
+   (.context_window.current_usage.cache_read_input_tokens // 0)) as $used |
+  if .context_window.context_window_size > 0 then
+    (($used / .context_window.context_window_size * 100 / 0.9) | floor | if . > 100 then 100 else . end)
+  else
+    0
+  end
+')
 
 #user=$(whoami)
 #host=$(hostname -s)
@@ -23,5 +34,5 @@ else
     git_info=""
 fi
 
-# Output: directory (blue), git branch (green), model (magenta)
-printf "\033[34m%s\033[0m\033[32m%s\033[0m\033[35m 𝌭 %s\033[0m" "$dir" "$git_info" "$model"
+# Output: directory (blue), git branch (green), model (magenta), context usage (cyan)
+printf "\033[34m%s\033[0m\033[32m%s\033[0m\033[35m 𝌭 %s\033[0m\033[36m ⚡ %s%%\033[0m" "$dir" "$git_info" "$model" "$tokens_percent"

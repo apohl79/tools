@@ -346,8 +346,8 @@
   (set-fontset-font t 'symbol nil)
 
   ;; General unicode/symbol setup - use unicode font with smaller size for icons
-  (set-fontset-font t 'unicode (font-spec :family my/unicode-font :size 12) nil 'prepend)
-  (set-fontset-font t 'symbol (font-spec :family my/unicode-font :size 12) nil 'prepend)
+  (set-fontset-font t 'unicode (font-spec :family my/unicode-font :size 10.9) nil 'prepend)
+  (set-fontset-font t 'symbol (font-spec :family my/unicode-font :size 10.9) nil 'prepend)
 
   ;; Box-drawing and geometric shapes to align vterm buffer width properly
   (set-fontset-font t '(#x2500 . #x257F) (font-spec :family my/fixed-font) nil 'prepend)
@@ -363,9 +363,10 @@
 (add-hook 'doom-init-ui-hook #'my/configure-fontsets)
 ;; Also apply when loading vterm buffers
 (add-hook 'vterm-mode-hook #'my/configure-fontsets)
+(add-hook 'eat-mode-hook #'my/configure-fontsets)
 
 ;; Replace specific Claude Code Unicode symbols with ASCII in vterm buffers
-(defun my/vterm-replace-unicode-spinners ()
+(defun my/replace-unicode-spinners ()
   "Set buffer-local display table to replace Unicode spinners with ASCII in vterm."
   (let ((table (or buffer-display-table (make-display-table))))
     ;; · - U+00B7 (Middle Dot)
@@ -382,7 +383,8 @@
     (aset table #x273D (vector ? ))
     (setq buffer-display-table table)))
 
-(add-hook 'vterm-mode-hook #'my/vterm-replace-unicode-spinners)
+(add-hook 'vterm-mode-hook #'my/replace-unicode-spinners)
+(add-hook 'eat-mode-hook #'my/replace-unicode-spinners)
 
 ;; This determines the style of line numbers in effect. If set to `nil', line
 ;; numbers are disabled. For relative line numbers, set this to `relative'.
@@ -426,6 +428,13 @@
         org-replace-disputed-keys t))
 
 (after! org
+  ;; Add TypeScript to org-babel languages
+  (add-to-list 'org-babel-load-languages '(typescript . t))
+  (org-babel-do-load-languages 'org-babel-load-languages org-babel-load-languages)
+
+  ;; Enable syntax highlighting for TypeScript blocks
+  (add-to-list 'org-src-lang-modes '("typescript" . typescript-ts))
+
   (defun org-add-color-keywords ()
     (font-lock-add-keywords
      nil
@@ -841,10 +850,18 @@
 (after! eat
   (setq eat-kill-buffer-on-exit t
         ;; Use xterm-256color instead of eat's custom terminfo for better powerlevel10k compatibility
-        eat-term-name "xterm-256color")
+        eat-term-name "xterm-256color"
+        ;; Enable mouse support for clickable links
+        eat-enable-mouse t)
+  ;; Enable clickable URLs in eat buffers
+  (add-hook 'eat-mode-hook #'goto-address-mode)
   ;; Unbind the C-x n prefix in eat-mode to allow using it for other-window
   (map! :map eat-mode-map
-        "C-x n" nil))
+        "C-x n" nil)
+  ;; Enable Control-left/right for word navigation in semi-char mode
+  (map! :map eat-semi-char-mode-map
+        "C-<left>" (lambda () (interactive) (eat-term-send-string eat-terminal "\e[1;5D"))
+        "C-<right>" (lambda () (interactive) (eat-term-send-string eat-terminal "\e[1;5C"))))
 
 (message "*** Coding / Compilation Buffer")
 
@@ -933,19 +950,22 @@
         claude-code-notification-function #'my-claude-notify
         claude-code-confirm-kill 'nil)
 
-  ;; Show the new buffer as side window
-  (add-to-list 'display-buffer-alist
-                 '("^\\*claude"
-                   (display-buffer-in-side-window)
-                   (side . right)
-                   (window-width . 110)))
+  ;; Configure claude buffer display (function defined in +functions.el)
+  (setq display-buffer-alist
+        (cons '("^\\*claude"
+                (my/claude-display-buffer)
+                (inhibit-same-window . t))
+              (assq-delete-all "^\\*claude" display-buffer-alist)))
 
   ;; Enable IDE integration support
   (add-hook 'claude-code-process-environment-functions #'monet-start-server-function)
   (monet-mode 1)
 
-  ;; Focus the new claude buffer
-  (add-hook 'claude-code-start-hook (lambda () (pop-to-buffer (current-buffer))))
+  ;; Focus the new claude buffer (but don't re-display it)
+  (add-hook 'claude-code-start-hook
+            (lambda ()
+              (let ((window (get-buffer-window (current-buffer) t)))
+                (when window (select-window window)))))
 
   (load-file "~/.config/emacs/.local/straight/repos/claude-code.el/examples/hooks/claude-code-auto-revert-hook.el")
   (setup-claude-auto-revert :git-merge t)  ; git-merge strategy, auto-save enabled
