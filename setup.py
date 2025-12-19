@@ -1197,7 +1197,6 @@ def install_custom_sudo(custom_sudo_config, script_dir, home):
     for install_cmd in custom_sudo_config['install_commands']:
         # Use absolute path to system sudo to avoid using the newly compiled one
         cmd = install_cmd.format(target=target_binary)
-        cmd = cmd.replace('sudo ', '/usr/bin/sudo ', 1)  # Replace first occurrence only
         if not run_command(cmd, prompt_on_error=False):
             print(f"✗ Failed to execute: {cmd}")
             return False
