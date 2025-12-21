@@ -9,6 +9,9 @@ import argparse
 import json
 import importlib
 
+# Suppress Homebrew environment hints
+os.environ['HOMEBREW_NO_ENV_HINTS'] = '1'
+
 # ANSI color codes
 GREEN = '\033[92m'
 RED = '\033[91m'
