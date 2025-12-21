@@ -346,8 +346,8 @@
   (set-fontset-font t 'symbol nil)
 
   ;; General unicode/symbol setup - use unicode font with smaller size for icons
-  (set-fontset-font t 'unicode (font-spec :family my/unicode-font :size 10.9) nil 'prepend)
-  (set-fontset-font t 'symbol (font-spec :family my/unicode-font :size 10.9) nil 'prepend)
+  (set-fontset-font t 'unicode (font-spec :family my/unicode-font :size 10.5) nil 'prepend)
+  (set-fontset-font t 'symbol (font-spec :family my/unicode-font :size 10.5) nil 'prepend)
 
   ;; Box-drawing and geometric shapes to align vterm buffer width properly
   (set-fontset-font t '(#x2500 . #x257F) (font-spec :family my/fixed-font) nil 'prepend)
