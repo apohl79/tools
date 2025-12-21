@@ -57,6 +57,17 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-supervisor post-tool-use"
+          }
+        ]
+      }
+    ],
     "PermissionRequest": [
       {
         "matcher": "",
