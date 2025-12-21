@@ -64,6 +64,7 @@ brew_packages = [
     "cliclick",
     "clipgrab",
     "cmake",
+    "codex",
     "contexts",
     "coreutils",
     "cryptomator",
