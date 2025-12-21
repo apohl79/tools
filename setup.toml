@@ -275,11 +275,16 @@ source = "{script_dir}/claude-statusline.sh"
 target = "{home}/.claude/statusline.sh"
 
 [[layer5.symlinks]]
+name = "claude-settings"
+source = "{script_dir}/claude-settings.json"
+target = "{home}/.claude/settings.json"
+
+[[layer5.symlinks]]
 name = "claude-emacs-hook"
 source = "{home}/.config/emacs/.local/straight/repos/claude-code.el/bin/claude-code-hook-wrapper"
 target = "{home}/bin/claude-code-hook-wrapper"
 
 [[layer5.symlinks]]
 name = "claude-supervisor"
-source = "{script_dir}/claude-code-supervisor"
-target = "{home}/bin/claude-code-supervisor"
+source = "{script_dir}/claude-supervisor"
+target = "{home}/bin/claude-supervisor"

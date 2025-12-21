@@ -6,7 +6,7 @@
  * A hook script that validates tool use and permission requests using
  * fast-path rules and Codex LLM for intelligent decisions.
  *
- * Usage: claude-code-supervisor <pre-tool-use|permission-request|post-tool-use>
+ * Usage: claude-supervisor <pre-tool-use|permission-request|post-tool-use>
  * Input: JSON from stdin (Claude Code hook format)
  * Output: JSON decision to stdout
  *
@@ -24,7 +24,7 @@ const path = require('path');
 // Configuration
 const CODEX_TIMEOUT_MS = 15000; // 15 seconds for Codex to respond
 const DEBUG = process.env.CLAUDE_SUPERVISOR_DEBUG === '1';
-const LOG_DIR = path.join(homedir(), 'Library', 'Logs', 'claude-code-supervisor');
+const LOG_DIR = path.join(homedir(), 'Library', 'Logs', 'claude-supervisor');
 const SESSION_STATE_DIR = '/tmp/claude-supervisor-sessions';
 
 // Auto-accept modes via environment variable
@@ -206,9 +206,14 @@ function isLearnedAutoAcceptEnabled() {
 // Security Rules
 // ============================================================================
 
+// HARD BLOCK: These are truly dangerous - no exceptions
 const ALWAYS_DENY_PATHS = [
-  /[/\\]\.ssh[/\\]/i,
-  /[/\\]\.gnupg[/\\]/i,
+  /[/\\]\.ssh[/\\]/i,           // SSH keys - never allow
+  /[/\\]\.gnupg[/\\]/i,         // GPG keys - never allow
+];
+
+// SOFT BLOCK: Ask user instead of denying - might be legitimate
+const ASK_USER_PATHS = [
   /[/\\]\.aws[/\\]credentials/i,
   /[/\\]\.aws[/\\]config/i,
   /^\/etc\/(passwd|shadow|sudoers)/,
@@ -216,9 +221,6 @@ const ALWAYS_DENY_PATHS = [
   /[/\\]\.netrc$/i,
   /[/\\]\.npmrc$/i,
   /[/\\]\.pypirc$/i,
-];
-
-const SENSITIVE_MODIFY_PATHS = [
   /[/\\]\.bashrc$/i,
   /[/\\]\.zshrc$/i,
   /[/\\]\.profile$/i,
@@ -227,16 +229,22 @@ const SENSITIVE_MODIFY_PATHS = [
   /[/\\]\.gitconfig$/i,
 ];
 
+// HARD BLOCK: Truly dangerous bash patterns - no exceptions
 const DANGEROUS_BASH_PATTERNS = [
-  /curl\s+.*\|\s*(ba)?sh/i,
-  /wget\s+.*\|\s*(ba)?sh/i,
-  /curl\s+.*>\s*.*\.sh\s*&&\s*(ba)?sh/i,
-  /rm\s+(-rf?|--recursive)\s+[/~]/i,
-  /chmod\s+777/i,
-  />\s*\/dev\/sd[a-z]/i,
-  /mkfs\./i,
-  /dd\s+.*of=\/dev\//i,
-  /:\(\)\s*\{\s*:\|:\s*&\s*\}/,
+  /curl\s+.*\|\s*(ba)?sh/i,              // Pipe curl to shell
+  /wget\s+.*\|\s*(ba)?sh/i,              // Pipe wget to shell
+  /curl\s+.*>\s*.*\.sh\s*&&\s*(ba)?sh/i, // Download and execute
+  />\s*\/dev\/sd[a-z]/i,                 // Write to disk device
+  /mkfs\./i,                             // Format filesystem
+  /dd\s+.*of=\/dev\//i,                  // dd to device
+  /:\(\)\s*\{\s*:\|:\s*&\s*\}/,          // Fork bomb
+];
+
+// SOFT BLOCK: Potentially dangerous but might be legitimate - ask user
+const ASK_USER_BASH_PATTERNS = [
+  /rm\s+(-rf?|--recursive)\s+[/~]/i,     // rm -rf - might be cleanup
+  /chmod\s+777/i,                         // chmod 777 - might be intentional
+  /sudo\s+/i,                             // sudo commands - ask first
 ];
 
 const ALWAYS_SAFE_TOOLS = ['Read', 'Glob', 'Grep', 'LSP', 'ListMcpResourcesTool', 'ReadMcpResourceTool'];
@@ -292,9 +300,17 @@ function checkFastPathRules(input) {
   // 1. Always-safe read-only tools
   if (ALWAYS_SAFE_TOOLS.includes(tool_name)) {
     const filePath = getFilePath(tool_input);
-    if (filePath && matchesAnyPattern(expandPath(filePath), ALWAYS_DENY_PATHS)) {
+    const expandedPath = filePath ? expandPath(filePath) : null;
+
+    // Hard block: SSH/GPG keys
+    if (expandedPath && matchesAnyPattern(expandedPath, ALWAYS_DENY_PATHS)) {
       return { decision: 'deny', reason: `Access to sensitive path blocked: ${filePath}` };
     }
+    // Soft block: Other sensitive paths - ask user
+    if (expandedPath && matchesAnyPattern(expandedPath, ASK_USER_PATHS)) {
+      return { decision: 'ask', reason: `Reading sensitive file: ${filePath}` };
+    }
+    // Allow within project
     if (!filePath || isWithinDirectory(filePath, projectDir)) {
       return { decision: 'allow', reason: 'Safe read-only operation within project' };
     }
@@ -307,36 +323,58 @@ function checkFastPathRules(input) {
     if (!filePath) return null;
 
     const expandedPath = expandPath(filePath);
+
+    // Hard block: SSH/GPG keys - never allow modification
     if (matchesAnyPattern(expandedPath, ALWAYS_DENY_PATHS)) {
       return { decision: 'deny', reason: `Modification of sensitive path blocked: ${filePath}` };
     }
-    if (matchesAnyPattern(expandedPath, SENSITIVE_MODIFY_PATHS)) {
-      return { decision: 'deny', reason: `Modification of shell config blocked: ${filePath}` };
+    // Soft block: Other sensitive paths - ask user
+    if (matchesAnyPattern(expandedPath, ASK_USER_PATHS)) {
+      return { decision: 'ask', reason: `Modifying sensitive file: ${filePath}` };
     }
+    // Allow within project
     if (isWithinDirectory(filePath, projectDir)) {
       return { decision: 'allow', reason: 'File modification within project directory' };
     }
-    return null;
+    // Outside project - ask instead of blocking
+    return { decision: 'ask', reason: `File outside project: ${filePath}` };
   }
 
   // 3. Bash commands
   if (tool_name === 'Bash') {
     const command = tool_input?.command || '';
+
+    // Hard block: Truly dangerous patterns (phishing, device writes, fork bombs)
     if (matchesAnyPattern(command, DANGEROUS_BASH_PATTERNS)) {
-      return { decision: 'deny', reason: `Dangerous bash pattern detected: ${command.substring(0, 100)}` };
+      return { decision: 'deny', reason: `Dangerous bash pattern blocked: ${command.substring(0, 100)}` };
     }
 
+    // Soft block: Potentially risky but might be legitimate - ask user
+    if (matchesAnyPattern(command, ASK_USER_BASH_PATTERNS)) {
+      return { decision: 'ask', reason: `Potentially risky command: ${command.substring(0, 80)}` };
+    }
+
+    // Allow safe commands
     const safeCommands = [
       /^(ls|pwd|echo|cat|head|tail|wc|date|whoami|hostname|uname|env|which|type|file|stat)\b/,
-      /^(git\s+(status|log|diff|branch|show|remote|fetch))\b/,
-      /^(npm\s+(list|ls|outdated|info|view))\b/,
-      /^(node|npx|npm\s+(run|test|start|build))\b/,
-      /^(python|python3|pip\s+(list|show|freeze))\b/,
-      /^(make|cargo|go)\s+(build|test|run|check)/,
+      /^(git\s+(status|log|diff|branch|show|remote|fetch|add|commit|push|pull|checkout|merge|rebase))\b/,
+      /^(npm\s+(list|ls|outdated|info|view|run|test|start|build|install|ci))\b/,
+      /^(node|npx|pnpm|yarn)\b/,
+      /^(python|python3|pip\s+(list|show|freeze|install))\b/,
+      /^(make|cargo|go)\s+(build|test|run|check|install)/,
+      /^(docker|docker-compose)\s+(ps|images|logs|build|up|down|exec|run)\b/,
+      /^(kubectl|helm)\s+(get|describe|logs|apply|delete)\b/,
+      /^(brew|apt|yum)\s+(list|info|search|install|update)\b/,
+      /^(code|vim|nano|emacs|open)\b/,
+      /^(mkdir|touch|cp|mv|ln)\b/,
+      /^(curl|wget|http)\s+.*\s*$/,  // curl/wget without piping to shell
+      /^(jq|grep|awk|sed|sort|uniq|cut|tr)\b/,
     ];
     if (safeCommands.some(pattern => pattern.test(command))) {
       return { decision: 'allow', reason: 'Safe bash command' };
     }
+
+    // Unknown command - let LLM decide or ask
     return null;
   }
 
@@ -355,7 +393,7 @@ function checkFastPathRules(input) {
   }
 
   // 6. Task/Agent tools
-  if (tool_name === 'Task' || tool_name === 'TodoWrite') {
+  if (tool_name === 'Task' || tool_name === 'TodoWrite' || tool_name === 'AskUserQuestion') {
     return { decision: 'allow', reason: 'Internal Claude operation' };
   }
 
@@ -449,14 +487,33 @@ function callCodex(prompt) {
 // Output
 // ============================================================================
 
-function outputDecision(decision, reason, hookEventName) {
-  console.log(JSON.stringify({
+/**
+ * Output the decision with optional status message
+ * @param {string} decision - 'allow', 'deny', or 'ask'
+ * @param {string} reason - Reason for the decision
+ * @param {string} hookEventName - The hook event name
+ * @param {object} options - Optional settings
+ * @param {boolean} options.showMessage - Whether to show a system message (default: true for allow)
+ * @param {string} options.source - Source of the decision for the message
+ */
+function outputDecision(decision, reason, hookEventName, options = {}) {
+  const { showMessage = (decision === 'allow'), source = '' } = options;
+
+  const output = {
     hookSpecificOutput: {
       hookEventName,
       permissionDecision: decision,
       permissionDecisionReason: reason,
     }
-  }));
+  };
+
+  // Add a system message for visibility when auto-accepting
+  if (showMessage && decision === 'allow') {
+    const sourceInfo = source ? ` [${source}]` : '';
+    output.systemMessage = `[Supervisor] Auto-approved${sourceInfo}: ${reason}`;
+  }
+
+  console.log(JSON.stringify(output));
 }
 
 // ============================================================================
@@ -484,7 +541,7 @@ async function main() {
   const hookType = process.argv[2];
 
   if (!hookType) {
-    console.error('Usage: claude-code-supervisor <pre-tool-use|permission-request|post-tool-use>');
+    console.error('Usage: claude-supervisor <pre-tool-use|permission-request|post-tool-use>');
     process.exit(1);
   }
 
@@ -519,7 +576,7 @@ async function main() {
       debug('Auto-accept enabled via env var');
       log('INFO', 'Auto-accept enabled', { mode: 'env-var' });
       logDecision('allow', 'Auto-accept enabled via CLAUDE_SUPERVISOR_AUTO_ACCEPT', 'auto-accept', input);
-      outputDecision('allow', 'Auto-accept enabled', hookEventName);
+      outputDecision('allow', 'Auto-accept enabled', hookEventName, { source: 'env' });
       return;
     }
 
@@ -529,7 +586,7 @@ async function main() {
       debug('Allowed by session learning:', sessionCheck.pattern);
       log('INFO', 'Allowed by session learning', { pattern: sessionCheck.pattern });
       logDecision('allow', `Previously allowed pattern: ${sessionCheck.pattern}`, 'session-learned', input);
-      outputDecision('allow', `Previously allowed: ${sessionCheck.pattern}`, hookEventName);
+      outputDecision('allow', `Learned: ${sessionCheck.pattern}`, hookEventName, { source: 'learned' });
       return;
     }
 
@@ -537,7 +594,7 @@ async function main() {
     if (isLearnedAutoAcceptEnabled()) {
       debug('Learned-only mode, pattern not found, asking user');
       logDecision('ask', 'Pattern not learned yet', 'learned-mode', input);
-      outputDecision('ask', 'Pattern not learned yet - approve to remember', hookEventName);
+      outputDecision('ask', 'Pattern not learned yet - approve to remember', hookEventName, { showMessage: false });
       return;
     }
 
@@ -546,7 +603,7 @@ async function main() {
     if (fastPathResult) {
       debug('Fast-path decision:', fastPathResult);
       logDecision(fastPathResult.decision, fastPathResult.reason, 'fast-path', input);
-      outputDecision(fastPathResult.decision, fastPathResult.reason, hookEventName);
+      outputDecision(fastPathResult.decision, fastPathResult.reason, hookEventName, { source: 'rules' });
       return;
     }
 
@@ -559,7 +616,7 @@ async function main() {
     if (codexResult && codexResult.decision) {
       debug('Codex decision:', codexResult);
       logDecision(codexResult.decision, codexResult.reason || 'LLM decision', 'codex', input);
-      outputDecision(codexResult.decision, codexResult.reason || 'LLM decision', hookEventName);
+      outputDecision(codexResult.decision, codexResult.reason || 'LLM decision', hookEventName, { source: 'LLM' });
       return;
     }
 
@@ -567,7 +624,7 @@ async function main() {
     debug('Codex unavailable or invalid response, falling back to ask');
     log('WARN', 'Codex unavailable, falling back to ask', { toolName: input?.tool_name });
     logDecision('ask', 'Unable to determine automatically, please decide', 'fallback', input);
-    outputDecision('ask', 'Unable to determine automatically, please decide', hookEventName);
+    outputDecision('ask', 'Unable to determine automatically, please decide', hookEventName, { showMessage: false });
 
   } catch (err) {
     debug('Error:', err.message);

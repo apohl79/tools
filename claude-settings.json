@@ -1,0 +1,72 @@
+{
+  "permissions": {
+    "allow": [],
+    "defaultMode": "dontAsk"
+  },
+  "model": "opus",
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "agent-orchestrator@claudes-kitchen": true,
+    "backend-services@claudes-kitchen": true,
+    "career-development@claudes-kitchen": true,
+    "document-skills@claudes-kitchen": true,
+    "hiring@claudes-kitchen": true,
+    "operational-excellence@claudes-kitchen": true,
+    "parloa-toolkit-services@claudes-kitchen": true,
+    "python-services@claudes-kitchen": true,
+    "scrum@claudes-kitchen": true,
+    "skills-development@claudes-kitchen": true,
+    "typescript-services@claudes-kitchen": true,
+    "workflows@claudes-kitchen": true
+  },
+  "alwaysThinkingEnabled": true,
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-code-hook-wrapper notification"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-code-hook-wrapper stop"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-supervisor pre-tool-use"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-supervisor permission-request"
+          }
+        ]
+      }
+    ]
+  }
+}
