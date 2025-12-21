@@ -365,22 +365,23 @@
 (add-hook 'vterm-mode-hook #'my/configure-fontsets)
 (add-hook 'eat-mode-hook #'my/configure-fontsets)
 
-;; Replace specific Claude Code Unicode symbols with ASCII in vterm buffers
+;; Replace specific Claude Code Unicode symbols with ASCII in vterm/eat buffers
+;; ⠉ ⠒ ⠤
 (defun my/replace-unicode-spinners ()
   "Set buffer-local display table to replace Unicode spinners with ASCII in vterm."
   (let ((table (or buffer-display-table (make-display-table))))
     ;; · - U+00B7 (Middle Dot)
-    (aset table #x00B7 (vector ?⏺))
+    (aset table #x00B7 (vector ?⠉))
     ;; ✢ - U+2722 (Four Teardrop-Spoked Asterisk)
-    (aset table #x2722 (vector ?⏺))
+    (aset table #x2722 (vector ?⠉))
     ;; ✳ - U+2733 (Eight Spoked Asterisk)
-    (aset table #x2733 (vector ?⏺))
+    (aset table #x2733 (vector ?⠒))
     ;; ✶ - U+2736 (Six Pointed Black Star)
-    (aset table #x2736 (vector ? ))
+    (aset table #x2736 (vector ?⠒))
     ;; ✻ - U+273B (Teardrop-Spoked Asterisk)
-    (aset table #x273B (vector ? ))
+    (aset table #x273B (vector ?⠤))
     ;; ✽ - U+273D (Heavy Teardrop-Spoked Asterisk)
-    (aset table #x273D (vector ? ))
+    (aset table #x273D (vector ?⠤))
     (setq buffer-display-table table)))
 
 (add-hook 'vterm-mode-hook #'my/replace-unicode-spinners)
@@ -946,7 +947,7 @@
                   "-e" (format "display notification \"%s\" with title \"%s\""
                                message title)))
 
-  (setq claude-code-program-switches '("--dangerously-skip-permissions")
+  (setq ;;claude-code-program-switches '("--dangerously-skip-permissions")
         claude-code-notification-function #'my-claude-notify
         claude-code-confirm-kill 'nil)
 
