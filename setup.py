@@ -7,7 +7,6 @@ import shutil
 import glob
 import argparse
 import json
-import importlib
 
 # Suppress Homebrew environment hints and emojis
 os.environ['HOMEBREW_NO_ENV_HINTS'] = '1'

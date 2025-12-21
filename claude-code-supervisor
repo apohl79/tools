@@ -1,0 +1,579 @@
+#!/usr/bin/env node
+
+/**
+ * Claude Code Supervisor
+ *
+ * A hook script that validates tool use and permission requests using
+ * fast-path rules and Codex LLM for intelligent decisions.
+ *
+ * Usage: claude-code-supervisor <pre-tool-use|permission-request|post-tool-use>
+ * Input: JSON from stdin (Claude Code hook format)
+ * Output: JSON decision to stdout
+ *
+ * Environment Variables:
+ *   CLAUDE_SUPERVISOR_DEBUG=1        - Enable debug output to stderr
+ *   CLAUDE_SUPERVISOR_AUTO_ACCEPT=1  - Auto-accept all actions (bypass supervisor)
+ *   CLAUDE_SUPERVISOR_AUTO_ACCEPT=learned - Only auto-accept learned patterns
+ */
+
+const { execSync, spawnSync } = require('child_process');
+const { readFileSync, writeFileSync, realpathSync, existsSync, mkdirSync, appendFileSync } = require('fs');
+const { homedir } = require('os');
+const path = require('path');
+
+// Configuration
+const CODEX_TIMEOUT_MS = 15000; // 15 seconds for Codex to respond
+const DEBUG = process.env.CLAUDE_SUPERVISOR_DEBUG === '1';
+const LOG_DIR = path.join(homedir(), 'Library', 'Logs', 'claude-code-supervisor');
+const SESSION_STATE_DIR = '/tmp/claude-supervisor-sessions';
+
+// Auto-accept modes via environment variable
+// Values: '1' or 'all' = accept everything, 'learned' = only learned patterns
+const AUTO_ACCEPT = process.env.CLAUDE_SUPERVISOR_AUTO_ACCEPT || '';
+
+// Ensure directories exist
+try { mkdirSync(SESSION_STATE_DIR, { recursive: true }); } catch {}
+try { mkdirSync(LOG_DIR, { recursive: true }); } catch {}
+
+// ============================================================================
+// Logging Functions
+// ============================================================================
+
+function getTimestamp() {
+  return new Date().toISOString();
+}
+
+function getLogFilePath() {
+  const date = new Date().toISOString().split('T')[0];
+  return path.join(LOG_DIR, `supervisor-${date}.log`);
+}
+
+function log(level, message, data = null) {
+  try {
+    const logEntry = { timestamp: getTimestamp(), level, message, ...(data && { data }) };
+    appendFileSync(getLogFilePath(), JSON.stringify(logEntry) + '\n');
+  } catch {}
+}
+
+function debug(...args) {
+  if (DEBUG) console.error('[supervisor]', ...args);
+}
+
+function logRequest(hookType, input) {
+  log('INFO', 'Request received', {
+    hookType,
+    sessionId: input?.session_id,
+    toolName: input?.tool_name,
+    cwd: input?.cwd,
+    toolInput: input?.tool_input
+  });
+}
+
+function logDecision(decision, reason, source, input) {
+  log('INFO', 'Decision made', {
+    decision, reason, source,
+    toolName: input?.tool_name,
+    sessionId: input?.session_id
+  });
+}
+
+function logError(message, error, context = null) {
+  log('ERROR', message, {
+    error: error?.message || String(error),
+    stack: error?.stack,
+    ...(context && { context })
+  });
+}
+
+// ============================================================================
+// Session State Management - Learn from user decisions during a session
+// ============================================================================
+
+function getSessionStateFilePath(sessionId) {
+  if (!sessionId) return null;
+  const safeId = sessionId.replace(/[^a-zA-Z0-9-_]/g, '_');
+  return path.join(SESSION_STATE_DIR, `${safeId}.json`);
+}
+
+function loadSessionState(sessionId) {
+  const filePath = getSessionStateFilePath(sessionId);
+  if (!filePath) return { allowedPatterns: [], deniedPatterns: [], toolsAllowed: [] };
+  try {
+    if (existsSync(filePath)) {
+      return JSON.parse(readFileSync(filePath, 'utf8'));
+    }
+  } catch (err) {
+    debug('Failed to load session state:', err.message);
+  }
+  return { allowedPatterns: [], deniedPatterns: [], toolsAllowed: [] };
+}
+
+function saveSessionState(sessionId, state) {
+  const filePath = getSessionStateFilePath(sessionId);
+  if (!filePath) return;
+  try {
+    writeFileSync(filePath, JSON.stringify(state, null, 2));
+  } catch (err) {
+    debug('Failed to save session state:', err.message);
+  }
+}
+
+/**
+ * Generate pattern keys for matching similar actions
+ */
+function generatePatternKeys(input) {
+  const { tool_name, tool_input } = input;
+  const patterns = [];
+
+  if (tool_name === 'Bash') {
+    const cmd = tool_input?.command || '';
+    const cmdParts = cmd.trim().split(/\s+/);
+    if (cmdParts.length > 0) {
+      patterns.push(`Bash:${cmdParts[0]}`);
+      if (cmdParts.length > 1) {
+        patterns.push(`Bash:${cmdParts[0]}:${cmdParts[1]}`);
+      }
+    }
+  } else if (FILE_MODIFY_TOOLS.includes(tool_name) || ALWAYS_SAFE_TOOLS.includes(tool_name)) {
+    const filePath = getFilePath(tool_input);
+    if (filePath) {
+      const dir = path.dirname(filePath);
+      patterns.push(`${tool_name}:dir:${dir}`);
+      const ext = path.extname(filePath);
+      if (ext) patterns.push(`${tool_name}:ext:${ext}`);
+    }
+  } else if (tool_name === 'WebFetch' || tool_name === 'WebSearch') {
+    const url = tool_input?.url || tool_input?.query || '';
+    try {
+      const urlObj = new URL(url);
+      patterns.push(`${tool_name}:domain:${urlObj.hostname}`);
+    } catch {
+      patterns.push(`${tool_name}:${url.substring(0, 30)}`);
+    }
+  }
+
+  patterns.push(`Tool:${tool_name}`);
+  return patterns;
+}
+
+function checkSessionAllowed(sessionId, input) {
+  const state = loadSessionState(sessionId);
+  const patterns = generatePatternKeys(input);
+
+  debug('Checking session patterns:', patterns);
+  debug('Allowed patterns:', state.allowedPatterns);
+
+  for (const pattern of patterns) {
+    if (state.allowedPatterns.includes(pattern)) {
+      return { allowed: true, pattern };
+    }
+  }
+
+  if (state.toolsAllowed.includes(input.tool_name)) {
+    return { allowed: true, pattern: `Tool:${input.tool_name}` };
+  }
+
+  return { allowed: false };
+}
+
+function recordAllowedAction(sessionId, input) {
+  if (!sessionId) return;
+
+  const state = loadSessionState(sessionId);
+  const patterns = generatePatternKeys(input);
+
+  for (const pattern of patterns) {
+    if (!state.allowedPatterns.includes(pattern)) {
+      state.allowedPatterns.push(pattern);
+    }
+  }
+
+  state.lastUpdated = getTimestamp();
+  saveSessionState(sessionId, state);
+  log('INFO', 'Recorded allowed action in session', { sessionId, patterns });
+}
+
+function isAutoAcceptEnabled() {
+  const mode = AUTO_ACCEPT.toLowerCase();
+  return mode === '1' || mode === 'all' || mode === 'true';
+}
+
+function isLearnedAutoAcceptEnabled() {
+  return AUTO_ACCEPT.toLowerCase() === 'learned';
+}
+
+// ============================================================================
+// Security Rules
+// ============================================================================
+
+const ALWAYS_DENY_PATHS = [
+  /[/\\]\.ssh[/\\]/i,
+  /[/\\]\.gnupg[/\\]/i,
+  /[/\\]\.aws[/\\]credentials/i,
+  /[/\\]\.aws[/\\]config/i,
+  /^\/etc\/(passwd|shadow|sudoers)/,
+  /[/\\]\.password-store[/\\]/i,
+  /[/\\]\.netrc$/i,
+  /[/\\]\.npmrc$/i,
+  /[/\\]\.pypirc$/i,
+];
+
+const SENSITIVE_MODIFY_PATHS = [
+  /[/\\]\.bashrc$/i,
+  /[/\\]\.zshrc$/i,
+  /[/\\]\.profile$/i,
+  /[/\\]\.bash_profile$/i,
+  /[/\\]\.zprofile$/i,
+  /[/\\]\.gitconfig$/i,
+];
+
+const DANGEROUS_BASH_PATTERNS = [
+  /curl\s+.*\|\s*(ba)?sh/i,
+  /wget\s+.*\|\s*(ba)?sh/i,
+  /curl\s+.*>\s*.*\.sh\s*&&\s*(ba)?sh/i,
+  /rm\s+(-rf?|--recursive)\s+[/~]/i,
+  /chmod\s+777/i,
+  />\s*\/dev\/sd[a-z]/i,
+  /mkfs\./i,
+  /dd\s+.*of=\/dev\//i,
+  /:\(\)\s*\{\s*:\|:\s*&\s*\}/,
+];
+
+const ALWAYS_SAFE_TOOLS = ['Read', 'Glob', 'Grep', 'LSP', 'ListMcpResourcesTool', 'ReadMcpResourceTool'];
+const FILE_MODIFY_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+function expandPath(filePath) {
+  if (!filePath) return null;
+  if (filePath.startsWith('~')) return path.join(homedir(), filePath.slice(1));
+  return filePath;
+}
+
+function normalizePath(filePath) {
+  const expanded = expandPath(filePath);
+  if (!expanded) return null;
+  try {
+    return existsSync(expanded) ? realpathSync(expanded) : path.resolve(expanded);
+  } catch {
+    return path.resolve(expanded);
+  }
+}
+
+function isWithinDirectory(filePath, directory) {
+  if (!filePath || !directory) return false;
+  const normalizedFile = normalizePath(filePath);
+  const normalizedDir = normalizePath(directory);
+  if (!normalizedFile || !normalizedDir) return false;
+  return normalizedFile.startsWith(normalizedDir + path.sep) || normalizedFile === normalizedDir;
+}
+
+function matchesAnyPattern(str, patterns) {
+  if (!str) return false;
+  return patterns.some(pattern => pattern.test(str));
+}
+
+function getFilePath(toolInput) {
+  return toolInput?.file_path || toolInput?.filePath || toolInput?.path || toolInput?.notebook_path || null;
+}
+
+// ============================================================================
+// Fast-Path Rules (No LLM needed)
+// ============================================================================
+
+function checkFastPathRules(input) {
+  const { tool_name, tool_input, cwd } = input;
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || cwd;
+
+  debug('Checking fast-path rules for:', tool_name);
+
+  // 1. Always-safe read-only tools
+  if (ALWAYS_SAFE_TOOLS.includes(tool_name)) {
+    const filePath = getFilePath(tool_input);
+    if (filePath && matchesAnyPattern(expandPath(filePath), ALWAYS_DENY_PATHS)) {
+      return { decision: 'deny', reason: `Access to sensitive path blocked: ${filePath}` };
+    }
+    if (!filePath || isWithinDirectory(filePath, projectDir)) {
+      return { decision: 'allow', reason: 'Safe read-only operation within project' };
+    }
+    return null;
+  }
+
+  // 2. File modification tools
+  if (FILE_MODIFY_TOOLS.includes(tool_name)) {
+    const filePath = getFilePath(tool_input);
+    if (!filePath) return null;
+
+    const expandedPath = expandPath(filePath);
+    if (matchesAnyPattern(expandedPath, ALWAYS_DENY_PATHS)) {
+      return { decision: 'deny', reason: `Modification of sensitive path blocked: ${filePath}` };
+    }
+    if (matchesAnyPattern(expandedPath, SENSITIVE_MODIFY_PATHS)) {
+      return { decision: 'deny', reason: `Modification of shell config blocked: ${filePath}` };
+    }
+    if (isWithinDirectory(filePath, projectDir)) {
+      return { decision: 'allow', reason: 'File modification within project directory' };
+    }
+    return null;
+  }
+
+  // 3. Bash commands
+  if (tool_name === 'Bash') {
+    const command = tool_input?.command || '';
+    if (matchesAnyPattern(command, DANGEROUS_BASH_PATTERNS)) {
+      return { decision: 'deny', reason: `Dangerous bash pattern detected: ${command.substring(0, 100)}` };
+    }
+
+    const safeCommands = [
+      /^(ls|pwd|echo|cat|head|tail|wc|date|whoami|hostname|uname|env|which|type|file|stat)\b/,
+      /^(git\s+(status|log|diff|branch|show|remote|fetch))\b/,
+      /^(npm\s+(list|ls|outdated|info|view))\b/,
+      /^(node|npx|npm\s+(run|test|start|build))\b/,
+      /^(python|python3|pip\s+(list|show|freeze))\b/,
+      /^(make|cargo|go)\s+(build|test|run|check)/,
+    ];
+    if (safeCommands.some(pattern => pattern.test(command))) {
+      return { decision: 'allow', reason: 'Safe bash command' };
+    }
+    return null;
+  }
+
+  // 4. Web operations
+  if (tool_name === 'WebFetch' || tool_name === 'WebSearch') {
+    const url = tool_input?.url || '';
+    if (/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/i.test(url)) {
+      return null; // Let LLM decide for local URLs
+    }
+    return { decision: 'allow', reason: 'Web operation allowed' };
+  }
+
+  // 5. MCP tools
+  if (tool_name.startsWith('mcp__')) {
+    return { decision: 'allow', reason: 'MCP tool operation' };
+  }
+
+  // 6. Task/Agent tools
+  if (tool_name === 'Task' || tool_name === 'TodoWrite') {
+    return { decision: 'allow', reason: 'Internal Claude operation' };
+  }
+
+  return null;
+}
+
+// ============================================================================
+// Codex LLM Integration
+// ============================================================================
+
+function buildCodexPrompt(input) {
+  const { tool_name, tool_input, cwd, hook_event_name } = input;
+  return `You are a security supervisor for Claude Code. Analyze this action and decide if it should be allowed.
+
+EVENT: ${hook_event_name}
+PROJECT DIRECTORY: ${cwd}
+TOOL: ${tool_name}
+INPUT: ${JSON.stringify(tool_input, null, 2)}
+
+RULES:
+- ALLOW actions that are clearly within the project scope
+- ALLOW relevant documentation/resource fetches
+- ALLOW standard development commands (build, test, lint, etc.)
+- DENY access to credentials, SSH keys, or security-sensitive files
+- DENY modifications to system files or shell configurations
+- DENY suspicious command patterns (curl|bash, etc.)
+- ASK when uncertain or the action seems unusual
+
+Respond with ONLY a JSON object (no markdown, no explanation):
+{"decision": "allow", "reason": "brief reason"}
+or
+{"decision": "deny", "reason": "brief reason"}
+or
+{"decision": "ask", "reason": "brief reason"}`;
+}
+
+function callCodex(prompt) {
+  try {
+    debug('Calling Codex...');
+    const result = spawnSync('codex', ['exec', '-', '--json'], {
+      input: prompt,
+      encoding: 'utf8',
+      timeout: CODEX_TIMEOUT_MS,
+      maxBuffer: 1024 * 1024,
+    });
+
+    if (result.error) {
+      debug('Codex error:', result.error);
+      log('ERROR', 'Codex spawn error', { error: result.error.message });
+      return null;
+    }
+
+    if (result.status !== 0) {
+      debug('Codex non-zero exit:', result.status, result.stderr);
+      log('WARN', 'Codex non-zero exit', { status: result.status, stderr: result.stderr?.substring(0, 500) });
+      return null;
+    }
+
+    const output = result.stdout.trim();
+    debug('Codex raw output:', output);
+
+    const lines = output.split('\n');
+    let agentMessage = null;
+
+    for (const line of lines) {
+      try {
+        const event = JSON.parse(line);
+        if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
+          agentMessage = event.item.text;
+        }
+      } catch {}
+    }
+
+    if (!agentMessage) {
+      debug('No agent message found in Codex output');
+      return null;
+    }
+
+    debug('Codex agent message:', agentMessage);
+
+    const jsonMatch = agentMessage.match(/\{[\s\S]*"decision"[\s\S]*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    return JSON.parse(agentMessage);
+  } catch (err) {
+    debug('Codex call failed:', err.message);
+    return null;
+  }
+}
+
+// ============================================================================
+// Output
+// ============================================================================
+
+function outputDecision(decision, reason, hookEventName) {
+  console.log(JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName,
+      permissionDecision: decision,
+      permissionDecisionReason: reason,
+    }
+  }));
+}
+
+// ============================================================================
+// Stdin Reader
+// ============================================================================
+
+async function readStdin() {
+  return new Promise((resolve) => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('readable', () => {
+      let chunk;
+      while ((chunk = process.stdin.read()) !== null) data += chunk;
+    });
+    process.stdin.on('end', () => resolve(data));
+    setTimeout(() => resolve(data), 100);
+  });
+}
+
+// ============================================================================
+// Main Entry Point
+// ============================================================================
+
+async function main() {
+  const hookType = process.argv[2];
+
+  if (!hookType) {
+    console.error('Usage: claude-code-supervisor <pre-tool-use|permission-request|post-tool-use>');
+    process.exit(1);
+  }
+
+  let input = null;
+
+  try {
+    const stdinData = await readStdin();
+
+    if (!stdinData.trim()) {
+      debug('No input received, falling back to ask');
+      log('WARN', 'No input received', { hookType });
+      outputDecision('ask', 'No input data received', hookType === 'pre-tool-use' ? 'PreToolUse' : 'PermissionRequest');
+      return;
+    }
+
+    input = JSON.parse(stdinData);
+    debug('Input:', JSON.stringify(input, null, 2));
+    logRequest(hookType, input);
+
+    const hookEventName = input.hook_event_name || (hookType === 'pre-tool-use' ? 'PreToolUse' : 'PermissionRequest');
+    const sessionId = input.session_id;
+
+    // Handle post-tool-use: Record the action as allowed for session learning
+    if (hookType === 'post-tool-use') {
+      recordAllowedAction(sessionId, input);
+      debug('Recorded successful tool use for session learning');
+      return;
+    }
+
+    // Check auto-accept env var first (full bypass)
+    if (isAutoAcceptEnabled()) {
+      debug('Auto-accept enabled via env var');
+      log('INFO', 'Auto-accept enabled', { mode: 'env-var' });
+      logDecision('allow', 'Auto-accept enabled via CLAUDE_SUPERVISOR_AUTO_ACCEPT', 'auto-accept', input);
+      outputDecision('allow', 'Auto-accept enabled', hookEventName);
+      return;
+    }
+
+    // Check session state for learned patterns
+    const sessionCheck = checkSessionAllowed(sessionId, input);
+    if (sessionCheck.allowed) {
+      debug('Allowed by session learning:', sessionCheck.pattern);
+      log('INFO', 'Allowed by session learning', { pattern: sessionCheck.pattern });
+      logDecision('allow', `Previously allowed pattern: ${sessionCheck.pattern}`, 'session-learned', input);
+      outputDecision('allow', `Previously allowed: ${sessionCheck.pattern}`, hookEventName);
+      return;
+    }
+
+    // If learned-only mode, and not learned, fall back to ask
+    if (isLearnedAutoAcceptEnabled()) {
+      debug('Learned-only mode, pattern not found, asking user');
+      logDecision('ask', 'Pattern not learned yet', 'learned-mode', input);
+      outputDecision('ask', 'Pattern not learned yet - approve to remember', hookEventName);
+      return;
+    }
+
+    // Try fast-path rules
+    const fastPathResult = checkFastPathRules(input);
+    if (fastPathResult) {
+      debug('Fast-path decision:', fastPathResult);
+      logDecision(fastPathResult.decision, fastPathResult.reason, 'fast-path', input);
+      outputDecision(fastPathResult.decision, fastPathResult.reason, hookEventName);
+      return;
+    }
+
+    // No fast-path match - use Codex
+    debug('No fast-path match, consulting Codex...');
+    log('INFO', 'Consulting Codex LLM', { toolName: input.tool_name });
+    const prompt = buildCodexPrompt(input);
+    const codexResult = callCodex(prompt);
+
+    if (codexResult && codexResult.decision) {
+      debug('Codex decision:', codexResult);
+      logDecision(codexResult.decision, codexResult.reason || 'LLM decision', 'codex', input);
+      outputDecision(codexResult.decision, codexResult.reason || 'LLM decision', hookEventName);
+      return;
+    }
+
+    // Fallback to asking user
+    debug('Codex unavailable or invalid response, falling back to ask');
+    log('WARN', 'Codex unavailable, falling back to ask', { toolName: input?.tool_name });
+    logDecision('ask', 'Unable to determine automatically, please decide', 'fallback', input);
+    outputDecision('ask', 'Unable to determine automatically, please decide', hookEventName);
+
+  } catch (err) {
+    debug('Error:', err.message);
+    logError('Supervisor error', err, { hookType, toolName: input?.tool_name });
+    outputDecision('ask', `Supervisor error: ${err.message}`, 'PreToolUse');
+  }
+}
+
+main();
