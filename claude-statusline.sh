@@ -10,7 +10,7 @@ tokens_percent=$(echo "$input" | jq -r '
    (.context_window.current_usage.cache_creation_input_tokens // 0) +
    (.context_window.current_usage.cache_read_input_tokens // 0)) as $used |
   if .context_window.context_window_size > 0 then
-    (($used / .context_window.context_window_size * 100 / 0.9) | floor | if . > 100 then 100 else . end)
+    (($used / .context_window.context_window_size * 100 / 0.8) | floor | if . > 100 then 100 else . end)
   else
     0
   end
