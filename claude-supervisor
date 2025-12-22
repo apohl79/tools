@@ -119,20 +119,99 @@ function saveSessionState(sessionId, state) {
 }
 
 /**
+ * Commands that modify files and need scope-awareness
+ */
+const FILE_MODIFYING_COMMANDS = [
+  'rm', 'mv', 'cp', 'chmod', 'chown', 'touch', 'mkdir', 'rmdir',
+  'ln', 'install', 'rsync', 'tar', 'unzip', 'zip', 'gzip', 'gunzip'
+];
+
+/**
+ * Commands that are safe to learn globally (don't modify arbitrary files)
+ */
+const SAFE_GLOBAL_COMMANDS = [
+  'ls', 'pwd', 'echo', 'cat', 'head', 'tail', 'wc', 'date', 'whoami',
+  'hostname', 'uname', 'env', 'which', 'type', 'file', 'stat', 'find',
+  'grep', 'rg', 'ag', 'awk', 'sed', 'sort', 'uniq', 'cut', 'tr', 'jq',
+  'git', 'npm', 'npx', 'pnpm', 'yarn', 'node', 'python', 'python3',
+  'pip', 'pip3', 'cargo', 'go', 'make', 'docker', 'docker-compose',
+  'kubectl', 'helm', 'brew', 'apt', 'yum', 'code', 'vim', 'nano', 'open'
+];
+
+/**
+ * Extract potential file paths from a bash command
+ */
+function extractPathsFromCommand(command) {
+  const paths = [];
+  // Match quoted strings and unquoted paths
+  const tokens = command.match(/"[^"]*"|'[^']*'|[^\s]+/g) || [];
+
+  for (const token of tokens) {
+    // Remove quotes
+    const cleaned = token.replace(/^["']|["']$/g, '');
+    // Check if it looks like a path (starts with /, ~, or ./)
+    if (/^[\/~.]/.test(cleaned) || cleaned.includes('/')) {
+      paths.push(cleaned);
+    }
+  }
+  return paths;
+}
+
+/**
+ * Check if all paths in a command are within the project directory
+ */
+function commandIsWithinProject(command, projectDir) {
+  const paths = extractPathsFromCommand(command);
+  if (paths.length === 0) return true; // No paths = assume project-scoped
+
+  for (const p of paths) {
+    const expanded = expandPath(p);
+    if (!isWithinDirectory(expanded, projectDir)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
  * Generate pattern keys for matching similar actions
  */
 function generatePatternKeys(input) {
-  const { tool_name, tool_input } = input;
+  const { tool_name, tool_input, cwd } = input;
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || cwd;
   const patterns = [];
 
   if (tool_name === 'Bash') {
     const cmd = tool_input?.command || '';
     const cmdParts = cmd.trim().split(/\s+/);
-    if (cmdParts.length > 0) {
-      patterns.push(`Bash:${cmdParts[0]}`);
-      if (cmdParts.length > 1) {
-        patterns.push(`Bash:${cmdParts[0]}:${cmdParts[1]}`);
+    if (cmdParts.length === 0) return patterns;
+
+    const baseCmd = cmdParts[0];
+    const firstArg = cmdParts.length > 1 ? cmdParts[1] : null;
+
+    // Check if this is a file-modifying command
+    if (FILE_MODIFYING_COMMANDS.includes(baseCmd)) {
+      // For file-modifying commands, only learn if within project
+      if (commandIsWithinProject(cmd, projectDir)) {
+        patterns.push(`Bash:${baseCmd}:in-project`);
+        if (firstArg && firstArg.startsWith('-')) {
+          patterns.push(`Bash:${baseCmd}:${firstArg}:in-project`);
+        }
       }
+      // Don't learn global patterns for file-modifying commands outside project
+    } else if (SAFE_GLOBAL_COMMANDS.includes(baseCmd)) {
+      // Safe commands can be learned globally
+      patterns.push(`Bash:${baseCmd}`);
+      if (firstArg) {
+        patterns.push(`Bash:${baseCmd}:${firstArg}`);
+      }
+    } else {
+      // Unknown commands - be conservative, scope to project
+      if (commandIsWithinProject(cmd, projectDir)) {
+        patterns.push(`Bash:${baseCmd}:in-project`);
+      }
+      // Also learn the specific command pattern (less broad)
+      patterns.push(`Bash:${baseCmd}`);
     }
   } else if (FILE_MODIFY_TOOLS.includes(tool_name) || ALWAYS_SAFE_TOOLS.includes(tool_name)) {
     const filePath = getFilePath(tool_input);
@@ -152,7 +231,11 @@ function generatePatternKeys(input) {
     }
   }
 
-  patterns.push(`Tool:${tool_name}`);
+  // Don't add Tool:Bash for file-modifying commands (too broad)
+  if (tool_name !== 'Bash' || !FILE_MODIFYING_COMMANDS.includes((tool_input?.command || '').trim().split(/\s+/)[0])) {
+    patterns.push(`Tool:${tool_name}`);
+  }
+
   return patterns;
 }
 
@@ -177,20 +260,29 @@ function checkSessionAllowed(sessionId, input) {
 }
 
 function recordAllowedAction(sessionId, input) {
-  if (!sessionId) return;
+  if (!sessionId) return { added: [], existing: [] };
 
   const state = loadSessionState(sessionId);
   const patterns = generatePatternKeys(input);
+  const added = [];
+  const existing = [];
 
   for (const pattern of patterns) {
     if (!state.allowedPatterns.includes(pattern)) {
       state.allowedPatterns.push(pattern);
+      added.push(pattern);
+    } else {
+      existing.push(pattern);
     }
   }
 
-  state.lastUpdated = getTimestamp();
-  saveSessionState(sessionId, state);
-  log('INFO', 'Recorded allowed action in session', { sessionId, patterns });
+  if (added.length > 0) {
+    state.lastUpdated = getTimestamp();
+    saveSessionState(sessionId, state);
+    log('INFO', 'Recorded allowed action in session', { sessionId, added, existing });
+  }
+
+  return { added, existing };
 }
 
 function isAutoAcceptEnabled() {
@@ -566,8 +658,17 @@ async function main() {
 
     // Handle post-tool-use: Record the action as allowed for session learning
     if (hookType === 'post-tool-use') {
-      recordAllowedAction(sessionId, input);
+      const { added } = recordAllowedAction(sessionId, input);
       debug('Recorded successful tool use for session learning');
+
+      // Output system message if new patterns were learned
+      if (added.length > 0) {
+        // Pick the most specific pattern to show (first one is usually most specific)
+        const patternToShow = added[0];
+        console.log(JSON.stringify({
+          systemMessage: `[Supervisor] Learned: ${patternToShow}`
+        }));
+      }
       return;
     }
 
