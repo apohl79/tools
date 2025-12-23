@@ -4,17 +4,19 @@
 input=$(cat)
 cwd=$(echo "$input" | jq -r ".workspace.current_dir")
 model=$(echo "$input" | jq -r ".model.display_name")
-# Calculate total current context including all token types
-# Add 25k tokens for system tools overhead (more portable across models than percentage-based compression)
-tokens_percent=$(echo "$input" | jq -r '
+
+# Calculate context usage with 24k overhead for system prompt + system tools
+context_info=$(echo "$input" | jq -r '
   ((.context_window.current_usage.input_tokens // 0) +
    (.context_window.current_usage.cache_creation_input_tokens // 0) +
    (.context_window.current_usage.cache_read_input_tokens // 0) +
-   25000) as $used_with_overhead |
-  if .context_window.context_window_size > 0 then
-    (($used_with_overhead / .context_window.context_window_size * 100) | floor | if . > 100 then 100 else . end)
+   23000) as $used_with_overhead |
+  .context_window.context_window_size as $total |
+  if $total > 0 then
+    (($used_with_overhead / $total * 100) | floor | if . > 100 then 100 else . end) as $percent |
+    "\($percent)%"
   else
-    0
+    "0%"
   end
 ')
 
@@ -37,4 +39,4 @@ else
 fi
 
 # Output: directory (blue), git branch (green), model (magenta), context usage (cyan)
-printf "\033[34m%s\033[0m\033[32m%s\033[0m\033[35m 𝌭 %s\033[0m\033[36m ⚡ %s%%\033[0m" "$dir" "$git_info" "$model" "$tokens_percent"
+printf "\033[34m%s\033[0m\033[32m%s\033[0m\033[35m 𝌭 %s\033[0m\033[36m ⚡ %s\033[0m" "$dir" "$git_info" "$model" "$context_info"
