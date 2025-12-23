@@ -354,6 +354,11 @@
   (set-fontset-font t '(#x2580 . #x259F) (font-spec :family my/fixed-font) nil 'prepend)
   (set-fontset-font t '(#x25A0 . #x25FF) (font-spec :family my/fixed-font) nil 'prepend)
 
+  ;; Misc symbols for terminal alignment
+  (set-fontset-font t #x1D32D (font-spec :family my/fixed-font) nil 'prepend)  ; 𝌭
+  (set-fontset-font t #x2387 (font-spec :family my/fixed-font) nil 'prepend)   ; ⎇
+  (set-fontset-font t #x26A1 (font-spec :family my/fixed-font) nil 'prepend)   ; ⚡
+
   ;; Fix non-breaking space underlines
   (set-face-attribute 'nobreak-space nil :underline nil)
 )
@@ -396,6 +401,7 @@
 (set-face-attribute 'line-number-current-line nil :font my/fixed-font)
 
 (add-hook 'vterm-mode-hook (lambda () (display-line-numbers-mode 0)))
+(add-hook 'eat-mode-hook (lambda () (display-line-numbers-mode 0)))
 
 ;; Set the project name as frame title (window name in macOS)
 (setq frame-title-format '("" "%b" (:eval
