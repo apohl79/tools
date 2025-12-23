@@ -317,7 +317,7 @@ Otherwise call `indent-for-tab-command'."
       ;; Calculate padding to center "Loading Session..."
       (let* ((text1 "Restoring Session")
              (text2 "Please wait while your workspace is restored")
-             (text3 "0%")
+             (text3 "0% ")
              ;; text1 uses :height 1.5, so scale offset by 1.5 to account for wider characters
              (padding1 (propertize " " 'display `(space :align-to (- center ,(round (* 1.5 (/ (length text1) 2.0)))))))
              (padding2 (propertize " " 'display `(space :align-to (- center ,(/ (length text2) 2)))))
@@ -388,7 +388,7 @@ Otherwise call `indent-for-tab-command'."
                                                        (marker-position progress-start-marker)
                                                        (marker-position progress-end-marker))
                                               (let ((inhibit-read-only t)
-                                                    (percent-text (format "%d%%" percentage)))
+                                                    (percent-text (format "%d%% " percentage)))
                                                 ;; Delete old percentage text
                                                 (delete-region progress-start-marker progress-end-marker)
                                                 ;; Insert new percentage
@@ -727,7 +727,8 @@ This prevents unnecessary terminal reflows when only height changes."
 (defun my/claude-display-buffer (buffer alist)
   "Display BUFFER using regular window splits at 50% each.
 - If 1 window exists: split to create 2 windows, show buffer in one
-- If 2+ windows exist: show buffer in a window (prefer non-claude window, or opposite window)"
+- If 2+ windows exist: show buffer in a window (prefer non-claude window, or opposite window)
+Split direction is based on frame dimensions: horizontal if width > height, vertical otherwise."
   ;; Check if buffer is already displayed
   (let ((existing-window (get-buffer-window buffer t)))
     (if existing-window
@@ -735,8 +736,11 @@ This prevents unnecessary terminal reflows when only height changes."
           (select-window existing-window)
           existing-window)
 
-      ;; Count windows and find claude windows
-      (let* ((all-windows (window-list))
+      ;; Determine split direction based on frame dimensions
+      (let* ((split-direction (if (> (frame-pixel-width) (frame-pixel-height))
+                                  'right
+                                'below))
+             (all-windows (window-list))
              (window-count (length all-windows))
              (claude-windows nil)
              (non-claude-windows nil))
@@ -751,7 +755,7 @@ This prevents unnecessary terminal reflows when only height changes."
          ;; Only 1 window exists - split it
          ((= window-count 1)
           (let* ((main-window (car all-windows))
-                 (new-window (split-window main-window nil 'right)))
+                 (new-window (split-window main-window nil split-direction)))
             (set-window-buffer new-window buffer)
             (select-window new-window)
             new-window))
