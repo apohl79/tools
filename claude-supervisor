@@ -97,15 +97,50 @@ function getSessionStateFilePath(sessionId) {
 
 function loadSessionState(sessionId) {
   const filePath = getSessionStateFilePath(sessionId);
-  if (!filePath) return { allowedPatterns: [], deniedPatterns: [], toolsAllowed: [] };
+  if (!filePath) return { allowedPatterns: [], deniedPatterns: [], toolsAllowed: [], userPrompts: [] };
   try {
     if (existsSync(filePath)) {
-      return JSON.parse(readFileSync(filePath, 'utf8'));
+      const state = JSON.parse(readFileSync(filePath, 'utf8'));
+      // Ensure userPrompts array exists for older session files
+      if (!state.userPrompts) state.userPrompts = [];
+      return state;
     }
   } catch (err) {
     debug('Failed to load session state:', err.message);
   }
-  return { allowedPatterns: [], deniedPatterns: [], toolsAllowed: [] };
+  return { allowedPatterns: [], deniedPatterns: [], toolsAllowed: [], userPrompts: [] };
+}
+
+/**
+ * Store user prompt in session state for context
+ * Keeps only the last few prompts to avoid unbounded growth
+ */
+function recordUserPrompt(sessionId, prompt) {
+  if (!sessionId || !prompt) return;
+
+  const state = loadSessionState(sessionId);
+  const MAX_PROMPTS = 5; // Keep last 5 prompts for context
+
+  state.userPrompts.push({
+    timestamp: getTimestamp(),
+    prompt: prompt.substring(0, 500) // Truncate long prompts
+  });
+
+  // Keep only the last N prompts
+  if (state.userPrompts.length > MAX_PROMPTS) {
+    state.userPrompts = state.userPrompts.slice(-MAX_PROMPTS);
+  }
+
+  saveSessionState(sessionId, state);
+  debug('Recorded user prompt:', prompt.substring(0, 100));
+}
+
+/**
+ * Get recent user prompts for context
+ */
+function getRecentPrompts(sessionId) {
+  const state = loadSessionState(sessionId);
+  return state.userPrompts || [];
 }
 
 function saveSessionState(sessionId, state) {
@@ -130,13 +165,30 @@ const FILE_MODIFYING_COMMANDS = [
  * Commands that are safe to learn globally (don't modify arbitrary files)
  */
 const SAFE_GLOBAL_COMMANDS = [
-  'ls', 'pwd', 'echo', 'cat', 'head', 'tail', 'wc', 'date', 'whoami',
+  'cd', 'ls', 'pwd', 'echo', 'cat', 'head', 'tail', 'wc', 'date', 'whoami',
   'hostname', 'uname', 'env', 'which', 'type', 'file', 'stat', 'find',
   'grep', 'rg', 'ag', 'awk', 'sed', 'sort', 'uniq', 'cut', 'tr', 'jq',
   'git', 'npm', 'npx', 'pnpm', 'yarn', 'node', 'python', 'python3',
   'pip', 'pip3', 'cargo', 'go', 'make', 'docker', 'docker-compose',
   'kubectl', 'helm', 'brew', 'apt', 'yum', 'code', 'vim', 'nano', 'open'
 ];
+
+/**
+ * Network commands that need URL-specific pattern learning (not blanket approval)
+ */
+const NETWORK_COMMANDS = ['curl', 'wget', 'http', 'httpie'];
+
+/**
+ * Extract URL from a curl/wget command
+ */
+function extractUrlFromNetworkCommand(command) {
+  // Match URLs in the command (quoted or unquoted)
+  const urlMatch = command.match(/https?:\/\/[^\s"']+|"https?:\/\/[^"]+"|'https?:\/\/[^']+'/);
+  if (urlMatch) {
+    return urlMatch[0].replace(/^["']|["']$/g, ''); // Remove quotes
+  }
+  return null;
+}
 
 /**
  * Extract potential file paths from a bash command
@@ -158,7 +210,7 @@ function extractPathsFromCommand(command) {
 }
 
 /**
- * Check if all paths in a command are within the project directory
+ * Check if all paths in a command are within the project directory or worktrees
  */
 function commandIsWithinProject(command, projectDir) {
   const paths = extractPathsFromCommand(command);
@@ -166,7 +218,7 @@ function commandIsWithinProject(command, projectDir) {
 
   for (const p of paths) {
     const expanded = expandPath(p);
-    if (!isWithinDirectory(expanded, projectDir)) {
+    if (!isWithinProjectOrWorktree(expanded, projectDir)) {
       return false;
     }
   }
@@ -189,8 +241,19 @@ function generatePatternKeys(input) {
     const baseCmd = cmdParts[0];
     const firstArg = cmdParts.length > 1 ? cmdParts[1] : null;
 
-    // Check if this is a file-modifying command
-    if (FILE_MODIFYING_COMMANDS.includes(baseCmd)) {
+    // Network commands need URL-specific patterns (like WebFetch)
+    if (NETWORK_COMMANDS.includes(baseCmd)) {
+      const url = extractUrlFromNetworkCommand(cmd);
+      if (url) {
+        try {
+          const urlObj = new URL(url);
+          patterns.push(`Bash:${baseCmd}:domain:${urlObj.hostname}`);
+        } catch {
+          // Invalid URL - don't learn a broad pattern
+        }
+      }
+      // Don't add broad Bash:curl pattern - require domain-specific approval
+    } else if (FILE_MODIFYING_COMMANDS.includes(baseCmd)) {
       // For file-modifying commands, only learn if within project
       if (commandIsWithinProject(cmd, projectDir)) {
         patterns.push(`Bash:${baseCmd}:in-project`);
@@ -231,8 +294,13 @@ function generatePatternKeys(input) {
     }
   }
 
-  // Don't add Tool:Bash for file-modifying commands (too broad)
-  if (tool_name !== 'Bash' || !FILE_MODIFYING_COMMANDS.includes((tool_input?.command || '').trim().split(/\s+/)[0])) {
+  // Don't add Tool:Bash for file-modifying or network commands (too broad)
+  if (tool_name === 'Bash') {
+    const baseCmd = (tool_input?.command || '').trim().split(/\s+/)[0];
+    if (!FILE_MODIFYING_COMMANDS.includes(baseCmd) && !NETWORK_COMMANDS.includes(baseCmd)) {
+      patterns.push(`Tool:${tool_name}`);
+    }
+  } else {
     patterns.push(`Tool:${tool_name}`);
   }
 
@@ -337,6 +405,9 @@ const ASK_USER_BASH_PATTERNS = [
   /rm\s+(-rf?|--recursive)\s+[/~]/i,     // rm -rf - might be cleanup
   /chmod\s+777/i,                         // chmod 777 - might be intentional
   /sudo\s+/i,                             // sudo commands - ask first
+  /(curl|wget|http)[\s\S]*(-H|--header)/i, // curl/wget with headers (often contain API keys)
+  /(curl|wget|http)[\s\S]*(api.?key|token|secret|password|auth|bearer)/i, // curl with credentials
+  /(curl|wget|http)[\s\S]*-X\s*(DELETE|PUT|POST|PATCH)/i, // curl with modifying HTTP methods
 ];
 
 const ALWAYS_SAFE_TOOLS = ['Read', 'Glob', 'Grep', 'LSP', 'ListMcpResourcesTool', 'ReadMcpResourceTool'];
@@ -370,6 +441,60 @@ function isWithinDirectory(filePath, directory) {
   return normalizedFile.startsWith(normalizedDir + path.sep) || normalizedFile === normalizedDir;
 }
 
+/**
+ * Get all git worktree directories for a project
+ * @param {string} projectDir - The project directory
+ * @returns {string[]} Array of worktree paths
+ */
+function getGitWorktrees(projectDir) {
+  try {
+    const result = spawnSync('git', ['worktree', 'list', '--porcelain'], {
+      cwd: projectDir,
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    if (result.status !== 0) return [];
+
+    const worktrees = [];
+    const lines = result.stdout.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('worktree ')) {
+        worktrees.push(line.substring(9)); // Remove 'worktree ' prefix
+      }
+    }
+    return worktrees;
+  } catch {
+    return [];
+  }
+}
+
+// Cache worktrees per session to avoid repeated git calls
+let cachedWorktrees = null;
+let cachedProjectDir = null;
+
+function getWorktreesForProject(projectDir) {
+  if (cachedProjectDir === projectDir && cachedWorktrees !== null) {
+    return cachedWorktrees;
+  }
+  cachedProjectDir = projectDir;
+  cachedWorktrees = getGitWorktrees(projectDir);
+  debug('Detected worktrees:', cachedWorktrees);
+  return cachedWorktrees;
+}
+
+/**
+ * Check if a path is within the project or any of its worktrees
+ */
+function isWithinProjectOrWorktree(filePath, projectDir) {
+  if (isWithinDirectory(filePath, projectDir)) return true;
+
+  const worktrees = getWorktreesForProject(projectDir);
+  for (const worktree of worktrees) {
+    if (isWithinDirectory(filePath, worktree)) return true;
+  }
+  return false;
+}
+
 function matchesAnyPattern(str, patterns) {
   if (!str) return false;
   return patterns.some(pattern => pattern.test(str));
@@ -389,7 +514,7 @@ function checkFastPathRules(input) {
 
   debug('Checking fast-path rules for:', tool_name);
 
-  // 1. Always-safe read-only tools
+  // 1. Always-safe read-only tools - allow anywhere except sensitive paths
   if (ALWAYS_SAFE_TOOLS.includes(tool_name)) {
     const filePath = getFilePath(tool_input);
     const expandedPath = filePath ? expandPath(filePath) : null;
@@ -402,11 +527,8 @@ function checkFastPathRules(input) {
     if (expandedPath && matchesAnyPattern(expandedPath, ASK_USER_PATHS)) {
       return { decision: 'ask', reason: `Reading sensitive file: ${filePath}` };
     }
-    // Allow within project
-    if (!filePath || isWithinDirectory(filePath, projectDir)) {
-      return { decision: 'allow', reason: 'Safe read-only operation within project' };
-    }
-    return null;
+    // Read-only tools are safe anywhere
+    return { decision: 'allow', reason: 'Safe read-only operation', silent: true };
   }
 
   // 2. File modification tools
@@ -424,11 +546,11 @@ function checkFastPathRules(input) {
     if (matchesAnyPattern(expandedPath, ASK_USER_PATHS)) {
       return { decision: 'ask', reason: `Modifying sensitive file: ${filePath}` };
     }
-    // Allow within project
-    if (isWithinDirectory(filePath, projectDir)) {
+    // Allow within project or worktrees
+    if (isWithinProjectOrWorktree(filePath, projectDir)) {
       return { decision: 'allow', reason: 'File modification within project directory' };
     }
-    // Outside project - ask instead of blocking
+    // Outside project/worktrees - ask instead of blocking
     return { decision: 'ask', reason: `File outside project: ${filePath}` };
   }
 
@@ -484,9 +606,9 @@ function checkFastPathRules(input) {
     return { decision: 'allow', reason: 'MCP tool operation' };
   }
 
-  // 6. Task/Agent tools
+  // 6. Task/Agent tools (silent - not interesting to user)
   if (tool_name === 'Task' || tool_name === 'TodoWrite' || tool_name === 'AskUserQuestion') {
-    return { decision: 'allow', reason: 'Internal Claude operation' };
+    return { decision: 'allow', reason: 'Internal Claude operation', silent: true };
   }
 
   return null;
@@ -496,36 +618,46 @@ function checkFastPathRules(input) {
 // Codex LLM Integration
 // ============================================================================
 
-function buildCodexPrompt(input) {
+function buildCodexPrompt(input, sessionId) {
   const { tool_name, tool_input, cwd, hook_event_name } = input;
-  return `You are a security supervisor for Claude Code. Analyze this action and decide if it should be allowed.
+
+  // Get recent user prompts for context
+  const recentPrompts = getRecentPrompts(sessionId);
+  let userContext = '';
+  if (recentPrompts.length > 0) {
+    const promptTexts = recentPrompts.map(p => p.prompt).join('\n- ');
+    userContext = `\nUSER CONTEXT (recent requests):\n- ${promptTexts}\n`;
+  }
+
+  return `You are a security advisor for Claude Code. Analyze this action and decide if it should be auto-approved or if the user should be asked.
 
 EVENT: ${hook_event_name}
 PROJECT DIRECTORY: ${cwd}
 TOOL: ${tool_name}
 INPUT: ${JSON.stringify(tool_input, null, 2)}
-
+${userContext}
 RULES:
 - ALLOW actions that are clearly within the project scope
+- ALLOW actions that align with what the user requested in their recent prompts
 - ALLOW relevant documentation/resource fetches
 - ALLOW standard development commands (build, test, lint, etc.)
-- DENY access to credentials, SSH keys, or security-sensitive files
-- DENY modifications to system files or shell configurations
-- DENY suspicious command patterns (curl|bash, etc.)
+- ASK for actions involving credentials, API keys, or sensitive files (let user decide)
+- ASK for modifications to system files or shell configurations
+- ASK for network requests with embedded secrets
 - ASK when uncertain or the action seems unusual
+
+For dangerous actions, include "⚠️ WARNING:" in the reason to alert the user.
 
 Respond with ONLY a JSON object (no markdown, no explanation):
 {"decision": "allow", "reason": "brief reason"}
 or
-{"decision": "deny", "reason": "brief reason"}
-or
-{"decision": "ask", "reason": "brief reason"}`;
+{"decision": "ask", "reason": "brief concern, or ⚠️ WARNING: serious concern"}`;
 }
 
 function callCodex(prompt) {
   try {
     debug('Calling Codex...');
-    const result = spawnSync('codex', ['exec', '-', '--json'], {
+    const result = spawnSync('codex', ['exec', '-', '--json', '--skip-git-repo-check'], {
       input: prompt,
       encoding: 'utf8',
       timeout: CODEX_TIMEOUT_MS,
@@ -589,7 +721,7 @@ function callCodex(prompt) {
  * @param {string} options.source - Source of the decision for the message
  */
 function outputDecision(decision, reason, hookEventName, options = {}) {
-  const { showMessage = (decision === 'allow'), source = '' } = options;
+  const { showMessage = true, source = '' } = options;
 
   const output = {
     hookSpecificOutput: {
@@ -599,10 +731,16 @@ function outputDecision(decision, reason, hookEventName, options = {}) {
     }
   };
 
-  // Add a system message for visibility when auto-accepting
-  if (showMessage && decision === 'allow') {
+  // Add a system message for visibility
+  if (showMessage) {
     const sourceInfo = source ? ` [${source}]` : '';
-    output.systemMessage = `[Supervisor] Auto-approved${sourceInfo}: ${reason}`;
+    if (decision === 'allow') {
+      output.systemMessage = `[Supervisor] Auto-approved${sourceInfo}: ${reason}`;
+    } else if (decision === 'ask') {
+      output.systemMessage = `[Supervisor] Asking${sourceInfo}: ${reason}`;
+    } else if (decision === 'deny') {
+      output.systemMessage = `[Supervisor] Blocked${sourceInfo}: ${reason}`;
+    }
   }
 
   console.log(JSON.stringify(output));
@@ -656,19 +794,32 @@ async function main() {
     const hookEventName = input.hook_event_name || (hookType === 'pre-tool-use' ? 'PreToolUse' : 'PermissionRequest');
     const sessionId = input.session_id;
 
+    // Handle user-prompt-submit: Store the user's prompt for context
+    if (hookType === 'user-prompt-submit') {
+      const userPrompt = input.prompt || input.message || '';
+      if (userPrompt) {
+        recordUserPrompt(sessionId, userPrompt);
+        log('INFO', 'User prompt recorded', { sessionId, promptLength: userPrompt.length });
+      }
+      // Return nothing to let the prompt proceed
+      return;
+    }
+
     // Handle post-tool-use: Record the action as allowed for session learning
     if (hookType === 'post-tool-use') {
       const { added } = recordAllowedAction(sessionId, input);
       debug('Recorded successful tool use for session learning');
 
-      // Output system message if new patterns were learned
-      if (added.length > 0) {
-        // Pick the most specific pattern to show (first one is usually most specific)
-        const patternToShow = added[0];
-        console.log(JSON.stringify({
-          systemMessage: `[Supervisor] Learned: ${patternToShow}`
-        }));
-      }
+      // Patterns learned silently (no system message)
+      return;
+    }
+
+    // Handle permission-request: User is already being prompted, just pass through
+    // This avoids re-evaluating and potentially confusing Claude Code
+    if (hookType === 'permission-request') {
+      debug('Permission request - passing through to user prompt');
+      log('INFO', 'Permission request passthrough', { toolName: input.tool_name });
+      // Return nothing (no output) to let the default behavior proceed
       return;
     }
 
@@ -687,7 +838,7 @@ async function main() {
       debug('Allowed by session learning:', sessionCheck.pattern);
       log('INFO', 'Allowed by session learning', { pattern: sessionCheck.pattern });
       logDecision('allow', `Previously allowed pattern: ${sessionCheck.pattern}`, 'session-learned', input);
-      outputDecision('allow', `Learned: ${sessionCheck.pattern}`, hookEventName, { source: 'learned' });
+      outputDecision('allow', sessionCheck.pattern, hookEventName, { source: 'learned' });
       return;
     }
 
@@ -704,20 +855,26 @@ async function main() {
     if (fastPathResult) {
       debug('Fast-path decision:', fastPathResult);
       logDecision(fastPathResult.decision, fastPathResult.reason, 'fast-path', input);
-      outputDecision(fastPathResult.decision, fastPathResult.reason, hookEventName, { source: 'rules' });
+      outputDecision(fastPathResult.decision, fastPathResult.reason, hookEventName, {
+        source: 'rules',
+        showMessage: !fastPathResult.silent
+      });
       return;
     }
 
     // No fast-path match - use Codex
     debug('No fast-path match, consulting Codex...');
     log('INFO', 'Consulting Codex LLM', { toolName: input.tool_name });
-    const prompt = buildCodexPrompt(input);
+    const prompt = buildCodexPrompt(input, sessionId);
     const codexResult = callCodex(prompt);
 
     if (codexResult && codexResult.decision) {
       debug('Codex decision:', codexResult);
-      logDecision(codexResult.decision, codexResult.reason || 'LLM decision', 'codex', input);
-      outputDecision(codexResult.decision, codexResult.reason || 'LLM decision', hookEventName, { source: 'LLM' });
+      // Codex should advise, not block - convert "deny" to "ask" so user decides
+      const decision = codexResult.decision === 'deny' ? 'ask' : codexResult.decision;
+      const reason = codexResult.reason || 'LLM decision';
+      logDecision(decision, reason, 'codex', input);
+      outputDecision(decision, reason, hookEventName, { source: 'LLM' });
       return;
     }
 

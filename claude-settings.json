@@ -1,29 +1,20 @@
 {
   "permissions": {
-    "allow": [],
-    "defaultMode": "dontAsk"
+    "allow": []
   },
   "model": "opus",
-  "statusLine": {
-    "type": "command",
-    "command": "~/.claude/statusline.sh"
-  },
-  "enabledPlugins": {
-    "agent-orchestrator@claudes-kitchen": true,
-    "backend-services@claudes-kitchen": true,
-    "career-development@claudes-kitchen": true,
-    "document-skills@claudes-kitchen": true,
-    "hiring@claudes-kitchen": true,
-    "operational-excellence@claudes-kitchen": true,
-    "parloa-toolkit-services@claudes-kitchen": true,
-    "python-services@claudes-kitchen": true,
-    "scrum@claudes-kitchen": true,
-    "skills-development@claudes-kitchen": true,
-    "typescript-services@claudes-kitchen": true,
-    "workflows@claudes-kitchen": true
-  },
-  "alwaysThinkingEnabled": true,
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "claude-supervisor user-prompt-submit"
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "",
@@ -53,6 +44,10 @@
           {
             "type": "command",
             "command": "claude-supervisor pre-tool-use"
+          },
+          {
+            "type": "command",
+            "command": "claude-code-hook-wrapper pre-tool-use"
           }
         ]
       }
@@ -79,5 +74,25 @@
         ]
       }
     ]
-  }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "~/.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "agent-orchestrator@claudes-kitchen": true,
+    "backend-services@claudes-kitchen": true,
+    "career-development@claudes-kitchen": true,
+    "document-skills@claudes-kitchen": true,
+    "hiring@claudes-kitchen": true,
+    "operational-excellence@claudes-kitchen": true,
+    "parloa-toolkit-services@claudes-kitchen": true,
+    "python-services@claudes-kitchen": true,
+    "scrum@claudes-kitchen": true,
+    "skills-development@claudes-kitchen": true,
+    "typescript-services@claudes-kitchen": true,
+    "workflows@claudes-kitchen": true
+  },
+  "alwaysThinkingEnabled": true,
+  "promptSuggestionEnabled": false
 }
