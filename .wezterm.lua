@@ -38,6 +38,12 @@ config.colors = {
 
 local act = wezterm.action
 config.keys = {
+  -- claude shift+enter support
+  {
+    key = "Enter",
+    mods = "SHIFT",
+    action = wezterm.action { SendString="\x1b\r" }
+  },
   -- tilde hack as it does not work w/o deadkeys enabled
   {
     key = "n",
