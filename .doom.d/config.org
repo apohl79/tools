@@ -1296,6 +1296,8 @@ Setup a default connection function for pgmacs
 
 * AI Assistant (LLM)
 
+DEPRECATED... using claude code only these days..
+
 #+begin_src emacs-lisp :tangle yes
 (message "*** LLM")
 #+end_src
