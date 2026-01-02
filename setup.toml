@@ -61,6 +61,7 @@ brew_packages = [
     "bentobox",
     "blackhole-64ch",
     "clang-format",
+    "claude",
     "cliclick",
     "clipgrab",
     "cmake",
@@ -75,8 +76,11 @@ brew_packages = [
     "enchant",
     "ffmpeg",
     "font-iosevka-comfy",
+    "font-iosevka-term-nerd-font",
+    "font-jetbrains-mono-nerd-font",
     "font-juliamono",
     "font-roboto",
+    "font-symbols-only-nerd-font",
     "gh",
     "gimp",
     "git",
@@ -118,7 +122,6 @@ brew_packages = [
     "nvm",
     "offlineimap",
     "ollama",
-    "openjdk",
     "owncloud",
     "packages",
     "pandoc",
@@ -128,11 +131,9 @@ brew_packages = [
     "poppler",
     "pytest",
     "python-packaging",
-    "python@3.14",
     "raycast",
     "reaper",
     "rectangle",
-    "ripgrep",
     "rsync",
     "ruff",
     "shellcheck",
@@ -157,7 +158,6 @@ brew_packages = [
 # NPM global packages
 npm_packages = [
     "@anthropic-ai/claude-code",
-    #"@georgesg/arc-cli",
     "@tailwindcss/language-server",
     "@vtsls/language-server",
     "bash-language-server",
@@ -174,7 +174,6 @@ pip_packages = [
 
 # Post-install commands to run after packages are installed
 post_install_commands = [
-    #"if [ ! -d ~/vcpkg ]; then; git clone https://github.com/microsoft/vcpkg ~/vcpkg; fi",
 ]
 
 # Layer 3: Emacs installation
