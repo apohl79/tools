@@ -16,7 +16,7 @@
  *   CLAUDE_SUPERVISOR_AUTO_ACCEPT=learned - Only auto-accept learned patterns
  */
 
-const { execSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const { readFileSync, writeFileSync, realpathSync, existsSync, mkdirSync, appendFileSync } = require('fs');
 const { homedir } = require('os');
 const path = require('path');
@@ -30,6 +30,9 @@ const SESSION_STATE_DIR = '/tmp/claude-supervisor-sessions';
 // Auto-accept modes via environment variable
 // Values: '1' or 'all' = accept everything, 'learned' = only learned patterns
 const AUTO_ACCEPT = process.env.CLAUDE_SUPERVISOR_AUTO_ACCEPT || '';
+
+// Disable supervisor completely - returns nothing so Claude uses default behavior
+const DISABLED = process.env.CLAUDE_SUPERVISOR_DISABLED === '1';
 
 // Ensure directories exist
 try { mkdirSync(SESSION_STATE_DIR, { recursive: true }); } catch {}
@@ -174,9 +177,9 @@ const SAFE_GLOBAL_COMMANDS = [
 ];
 
 /**
- * Network commands that need URL-specific pattern learning (not blanket approval)
+ * Network/remote commands that need host-specific pattern learning (not blanket approval)
  */
-const NETWORK_COMMANDS = ['curl', 'wget', 'http', 'httpie'];
+const NETWORK_COMMANDS = ['curl', 'wget', 'http', 'httpie', 'ssh', 'scp', 'rsync', 'sftp'];
 
 /**
  * Extract URL from a curl/wget command
@@ -189,6 +192,40 @@ function extractUrlFromNetworkCommand(command) {
   }
   return null;
 }
+
+/**
+ * Extract hostname and remote command from ssh/scp/rsync command
+ * Returns { host, remoteCmd } or null
+ */
+function extractRemoteCommandInfo(command) {
+  // ssh user@host 'command' or ssh user@host "command"
+  const sshMatch = command.match(/(?:ssh|sftp)\s+(?:-[^\s]+\s+)*(?:\w+@)?([a-zA-Z0-9._-]+)\s+['"](.+)['"]/);
+  if (sshMatch) {
+    const remoteCmd = sshMatch[2].trim().split(/\s+/)[0]; // First word of remote command
+    return { host: sshMatch[1], remoteCmd };
+  }
+
+  // ssh user@host command (without quotes)
+  const sshUnquotedMatch = command.match(/(?:ssh|sftp)\s+(?:-[^\s]+\s+)*(?:\w+@)?([a-zA-Z0-9._-]+)\s+(\S+)/);
+  if (sshUnquotedMatch) {
+    return { host: sshUnquotedMatch[1], remoteCmd: sshUnquotedMatch[2] };
+  }
+
+  // ssh user@host (just connection, no command)
+  const sshConnectMatch = command.match(/(?:ssh|sftp)\s+(?:-[^\s]+\s+)*(?:\w+@)?([a-zA-Z0-9._-]+)\s*$/);
+  if (sshConnectMatch) {
+    return { host: sshConnectMatch[1], remoteCmd: 'shell' };
+  }
+
+  // scp/rsync - extract host and use 'transfer' as command type
+  const scpMatch = command.match(/(?:scp|rsync)\s+.*?(?:\w+@)?([a-zA-Z0-9._-]+):/);
+  if (scpMatch) {
+    return { host: scpMatch[1], remoteCmd: 'transfer' };
+  }
+
+  return null;
+}
+
 
 /**
  * Extract potential file paths from a bash command
@@ -241,18 +278,25 @@ function generatePatternKeys(input) {
     const baseCmd = cmdParts[0];
     const firstArg = cmdParts.length > 1 ? cmdParts[1] : null;
 
-    // Network commands need URL-specific patterns (like WebFetch)
+    // Network/remote commands need host-specific patterns
     if (NETWORK_COMMANDS.includes(baseCmd)) {
+      // Try URL extraction for curl/wget
       const url = extractUrlFromNetworkCommand(cmd);
       if (url) {
         try {
           const urlObj = new URL(url);
-          patterns.push(`Bash:${baseCmd}:domain:${urlObj.hostname}`);
+          patterns.push(`Bash:${baseCmd}:host:${urlObj.hostname}`);
         } catch {
-          // Invalid URL - don't learn a broad pattern
+          // Invalid URL - try host extraction
         }
       }
-      // Don't add broad Bash:curl pattern - require domain-specific approval
+      // Try host+command extraction for ssh/scp/rsync
+      const remoteInfo = extractRemoteCommandInfo(cmd);
+      if (remoteInfo) {
+        // Include the remote command in the pattern: ssh:host:sendnix.de:cat
+        patterns.push(`Bash:${baseCmd}:host:${remoteInfo.host}:${remoteInfo.remoteCmd}`);
+      }
+      // Don't add broad Bash:ssh or Bash:curl pattern - require host-specific approval
     } else if (FILE_MODIFYING_COMMANDS.includes(baseCmd)) {
       // For file-modifying commands, only learn if within project
       if (commandIsWithinProject(cmd, projectDir)) {
@@ -568,24 +612,28 @@ function checkFastPathRules(input) {
       return { decision: 'ask', reason: `Potentially risky command: ${command.substring(0, 80)}` };
     }
 
-    // Allow safe commands
+    // Allow only truly safe, read-only/info commands
+    // Everything else goes to LLM for smarter context-aware decisions
     const safeCommands = [
-      /^(ls|pwd|echo|cat|head|tail|wc|date|whoami|hostname|uname|env|which|type|file|stat)\b/,
-      /^(git\s+(status|log|diff|branch|show|remote|fetch|add|commit|push|pull|checkout|merge|rebase))\b/,
-      /^(npm\s+(list|ls|outdated|info|view|run|test|start|build|install|ci))\b/,
-      /^(node|npx|pnpm|yarn)\b/,
-      /^(python|python3|pip\s+(list|show|freeze|install))\b/,
-      /^(make|cargo|go)\s+(build|test|run|check|install)/,
-      /^(docker|docker-compose)\s+(ps|images|logs|build|up|down|exec|run)\b/,
-      /^(kubectl|helm)\s+(get|describe|logs|apply|delete)\b/,
-      /^(brew|apt|yum)\s+(list|info|search|install|update)\b/,
-      /^(code|vim|nano|emacs|open)\b/,
-      /^(mkdir|touch|cp|mv|ln)\b/,
-      /^(curl|wget|http)\s+.*\s*$/,  // curl/wget without piping to shell
-      /^(jq|grep|awk|sed|sort|uniq|cut|tr)\b/,
+      // Info-only commands that can't modify anything
+      /^(ls|pwd|echo|cat|head|tail|wc|date|whoami|hostname|uname|env|which|type|file|stat|id|groups|printenv)\b/,
+      // Read-only git commands (no fetch/pull/push/checkout/commit)
+      /^git\s+(status|log|diff|show|branch|remote|stash\s+list|config\s+--get)\b/,
+      // Package info only (no install/run/exec)
+      /^(npm|pnpm|yarn)\s+(list|ls|outdated|info|view|why)\b/,
+      /^pip\s+(list|show|freeze)\b/,
+      // Container/cluster info only (no run/exec/apply/delete)
+      /^docker\s+(ps|images|inspect|logs|version|info)\b/,
+      /^(kubectl|helm)\s+(get|describe|logs|version)\b/,
+      // Package manager info only (no install/update)
+      /^(brew|apt|yum|dnf)\s+(list|info|search|show)\b/,
+      // Text processing (read-only)
+      /^(jq|grep|rg|ag|awk|sed|sort|uniq|cut|tr|tee|diff|comm|join)\b/,
+      // Open apps/editors (user will see what opens)
+      /^(code|open)\b/,
     ];
     if (safeCommands.some(pattern => pattern.test(command))) {
-      return { decision: 'allow', reason: 'Safe bash command' };
+      return { decision: 'allow', reason: 'Safe read-only command' };
     }
 
     // Unknown command - let LLM decide or ask
@@ -775,6 +823,12 @@ async function main() {
     process.exit(1);
   }
 
+  // If disabled, return nothing - Claude uses its default behavior
+  if (DISABLED) {
+    debug('Supervisor disabled via CLAUDE_SUPERVISOR_DISABLED');
+    return;
+  }
+
   let input = null;
 
   try {
@@ -807,7 +861,7 @@ async function main() {
 
     // Handle post-tool-use: Record the action as allowed for session learning
     if (hookType === 'post-tool-use') {
-      const { added } = recordAllowedAction(sessionId, input);
+      recordAllowedAction(sessionId, input);
       debug('Recorded successful tool use for session learning');
 
       // Patterns learned silently (no system message)
