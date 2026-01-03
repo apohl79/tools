@@ -582,6 +582,11 @@ function checkFastPathRules(input) {
 
     const expandedPath = expandPath(filePath);
 
+    // Always allow: Claude Code plan files
+    if (isWithinDirectory(expandedPath, path.join(homedir(), '.claude', 'plans'))) {
+      return { decision: 'allow', reason: 'Claude Code plan file', silent: true };
+    }
+
     // Hard block: SSH/GPG keys - never allow modification
     if (matchesAnyPattern(expandedPath, ALWAYS_DENY_PATHS)) {
       return { decision: 'deny', reason: `Modification of sensitive path blocked: ${filePath}` };
