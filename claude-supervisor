@@ -457,6 +457,12 @@ const ASK_USER_BASH_PATTERNS = [
 const ALWAYS_SAFE_TOOLS = ['Read', 'Glob', 'Grep', 'LSP', 'ListMcpResourcesTool', 'ReadMcpResourceTool'];
 const FILE_MODIFY_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
 
+// Paths where file modifications are always allowed (no prompting)
+const ALWAYS_ALLOW_MODIFY_PATHS = [
+  path.join(homedir(), '.claude', 'plans'),
+  '/tmp',
+];
+
 // ============================================================================
 // Helper Functions
 // ============================================================================
@@ -582,9 +588,11 @@ function checkFastPathRules(input) {
 
     const expandedPath = expandPath(filePath);
 
-    // Always allow: Claude Code plan files
-    if (isWithinDirectory(expandedPath, path.join(homedir(), '.claude', 'plans'))) {
-      return { decision: 'allow', reason: 'Claude Code plan file', silent: true };
+    // Always allow: paths in ALWAYS_ALLOW_MODIFY_PATHS
+    for (const allowedPath of ALWAYS_ALLOW_MODIFY_PATHS) {
+      if (isWithinDirectory(expandedPath, allowedPath)) {
+        return { decision: 'allow', reason: `Allowed path: ${allowedPath}`, silent: true };
+      }
     }
 
     // Hard block: SSH/GPG keys - never allow modification
