@@ -43,7 +43,20 @@ end)
 -- -- Toggle play/pause in spotify hs.hotkey.bind({}, "F13", function()
 -- hs.spotify.playpause() end)
 --
--- -- Toggle play/pause in play music
+-- Parloa Okta login helper
+hs.hotkey.bind({"ctrl", "cmd"}, "P", function()
+    local output, status = hs.execute("op item get 'parloa okta' --fields username,password --reveal", true)
+    if status then
+        output = output:gsub("%s+$", "")
+        local username, password = output:match("([^,]+),([^,]+)")
+        hs.eventtap.keyStrokes(username)
+        hs.eventtap.keyStroke({}, "tab")
+        hs.eventtap.keyStrokes(password)
+    else
+        hs.alert.show("Failed to retrieve credentials from 1Password")
+    end
+end)
+
 -- hs.hotkey.bind({}, "F14", function()
 --       hs.osascript.applescript([[
 -- tell application "Google Chrome"
