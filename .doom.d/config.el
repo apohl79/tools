@@ -733,6 +733,7 @@
           (java "https://github.com/tree-sitter/tree-sitter-java")
           (javascript "https://github.com/tree-sitter/tree-sitter-javascript")
           (typescript "https://github.com/tree-sitter/tree-sitter-typescript" "master" "typescript/src")
+          (jsdoc "https://github.com/tree-sitter/tree-sitter-jsdoc")
           (tsx "https://github.com/tree-sitter/tree-sitter-typescript" "master" "tsx/src")
           (json "https://github.com/tree-sitter/tree-sitter-json")
           (yaml "https://github.com/ikatyang/tree-sitter-yaml")
