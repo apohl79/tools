@@ -184,7 +184,6 @@ options = [
     "--with-imagemagick",
     "--with-mailutils",
     "--with-xwidgets",
-    "--with-savchenkovaleriy-big-sur-3d-icon",
 ]
 
 # Post-install commands to run after Emacs is installed
@@ -288,3 +287,8 @@ target = "{home}/bin/claude-code-hook-wrapper"
 name = "claude-supervisor"
 source = "{script_dir}/claude-supervisor"
 target = "{home}/bin/claude-supervisor"
+
+[[layer5.symlinks]]
+name = "claude-notify"
+source = "{script_dir}/claude-notify"
+target = "{home}/bin/claude-notify"
