@@ -11,9 +11,10 @@
  * Output: JSON decision to stdout
  *
  * Environment Variables:
- *   CLAUDE_SUPERVISOR_DEBUG=1        - Enable debug output to stderr
- *   CLAUDE_SUPERVISOR_AUTO_ACCEPT=1  - Auto-accept all actions (bypass supervisor)
- *   CLAUDE_SUPERVISOR_AUTO_ACCEPT=learned - Only auto-accept learned patterns
+ *   CLAUDE_SUPERVISOR_DEBUG=1              - Enable debug output to stderr
+ *   CLAUDE_SUPERVISOR_AUTO_ACCEPT=1        - Auto-accept all actions (bypass supervisor)
+ *   CLAUDE_SUPERVISOR_AUTO_ACCEPT=learned  - Only auto-accept learned patterns
+ *   CLAUDE_SUPERVISOR_DISABLED=1           - Disable the supervisor
  */
 
 const { spawnSync } = require('child_process');
