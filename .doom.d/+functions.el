@@ -760,9 +760,13 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
             (select-window new-window)
             new-window))
 
-         ;; 2+ windows exist and there's a non-claude window - use it
+         ;; 2+ windows exist and there's a non-claude window - use one that's not current
          ((and (>= window-count 2) non-claude-windows)
-          (let ((target-window (car non-claude-windows)))
+          (let* ((current-window (selected-window))
+                 (other-non-claude (remove current-window non-claude-windows))
+                 (target-window (or (car other-non-claude)
+                                    (car (remove current-window all-windows))
+                                    (car non-claude-windows))))
             (set-window-buffer target-window buffer)
             (select-window target-window)
             target-window))
