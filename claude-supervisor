@@ -815,13 +815,29 @@ function outputDecision(decision, reason, hookEventName, options = {}) {
 async function readStdin() {
   return new Promise((resolve) => {
     let data = '';
+    let resolved = false;
+
+    const finish = () => {
+      if (!resolved) {
+        resolved = true;
+        resolve(data);
+      }
+    };
+
     process.stdin.setEncoding('utf8');
     process.stdin.on('readable', () => {
       let chunk;
       while ((chunk = process.stdin.read()) !== null) data += chunk;
     });
-    process.stdin.on('end', () => resolve(data));
-    setTimeout(() => resolve(data), 100);
+    process.stdin.on('end', finish);
+    process.stdin.on('error', (err) => {
+      debug('stdin error:', err.message);
+      finish();
+    });
+
+    // Fallback timeout - increased from 100ms to 5000ms
+    // This should only trigger if stdin never closes
+    setTimeout(finish, 5000);
   });
 }
 
