@@ -1,15 +1,5 @@
-# SSH agent, required from 10.12 on
-# Start ssh-agent if not already running
-if [ -z "$SSH_AUTH_SOCK" ]; then
-  eval "$(ssh-agent -s)" > /dev/null
-fi
-
-# Add SSH keys to agent
-for key in $HOME/.ssh/id_*; do
-  if [ -f "$key" ] && ! [[ "$key" =~ \.pub$ ]]; then
-    ssh-add --apple-use-keychain "$key" 2>/dev/null
-  fi
-done
+# Load SSH keys from macOS keychain (uses system ssh-agent)
+ssh-add --apple-load-keychain 2>/dev/null
 
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
