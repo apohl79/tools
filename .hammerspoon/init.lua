@@ -57,6 +57,17 @@ hs.hotkey.bind({"ctrl", "cmd"}, "P", function()
     end
 end)
 
+hs.hotkey.bind({"ctrl", "option", "cmd"}, "P", function()
+    local output, status = hs.execute("op item get 'parloa okta' --fields username,password --reveal", true)
+    if status then
+        output = output:gsub("%s+$", "")
+        local username, password = output:match("([^,]+),([^,]+)")
+        hs.eventtap.keyStrokes(password)
+    else
+        hs.alert.show("Failed to retrieve credentials from 1Password")
+    end
+end)
+
 -- hs.hotkey.bind({}, "F14", function()
 --       hs.osascript.applescript([[
 -- tell application "Google Chrome"
