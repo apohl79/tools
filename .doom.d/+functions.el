@@ -721,11 +721,18 @@ This prevents unnecessary terminal reflows when only height changes."
             (when (and left top width height)
               (set-frame-position (selected-frame) left top)
               (set-frame-size (selected-frame) width height nil)))
-        (error nil))))
+        (error nil)))))
 
 ;; Claude buffer display function
+(defun my/claude-window-width ()
+  "Get target width for Claude code windows.
+Uses `claude-code-ide-window-width' if available, otherwise defaults to 105."
+  (if (boundp 'claude-code-ide-window-width)
+      claude-code-ide-window-width
+    105))
+
 (defun my/claude-display-buffer (buffer alist)
-  "Display BUFFER using regular window splits at 50% each.
+  "Display BUFFER using regular window splits with specific width for claude buffers.
 - If 1 window exists: split to create 2 windows, show buffer in one
 - If 2+ windows exist: show buffer in a window (prefer non-claude window, or opposite window)
 Split direction is based on frame dimensions: horizontal if width > height, vertical otherwise."
@@ -734,11 +741,13 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
     (if existing-window
         (progn
           (select-window existing-window)
+          ;; Ensure width is correct for existing window
+          (my/claude-set-window-width existing-window)
           existing-window)
 
       ;; Determine split direction based on frame dimensions
       (let* ((split-direction (if (> (frame-pixel-width) (frame-pixel-height))
-                                  'right
+                                  'right  ; Put claude buffer on the right
                                 'below))
              (all-windows (window-list))
              (window-count (length all-windows))
@@ -751,36 +760,82 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
               (push window claude-windows)
             (push window non-claude-windows)))
 
+        (let ((target-window
+               (cond
+                ;; Only 1 window exists - split it 50/50
+                ((= window-count 1)
+                 (let* ((main-window (car all-windows))
+                        (new-window (split-window main-window nil split-direction)))
+                   (set-window-buffer new-window buffer)
+                   new-window))
+
+                ;; 2+ windows exist and there's a non-claude window - use one that's not current
+                ((and (>= window-count 2) non-claude-windows)
+                 (let* ((current-window (selected-window))
+                        (other-non-claude (remove current-window non-claude-windows))
+                        (win (or (car other-non-claude)
+                                 (car (remove current-window all-windows))
+                                 (car non-claude-windows))))
+                   (set-window-buffer win buffer)
+                   win))
+
+                ;; 2+ windows exist, all are claude - use the opposite window from current
+                ((>= window-count 2)
+                 (let* ((current-window (selected-window))
+                        (other-windows (remove current-window all-windows))
+                        (win (car other-windows)))
+                   (set-window-buffer win buffer)
+                   win))
+
+                ;; Fallback - should not happen
+                (t
+                 (set-window-buffer (selected-window) buffer)
+                 (selected-window)))))
+
+         ;; Select the window (don't resize - keep existing layout)
+         (select-window target-window)
+         ;; Force terminal to recalculate size (delay allows window layout to settle)
+         (run-with-timer 0.2 nil #'my/claude-refresh-terminal-size target-window)
+         target-window)))))
+
+(defun my/claude-set-window-width (window)
+  "Set WINDOW width to target claude width if in a horizontal split."
+  (when (and window (window-live-p window))
+    (let ((current-width (window-width window))
+          (target-width (my/claude-window-width)))
+      ;; Only resize if not spanning full frame width and width differs
+      (when (and (> (length (window-list)) 1)  ; More than one window
+                 (not (and (window-at-side-p window 'left)
+                           (window-at-side-p window 'right)))  ; Not full width
+                 (/= current-width target-width))
+        (ignore-errors
+          (window-resize window (- target-width current-width) t))))))
+
+(defun my/claude-refresh-terminal-size (window)
+  "Force terminal in WINDOW to recalculate size (supports eat and vterm)."
+  (when (and window (window-live-p window))
+    ;; Force layout recalculation
+    (redisplay t)
+    (with-selected-window window
+      (ignore-errors
         (cond
-         ;; Only 1 window exists - split it
-         ((= window-count 1)
-          (let* ((main-window (car all-windows))
-                 (new-window (split-window main-window nil split-direction)))
-            (set-window-buffer new-window buffer)
-            (select-window new-window)
-            new-window))
-
-         ;; 2+ windows exist and there's a non-claude window - use one that's not current
-         ((and (>= window-count 2) non-claude-windows)
-          (let* ((current-window (selected-window))
-                 (other-non-claude (remove current-window non-claude-windows))
-                 (target-window (or (car other-non-claude)
-                                    (car (remove current-window all-windows))
-                                    (car non-claude-windows))))
-            (set-window-buffer target-window buffer)
-            (select-window target-window)
-            target-window))
-
-         ;; 2+ windows exist, all are claude - use the opposite window from current
-         ((>= window-count 2)
-          (let* ((current-window (selected-window))
-                 (other-windows (remove current-window all-windows))
-                 (target-window (car other-windows)))
-            (set-window-buffer target-window buffer)
-            (select-window target-window)
-            target-window))
-
-         ;; Fallback - should not happen
-         (t
-          (set-window-buffer (selected-window) buffer)
-          (selected-window))))))))
+         ;; eat terminal
+         ((eq major-mode 'eat-mode)
+          (when (and (boundp 'eat-terminal) eat-terminal)
+            ;; Resize eat terminal to match window
+            (let ((inhibit-read-only t)
+                  (width (window-max-chars-per-line))
+                  (height (window-body-height)))
+              (eat-term-resize eat-terminal width height)
+              ;; Also trigger the process resize if available
+              (when-let ((process (get-buffer-process (current-buffer))))
+                (when (process-live-p process)
+                  (set-process-window-size process height width))))))
+         ;; vterm terminal
+         ((eq major-mode 'vterm-mode)
+          (puthash window (window-width window) my/vterm-window-widths)
+          (when (and (boundp 'vterm--term) vterm--term)
+            (let ((process (get-buffer-process (current-buffer))))
+              (when (and process (fboundp 'vterm--window-adjust-process-window-size))
+                (vterm--window-adjust-process-window-size process window)))
+            (vterm-reset-cursor-point))))))))
