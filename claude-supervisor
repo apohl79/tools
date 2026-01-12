@@ -264,7 +264,154 @@ function commandIsWithinProject(command, projectDir) {
 }
 
 /**
+ * Split a bash command string into individual commands (handles &&, ||, ;, |)
+ * Returns array of individual command strings
+ */
+function splitChainedCommands(commandString) {
+  const commands = [];
+  let current = '';
+  let depth = 0; // Track parentheses/subshell depth
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let i = 0;
+
+  while (i < commandString.length) {
+    const char = commandString[i];
+    const nextChar = commandString[i + 1];
+
+    // Track quote state
+    if (char === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      current += char;
+      i++;
+      continue;
+    }
+    if (char === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      current += char;
+      i++;
+      continue;
+    }
+
+    // Skip if inside quotes
+    if (inSingleQuote || inDoubleQuote) {
+      current += char;
+      i++;
+      continue;
+    }
+
+    // Track subshell depth
+    if (char === '(' || char === '{') {
+      depth++;
+      current += char;
+      i++;
+      continue;
+    }
+    if (char === ')' || char === '}') {
+      depth--;
+      current += char;
+      i++;
+      continue;
+    }
+
+    // Only split at top level
+    if (depth === 0) {
+      // Check for && or ||
+      if ((char === '&' && nextChar === '&') || (char === '|' && nextChar === '|')) {
+        if (current.trim()) commands.push(current.trim());
+        current = '';
+        i += 2;
+        continue;
+      }
+      // Check for ; or single |
+      if (char === ';' || (char === '|' && nextChar !== '|')) {
+        if (current.trim()) commands.push(current.trim());
+        current = '';
+        i++;
+        continue;
+      }
+    }
+
+    current += char;
+    i++;
+  }
+
+  if (current.trim()) commands.push(current.trim());
+  return commands;
+}
+
+/**
+ * Extract the base command from a single command string
+ * Handles environment variables, redirections, etc.
+ */
+function extractBaseCommand(singleCommand) {
+  // Remove leading env var assignments (FOO=bar cmd)
+  let cmd = singleCommand.replace(/^(\s*\w+=[^\s]*\s*)+/, '').trim();
+  // Get first word (the actual command)
+  const match = cmd.match(/^([^\s]+)/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Generate patterns for a single command (not a chain)
+ */
+function generatePatternsForSingleCommand(singleCmd, projectDir) {
+  const patterns = [];
+  const baseCmd = extractBaseCommand(singleCmd);
+  if (!baseCmd) return patterns;
+
+  const cmdParts = singleCmd.trim().split(/\s+/);
+  const firstArg = cmdParts.length > 1 ? cmdParts[1] : null;
+
+  // Network/remote commands need host-specific patterns
+  if (NETWORK_COMMANDS.includes(baseCmd)) {
+    // Try URL extraction for curl/wget
+    const url = extractUrlFromNetworkCommand(singleCmd);
+    if (url) {
+      try {
+        const urlObj = new URL(url);
+        patterns.push(`Bash:${baseCmd}:host:${urlObj.hostname}`);
+      } catch {
+        // Invalid URL - try host extraction
+      }
+    }
+    // Try host+command extraction for ssh/scp/rsync
+    const remoteInfo = extractRemoteCommandInfo(singleCmd);
+    if (remoteInfo) {
+      // Include the remote command in the pattern: ssh:host:sendnix.de:cat
+      patterns.push(`Bash:${baseCmd}:host:${remoteInfo.host}:${remoteInfo.remoteCmd}`);
+    }
+    // Don't add broad Bash:ssh or Bash:curl pattern - require host-specific approval
+  } else if (FILE_MODIFYING_COMMANDS.includes(baseCmd)) {
+    // For file-modifying commands, only learn if within project
+    if (commandIsWithinProject(singleCmd, projectDir)) {
+      patterns.push(`Bash:${baseCmd}:in-project`);
+      if (firstArg && firstArg.startsWith('-')) {
+        patterns.push(`Bash:${baseCmd}:${firstArg}:in-project`);
+      }
+    }
+    // Don't learn global patterns for file-modifying commands outside project
+  } else if (SAFE_GLOBAL_COMMANDS.includes(baseCmd)) {
+    // Safe commands can be learned globally
+    patterns.push(`Bash:${baseCmd}`);
+    if (firstArg) {
+      patterns.push(`Bash:${baseCmd}:${firstArg}`);
+    }
+  } else {
+    // Unknown commands - be conservative, scope to project
+    if (commandIsWithinProject(singleCmd, projectDir)) {
+      patterns.push(`Bash:${baseCmd}:in-project`);
+    }
+    // Also learn the specific command pattern (less broad)
+    patterns.push(`Bash:${baseCmd}`);
+  }
+
+  return patterns;
+}
+
+/**
  * Generate pattern keys for matching similar actions
+ * For chained commands, generates patterns for ALL commands in the chain
  */
 function generatePatternKeys(input) {
   const { tool_name, tool_input, cwd } = input;
@@ -273,53 +420,16 @@ function generatePatternKeys(input) {
 
   if (tool_name === 'Bash') {
     const cmd = tool_input?.command || '';
-    const cmdParts = cmd.trim().split(/\s+/);
-    if (cmdParts.length === 0) return patterns;
+    const chainedCommands = splitChainedCommands(cmd);
 
-    const baseCmd = cmdParts[0];
-    const firstArg = cmdParts.length > 1 ? cmdParts[1] : null;
+    if (chainedCommands.length === 0) return patterns;
 
-    // Network/remote commands need host-specific patterns
-    if (NETWORK_COMMANDS.includes(baseCmd)) {
-      // Try URL extraction for curl/wget
-      const url = extractUrlFromNetworkCommand(cmd);
-      if (url) {
-        try {
-          const urlObj = new URL(url);
-          patterns.push(`Bash:${baseCmd}:host:${urlObj.hostname}`);
-        } catch {
-          // Invalid URL - try host extraction
-        }
+    // Generate patterns for each command in the chain
+    for (const singleCmd of chainedCommands) {
+      const cmdPatterns = generatePatternsForSingleCommand(singleCmd, projectDir);
+      for (const p of cmdPatterns) {
+        if (!patterns.includes(p)) patterns.push(p);
       }
-      // Try host+command extraction for ssh/scp/rsync
-      const remoteInfo = extractRemoteCommandInfo(cmd);
-      if (remoteInfo) {
-        // Include the remote command in the pattern: ssh:host:sendnix.de:cat
-        patterns.push(`Bash:${baseCmd}:host:${remoteInfo.host}:${remoteInfo.remoteCmd}`);
-      }
-      // Don't add broad Bash:ssh or Bash:curl pattern - require host-specific approval
-    } else if (FILE_MODIFYING_COMMANDS.includes(baseCmd)) {
-      // For file-modifying commands, only learn if within project
-      if (commandIsWithinProject(cmd, projectDir)) {
-        patterns.push(`Bash:${baseCmd}:in-project`);
-        if (firstArg && firstArg.startsWith('-')) {
-          patterns.push(`Bash:${baseCmd}:${firstArg}:in-project`);
-        }
-      }
-      // Don't learn global patterns for file-modifying commands outside project
-    } else if (SAFE_GLOBAL_COMMANDS.includes(baseCmd)) {
-      // Safe commands can be learned globally
-      patterns.push(`Bash:${baseCmd}`);
-      if (firstArg) {
-        patterns.push(`Bash:${baseCmd}:${firstArg}`);
-      }
-    } else {
-      // Unknown commands - be conservative, scope to project
-      if (commandIsWithinProject(cmd, projectDir)) {
-        patterns.push(`Bash:${baseCmd}:in-project`);
-      }
-      // Also learn the specific command pattern (less broad)
-      patterns.push(`Bash:${baseCmd}`);
     }
   } else if (FILE_MODIFY_TOOLS.includes(tool_name) || ALWAYS_SAFE_TOOLS.includes(tool_name)) {
     const filePath = getFilePath(tool_input);
@@ -340,9 +450,15 @@ function generatePatternKeys(input) {
   }
 
   // Don't add Tool:Bash for file-modifying or network commands (too broad)
+  // For chains, check ALL commands
   if (tool_name === 'Bash') {
-    const baseCmd = (tool_input?.command || '').trim().split(/\s+/)[0];
-    if (!FILE_MODIFYING_COMMANDS.includes(baseCmd) && !NETWORK_COMMANDS.includes(baseCmd)) {
+    const cmd = tool_input?.command || '';
+    const chainedCommands = splitChainedCommands(cmd);
+    const hasRiskyCommand = chainedCommands.some(singleCmd => {
+      const baseCmd = extractBaseCommand(singleCmd);
+      return FILE_MODIFYING_COMMANDS.includes(baseCmd) || NETWORK_COMMANDS.includes(baseCmd);
+    });
+    if (!hasRiskyCommand) {
       patterns.push(`Tool:${tool_name}`);
     }
   } else {
@@ -352,8 +468,64 @@ function generatePatternKeys(input) {
   return patterns;
 }
 
+/**
+ * Check if a chained bash command is fully allowed
+ * Returns { allowed, pattern, missingPatterns }
+ * For chains: ALL commands must have at least one matching pattern
+ */
+function checkBashChainAllowed(sessionId, input) {
+  const state = loadSessionState(sessionId);
+  const { tool_input, cwd } = input;
+  const projectDir = process.env.CLAUDE_PROJECT_DIR || cwd;
+  const cmd = tool_input?.command || '';
+  const chainedCommands = splitChainedCommands(cmd);
+
+  if (chainedCommands.length === 0) {
+    return { allowed: false, missingPatterns: [] };
+  }
+
+  const matchedPatterns = [];
+  const missingCommands = [];
+
+  // Each command in the chain must have at least one allowed pattern
+  for (const singleCmd of chainedCommands) {
+    const cmdPatterns = generatePatternsForSingleCommand(singleCmd, projectDir);
+    const hasMatch = cmdPatterns.some(p => state.allowedPatterns.includes(p));
+
+    if (hasMatch) {
+      const matched = cmdPatterns.find(p => state.allowedPatterns.includes(p));
+      matchedPatterns.push(matched);
+    } else {
+      const baseCmd = extractBaseCommand(singleCmd);
+      missingCommands.push(baseCmd || singleCmd.substring(0, 30));
+    }
+  }
+
+  if (missingCommands.length === 0) {
+    return { allowed: true, pattern: matchedPatterns.join(', ') };
+  }
+
+  return { allowed: false, missingCommands };
+}
+
 function checkSessionAllowed(sessionId, input) {
   const state = loadSessionState(sessionId);
+  const { tool_name } = input;
+
+  // Special handling for Bash with chained commands
+  if (tool_name === 'Bash') {
+    const cmd = input.tool_input?.command || '';
+    const chainedCommands = splitChainedCommands(cmd);
+
+    if (chainedCommands.length > 1) {
+      // For chains, ALL commands must be allowed
+      const chainCheck = checkBashChainAllowed(sessionId, input);
+      debug('Chain check result:', chainCheck);
+      return chainCheck;
+    }
+  }
+
+  // Non-chain: original logic (any pattern match is sufficient)
   const patterns = generatePatternKeys(input);
 
   debug('Checking session patterns:', patterns);
@@ -616,14 +788,27 @@ function checkFastPathRules(input) {
   if (tool_name === 'Bash') {
     const command = tool_input?.command || '';
 
-    // Hard block: Truly dangerous patterns (phishing, device writes, fork bombs)
+    // FIRST: Check the FULL command string for dangerous patterns that span pipes/chains
+    // (e.g., "curl ... | bash" needs to match as a whole, not after splitting)
     if (matchesAnyPattern(command, DANGEROUS_BASH_PATTERNS)) {
       return { decision: 'deny', reason: `Dangerous bash pattern blocked: ${command.substring(0, 100)}` };
     }
 
-    // Soft block: Potentially risky but might be legitimate - ask user
+    // SECOND: Check the FULL command for risky patterns that span pipes/chains
     if (matchesAnyPattern(command, ASK_USER_BASH_PATTERNS)) {
       return { decision: 'ask', reason: `Potentially risky command: ${command.substring(0, 80)}` };
+    }
+
+    // THIRD: Split and check each command individually for additional patterns
+    const chainedCommands = splitChainedCommands(command);
+    for (const singleCmd of chainedCommands) {
+      // Check individual commands too (some patterns only make sense per-command)
+      if (matchesAnyPattern(singleCmd, DANGEROUS_BASH_PATTERNS)) {
+        return { decision: 'deny', reason: `Dangerous bash pattern blocked: ${singleCmd.substring(0, 100)}` };
+      }
+      if (matchesAnyPattern(singleCmd, ASK_USER_BASH_PATTERNS)) {
+        return { decision: 'ask', reason: `Potentially risky command in chain: ${singleCmd.substring(0, 80)}` };
+      }
     }
 
     // Allow only truly safe, read-only/info commands
@@ -646,8 +831,14 @@ function checkFastPathRules(input) {
       // Open apps/editors (user will see what opens)
       /^(code|open)\b/,
     ];
-    if (safeCommands.some(pattern => pattern.test(command))) {
-      return { decision: 'allow', reason: 'Safe read-only command' };
+
+    // For chains: ALL commands must be safe for auto-allow
+    const allSafe = chainedCommands.every(singleCmd =>
+      safeCommands.some(pattern => pattern.test(singleCmd))
+    );
+
+    if (allSafe) {
+      return { decision: 'allow', reason: 'Safe read-only command(s)' };
     }
 
     // Unknown command - let LLM decide or ask
