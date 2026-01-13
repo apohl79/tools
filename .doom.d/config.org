@@ -615,7 +615,7 @@ Visual indication for the active buffer by dimming inactive ones and adding a bo
 
 ** Markdown
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp :tangle no
 (use-package! valign
   :hook (markdown-mode . valign-mode))
 #+end_src

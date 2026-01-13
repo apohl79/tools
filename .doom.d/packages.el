@@ -14,7 +14,7 @@
 ;(package! elysium)
 (package! org-modern)
 (package! ob-typescript)
-(package! valign)
+;(package! valign)
 (package! pdf-tools)
 (package! simple-httpd)
 ;(package! jinx)

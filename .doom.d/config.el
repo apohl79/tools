@@ -505,9 +505,6 @@
 ;  :after org
 ;  :hook (org-mode . mixed-pitch-mode))
 
-(use-package! valign
-  :hook (markdown-mode . valign-mode))
-
 (use-package! pgmacs
   :config
   (set-face-attribute 'pgmacs-table-data nil :foreground "gray")
