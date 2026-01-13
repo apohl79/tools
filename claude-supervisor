@@ -860,7 +860,7 @@ function checkFastPathRules(input) {
   }
 
   // 6. Task/Agent tools (silent - not interesting to user)
-  if (tool_name === 'Task' || tool_name === 'TodoWrite' || tool_name === 'AskUserQuestion') {
+  if (tool_name === 'Task' || tool_name === 'TodoWrite' || tool_name === 'AskUserQuestion' || tool_name === 'Skill') {
     return { decision: 'allow', reason: 'Internal Claude operation', silent: true };
   }
 
