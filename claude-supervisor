@@ -625,6 +625,7 @@ const ASK_USER_BASH_PATTERNS = [
   /(curl|wget|http)[\s\S]*(-H|--header)/i, // curl/wget with headers (often contain API keys)
   /(curl|wget|http)[\s\S]*(api.?key|token|secret|password|auth|bearer)/i, // curl with credentials
   /(curl|wget|http)[\s\S]*-X\s*(DELETE|PUT|POST|PATCH)/i, // curl with modifying HTTP methods
+  /gh\s+api[\s\S]*(-X|--method)\s*(DELETE|PUT|POST|PATCH)/i, // gh api with write methods
 ];
 
 const ALWAYS_SAFE_TOOLS = ['Read', 'Glob', 'Grep', 'LSP', 'ListMcpResourcesTool', 'ReadMcpResourceTool'];
@@ -818,6 +819,8 @@ function checkFastPathRules(input) {
       /^(ls|pwd|echo|cat|head|tail|wc|date|whoami|hostname|uname|env|which|type|file|stat|id|groups|printenv)\b/,
       // Read-only git commands (no fetch/pull/push/checkout/commit)
       /^git\s+(status|log|diff|show|branch|remote|stash\s+list|config\s+--get)\b/,
+      // GitHub CLI read-only operations (gh api defaults to GET)
+      /^gh\s+(api|pr\s+(list|view|status|checks|diff)|issue\s+(list|view|status)|repo\s+(view|list)|run\s+(list|view)|workflow\s+(list|view))\b/,
       // Package info only (no install/run/exec)
       /^(npm|pnpm|yarn)\s+(list|ls|outdated|info|view|why)\b/,
       /^pip\s+(list|show|freeze)\b/,
@@ -910,7 +913,7 @@ or
 function callCodex(prompt) {
   try {
     debug('Calling Codex...');
-    const result = spawnSync('codex', ['exec', '-', '--json', '--skip-git-repo-check'], {
+    const result = spawnSync('codex', ['exec', '-', '--json', '--skip-git-repo-check', '-m', 'gpt-5.1-codex-mini'], {
       input: prompt,
       encoding: 'utf8',
       timeout: CODEX_TIMEOUT_MS,
