@@ -33,10 +33,10 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
     else
         status=""
     fi
-    git_info=" ⎇ ${branch}${status}"
+    git_info=" ⑃ ${branch}${status}"
 else
     git_info=""
 fi
 
 # Output: directory (blue), git branch (green), model (magenta), context usage (cyan)
-printf "\033[34m%s\033[0m\033[32m%s\033[0m\033[35m 𝌭 %s\033[0m\033[36m ⚡ %s\033[0m" "$dir" "$git_info" "$model" "$context_info"
+printf "\033[34m%s\033[0m\033[32m%s\033[0m\033[35m 𝌭 %s\033[0m\033[36m ⛁ %s\033[0m" "$dir" "$git_info" "$model" "$context_info"

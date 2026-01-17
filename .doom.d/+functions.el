@@ -16,11 +16,11 @@
 
 ;; leaving emacs without saving current buffer
 (defun my/save-and-killbuf ()
-  "save current buffer and quit"
+  "Save current buffer and kill it."
   (interactive)
-  (if (not buffer-read-only)
-      (save-buffer))
-  (kill-this-buffer))
+  (when (and (buffer-modified-p) (not buffer-read-only))
+    (save-buffer))
+  (kill-buffer (current-buffer)))
 
 ;; Walk between the windows
 (defun my/previous-window ()

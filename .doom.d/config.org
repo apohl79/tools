@@ -47,6 +47,15 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 ;; set to 1 to always group by mode. default 4
 (setq mouse-buffer-menu-mode-mult 1)
 
+;; Enable pixel scrolling
+(pixel-scroll-precision-mode 1)
+
+;; Adjust scrolling speed (optional)
+(setq pixel-scroll-precision-large-scroll-height 40.0)
+
+;; Disable momentum scrolling if you prefer (optional)
+(setq pixel-scroll-precision-use-momentum nil)
+
 ;; Do not truncate lines but wrap them into the next line
 (setq-default truncate-lines nil)
 
@@ -90,6 +99,7 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 (message "*** General / Org")
 
 (setq org-directory "~/ownCloud/org"
+      org-agenda-files (list org-directory)
       org-support-shift-select t
       org-replace-disputed-keys t
       org-startup-indented t
@@ -99,10 +109,12 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
       org-startup-with-inline-images t
       org-image-actual-width '(300))
 
-;; Unbind the C-x n prefix to allow using it for other-window
+;; Unbind keys to allow standard behavior
 (map! :after org
       :map org-mode-map
-      "C-x n" nil)
+      "C-x n" nil           ; allow other-window
+      "C-S-<up>" nil        ; allow block selection
+      "C-S-<down>" nil)
 #+end_src
 
 ** Markdown
@@ -173,6 +185,27 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 #+begin_src emacs-lisp :tangle yes
 (message "*** Key Bindings")
 
+;; Terminal: decode modified arrow escape sequences
+(unless (display-graphic-p)
+  ;; Shift+arrow (modifier 2)
+  (define-key input-decode-map "\e[1;2A" [S-up])
+  (define-key input-decode-map "\e[1;2B" [S-down])
+  (define-key input-decode-map "\e[1;2C" [S-right])
+  (define-key input-decode-map "\e[1;2D" [S-left])
+  ;; Ctrl+arrow (modifier 5)
+  (define-key input-decode-map "\e[1;5A" [C-up])
+  (define-key input-decode-map "\e[1;5B" [C-down])
+  (define-key input-decode-map "\e[1;5C" [C-right])
+  (define-key input-decode-map "\e[1;5D" [C-left])
+  ;; Ctrl+Shift+arrow (modifier 6)
+  (define-key input-decode-map "\e[1;6A" [C-S-up])
+  (define-key input-decode-map "\e[1;6B" [C-S-down])
+  (define-key input-decode-map "\e[1;6C" [C-S-right])
+  (define-key input-decode-map "\e[1;6D" [C-S-left])
+  ;; Cmd+Shift+arrow (custom modifier 10 via WezTerm)
+  (define-key input-decode-map "\e[1;10D" [s-S-left])
+  (define-key input-decode-map "\e[1;10C" [s-S-right]))
+
 (undefine-key! "C-z" "s-w" "s-+" "s--")
 (setq doom-localleader-alt-key "C-z")
 
@@ -210,6 +243,8 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
  ;; buffers and font
  "<s-wheel-down>" #'enlarge-window-horizontally
  "<s-wheel-up>" #'shrink-window-horizontally
+ "s-S-<left>" #'enlarge-window-horizontally
+ "s-S-<right>" #'shrink-window-horizontally
  "s-*" #'doom/increase-font-size
  "s-_" #'doom/decrease-font-size
 
@@ -221,17 +256,6 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 ;;         "RET" #'claude-code-ide-insert-newline
 ;;         "ESC" #'claude-code-ide-send-escape)
 
- ;; gptel/elysium
- (:leader :prefix ("C-s" . "LLM")
-          (:prefix ("e" . "elysium")
-                   "e" #'elysium-query
-                   "w" #'elysium-toggle-window
-                   "a" #'elysium-apply-code-changes
-                   "d" #'elysium-discard-all-suggested-changes)
-          "w" #'gptel
-          (:prefix ("a" . "add")
-                   "r" #'gptel-add
-                   "f" #'gptel-add-file))
  ;; lsp-bridge
  ;(:leader :prefix ("c" . "code")
  ;         :desc "LSP Code actions"      "a"   #'lsp-bridge-code-action
@@ -392,6 +416,8 @@ I'm using mu4e and org-msg coming with doom. Unfortunately org-msg needs some fi
 
 ** Theme
 
+The Emacs 31 face inheritance cycle fix is in =init.el= (must run before doom-themes loads).
+
 #+begin_src emacs-lisp :tangle yes
 (setq doom-theme 'doom-city-lights)
 #+end_src
@@ -445,12 +471,12 @@ I'm using mu4e and org-msg coming with doom. Unfortunately org-msg needs some fi
   (set-face-attribute 'nobreak-space nil :underline nil)
 )
 
-;; Apply after Doom sets fonts and on zoom
-(add-hook 'after-setting-font-hook #'my/configure-fontsets)
-(add-hook 'doom-init-ui-hook #'my/configure-fontsets)
-;; Also apply when loading vterm buffers
-(add-hook 'vterm-mode-hook #'my/configure-fontsets)
-(add-hook 'eat-mode-hook #'my/configure-fontsets)
+;; Also apply when loading vterm/eat buffers (GUI only - terminal uses its own fonts)
+(when (display-graphic-p)
+  (add-hook 'after-setting-font-hook #'my/configure-fontsets)
+  (add-hook 'doom-init-ui-hook #'my/configure-fontsets)
+  (add-hook 'vterm-mode-hook #'my/configure-fontsets)
+  (add-hook 'eat-mode-hook #'my/configure-fontsets))
 
 ;; Replace specific Claude Code Unicode symbols with ASCII in vterm/eat buffers
 ;; ⠉ ⠒ ⠤
@@ -471,8 +497,10 @@ I'm using mu4e and org-msg coming with doom. Unfortunately org-msg needs some fi
     (aset table #x273D (vector ?⠤))
     (setq buffer-display-table table)))
 
-(add-hook 'vterm-mode-hook #'my/replace-unicode-spinners)
-(add-hook 'eat-mode-hook #'my/replace-unicode-spinners)
+;; Replace spinners only in GUI mode
+(when (display-graphic-p)
+  (add-hook 'vterm-mode-hook #'my/replace-unicode-spinners)
+  (add-hook 'eat-mode-hook #'my/replace-unicode-spinners))
 
 #+end_src
 
@@ -1131,6 +1159,7 @@ Enable/disable vterm-copy-mode automatically when scrolling up/down via mouse.
         "C-x n" nil)
   ;; Enable Control-left/right for word navigation in semi-char mode
   (map! :map eat-semi-char-mode-map
+        "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
         "C-<left>" (lambda () (interactive) (eat-term-send-string eat-terminal "\e[1;5D"))
         "C-<right>" (lambda () (interactive) (eat-term-send-string eat-terminal "\e[1;5C"))))
 #+end_src
@@ -1253,7 +1282,7 @@ Setup a default connection function for pgmacs
 
 (use-package! claude-code
   ;:bind-keymap ("C-s-x" . claude-code-command-map)
-  :bind ("C-s-x" . claude-code-transient)
+  :bind ("C-M-x" . claude-code-transient)
   :config
   (defun my-claude-notify (title message)
     "Display a macOS notification."
@@ -1279,11 +1308,11 @@ Setup a default connection function for pgmacs
   ;; Focus the new claude buffer (but don't re-display it)
   (add-hook 'claude-code-start-hook
             (lambda ()
+              ;; Reduce flickering
+              (setq-local eat-minimum-latency 0.033
+                          eat-maximum-latency 0.1)
               (let ((window (get-buffer-window (current-buffer) t)))
                 (when window (select-window window)))))
-
-  (load-file "~/.config/emacs/.local/straight/repos/claude-code.el/examples/hooks/claude-code-auto-revert-hook.el")
-  (setup-claude-auto-revert :git-merge t)  ; git-merge strategy, auto-save enabled
 
   (claude-code-mode))
 #+end_src

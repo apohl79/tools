@@ -179,9 +179,8 @@ post_install_commands = [
 # Layer 3: Emacs installation
 [layer3]
 name = "Emacs Installation"
-formula = "emacs-plus@30"
+formula = "emacs-plus@31"
 options = [
-    "--with-imagemagick",
     "--with-mailutils",
     "--with-xwidgets",
 ]
@@ -189,7 +188,7 @@ options = [
 # Post-install commands to run after Emacs is installed
 post_install_commands = [
     "rm -rf /Applications/Emacs.app",
-    "osascript -e 'tell application \"Finder\" to make alias file to posix file \"{brew_prefix}/Cellar/emacs-plus@30/30.2/Emacs.app\" at posix file \"/Applications\" with properties {{name:\"Emacs.app\"}}'",
+    "osascript -e 'tell application \"Finder\" to make alias file to posix file \"{brew_prefix}/Cellar/emacs-plus@31/31.0.5/Emacs.app\" at posix file \"/Applications\" with properties {{name:\"Emacs.app\"}}'",
 ]
 
 # Spelling dictionaries to download
@@ -216,8 +215,8 @@ repo = "https://github.com/doomemacs/doomemacs"
 install_path = "{home}/.config/emacs"
 
 # Commands to run after Doom installation/sync
+# "brew services start d12frosted/emacs-plus/emacs-plus@31",
 post_install_commands = [
-    "brew services start d12frosted/emacs-plus/emacs-plus@30",
 ]
 
 # Emacs configuration symlinks (chosen during setup)

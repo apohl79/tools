@@ -29,6 +29,14 @@
 ;; Pre-load goto-addr to avoid void-variable errors
 (require 'goto-addr)
 
+;; Fix Emacs 31 face inheritance cycle in doom-themes (issue #875)
+;; Must be set up BEFORE doom-themes-base loads
+;; https://github.com/doomemacs/themes/issues/875
+(when (>= emacs-major-version 31)
+  (eval-after-load 'doom-themes-base
+    '(setf (alist-get 'gnus-group-news-low-empty doom-themes-base-faces)
+           '(:inherit 'gnus-group-mail-1-empty :weight 'normal))))
+
 (doom! :input
        ;;chinese
        ;;japanese

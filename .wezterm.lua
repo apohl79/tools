@@ -9,9 +9,20 @@ config.term = 'wezterm'
 
 --config.use_ime = false
 config.use_dead_keys = false
+
+-- Make left Option key send Meta sequences for terminal Emacs
+-- Right Option key still composes special characters (@ | [ ] { } etc.)
+config.send_composed_key_when_left_alt_is_pressed = false
+config.send_composed_key_when_right_alt_is_pressed = true
+
+-- Add fallback font for Unicode symbols (org-modern stars, etc.)
+config.font = wezterm.font_with_fallback {
+  'IosevkaTerm NFM Medium',
+  'Symbols Nerd Font',
+  'Apple Symbols',
+  'Menlo',
+}
 config.color_scheme = 'Andromeda'
---config.font = wezterm.font 'Iosevka Comfy'
-config.font = wezterm.font 'IosevkaTerm NFM Medium'
 config.font_size = 13.0
 config.window_decorations = "RESIZE"
 config.use_fancy_tab_bar = false
@@ -43,12 +54,6 @@ config.keys = {
     key = "Enter",
     mods = "SHIFT",
     action = wezterm.action { SendString="\x1b\r" }
-  },
-  -- tilde hack as it does not work w/o deadkeys enabled
-  {
-    key = "n",
-    mods = "OPT",
-    action = act { SendString = "~" },
   },
   -- remove keys I need in emacs
   {
@@ -135,15 +140,16 @@ config.keys = {
     mods = 'CMD|SHIFT',
     action = act.AdjustPaneSize { 'Down', 1 },
   },
+  -- CMD+SHIFT+left/right: send escape sequences for Emacs window resize
   {
     key = 'LeftArrow',
     mods = 'CMD|SHIFT',
-    action = act.AdjustPaneSize { 'Left', 1 },
+    action = wezterm.action.SendString("\x1b[1;10D"),
   },
   {
     key = 'RightArrow',
     mods = 'CMD|SHIFT',
-    action = act.AdjustPaneSize { 'Right', 1 },
+    action = wezterm.action.SendString("\x1b[1;10C"),
   },
   -- tab selection
   {
