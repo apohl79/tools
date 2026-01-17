@@ -33,7 +33,7 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
     else
         status=""
     fi
-    git_info=" ⑃ ${branch}${status}"
+    git_info=" ⑂ ${branch}${status}"
 else
     git_info=""
 fi
