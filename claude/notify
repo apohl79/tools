@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Claude Code notification script using terminal-notifier
+# Reads JSON from stdin and displays a notification
+
+json_input=$(cat)
+
+#echo "$json_input" > /tmp/claude-notify.json
+
+# Extract message and cwd from JSON
+message=$(echo "$json_input" | jq -r '.message // .title // "Claude Code notification"' 2>/dev/null)
+cwd=$(echo "$json_input" | jq -r '.cwd // empty' 2>/dev/null | xargs basename)
+
+# Use terminal-notifier for macOS notifications
+if [[ -n "$cwd" ]]; then
+    terminal-notifier -title "Claude Code" -subtitle ":: $cwd" -message "$message" -contentImage /Applications/Claude.app/Contents/Resources/electron.icns
+else
+    terminal-notifier -title "Claude Code" -message "$message" -contentImage /Applications/Claude.app/Contents/Resources/electron.icns
+fi

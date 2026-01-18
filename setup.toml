@@ -269,12 +269,12 @@ target = "{home}/.terminfo"
 
 [[layer5.symlinks]]
 name = "claude-statusline"
-source = "{script_dir}/claude-statusline.sh"
+source = "{script_dir}/claude/statusline.sh"
 target = "{home}/.claude/statusline.sh"
 
 [[layer5.symlinks]]
 name = "claude-settings"
-source = "{script_dir}/claude-settings.json"
+source = "{script_dir}/claude/settings.json"
 target = "{home}/.claude/settings.json"
 
 [[layer5.symlinks]]
@@ -284,10 +284,10 @@ target = "{home}/bin/claude-code-hook-wrapper"
 
 [[layer5.symlinks]]
 name = "claude-supervisor"
-source = "{script_dir}/claude-supervisor"
-target = "{home}/bin/claude-supervisor"
+source = "{script_dir}/claude/supervisor"
+target = "{home}/.claude/supervisor"
 
 [[layer5.symlinks]]
 name = "claude-notify"
-source = "{script_dir}/claude-notify"
-target = "{home}/bin/claude-notify"
+source = "{script_dir}/claude/notify"
+target = "{home}/.claude/notify"

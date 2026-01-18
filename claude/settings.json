@@ -10,7 +10,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-supervisor user-prompt-submit"
+            "command": "~/.claude/supervisor user-prompt-submit"
           }
         ]
       }
@@ -21,7 +21,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-notify"
+            "command": "~/.claude/notify"
           }
         ]
       }
@@ -29,12 +29,7 @@
     "Stop": [
       {
         "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude-code-hook-wrapper stop"
-          }
-        ]
+        "hooks": []
       }
     ],
     "PreToolUse": [
@@ -43,11 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-supervisor pre-tool-use"
-          },
-          {
-            "type": "command",
-            "command": "claude-code-hook-wrapper pre-tool-use"
+            "command": "~/.claude/supervisor pre-tool-use"
           }
         ]
       }
@@ -58,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-supervisor post-tool-use"
+            "command": "~/.claude/supervisor post-tool-use"
           }
         ]
       }
@@ -69,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "claude-supervisor permission-request"
+            "command": "~/.claude/supervisor permission-request"
           }
         ]
       }
@@ -94,5 +85,7 @@
     "workflows@claudes-kitchen": true
   },
   "alwaysThinkingEnabled": true,
-  "promptSuggestionEnabled": false
+  "promptSuggestionEnabled": false,
+  "autoUpdatesChannel": "stable",
+  "tipsEnabled": false
 }
