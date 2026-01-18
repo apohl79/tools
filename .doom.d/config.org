@@ -99,7 +99,7 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 (message "*** General / Org")
 
 (setq org-directory "~/ownCloud/org"
-      org-agenda-files (list org-directory)
+      org-agenda-files (directory-files-recursively org-directory "\\.org$")
       org-support-shift-select t
       org-replace-disputed-keys t
       org-startup-indented t
@@ -298,6 +298,7 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
  "C-<down>" #'gptel-end-of-response
  :map vterm-mode-map
  "C-c C-c" #'vterm-send-C-c
+ "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
  :map mu4e-headers-mode-map
  "." #'mu4e-view-raw-message
  "<up>" #'mu4e-headers-prev
@@ -1136,7 +1137,12 @@ Enable/disable vterm-copy-mode automatically when scrolling up/down via mouse.
   (my/vterm-configure-resize-optimization)
   ;; Add small margins to prevent wrapping issues
   (setq-default left-margin-width 1
-                right-margin-width 1))
+                right-margin-width 1)
+  ;; Override vterm--self-insert-meta for keys we need in claude-code
+  ;; S-return arrives as M-RET - send CSI u encoding for newline in Claude
+  (define-key vterm-mode-map (kbd "M-RET") (lambda () (interactive) (vterm-send-string "\e[13;2u")))
+  ;; Enable clickable URLs in vterm buffers
+  (add-hook 'vterm-mode-hook #'goto-address-mode))
 
 ;; Refresh vterm on window configuration changes
 (add-hook 'window-configuration-change-hook
@@ -1154,6 +1160,8 @@ Enable/disable vterm-copy-mode automatically when scrolling up/down via mouse.
         eat-enable-mouse t)
   ;; Enable clickable URLs in eat buffers
   (add-hook 'eat-mode-hook #'goto-address-mode)
+  ;; Disable flycheck in terminal buffers (makes no sense there)
+  (add-hook 'eat-mode-hook (lambda () (flycheck-mode -1)))
   ;; Unbind the C-x n prefix in eat-mode to allow using it for other-window
   (map! :map eat-mode-map
         "C-x n" nil)
@@ -1284,33 +1292,58 @@ Setup a default connection function for pgmacs
   ;:bind-keymap ("C-s-x" . claude-code-command-map)
   :bind ("C-M-x" . claude-code-transient)
   :config
-  (defun my-claude-notify (title message)
-    "Display a macOS notification."
-    (call-process "osascript" nil nil nil
-                  "-e" (format "display notification \"%s\" with title \"%s\""
-                               message title)))
-
   (setq ;;claude-code-program-switches '("--dangerously-skip-permissions")
-        claude-code-notification-function #'my-claude-notify
-        claude-code-confirm-kill 'nil)
+        claude-code-confirm-kill 'nil
+        claude-code-terminal-backend 'vterm  ; use vterm to avoid eat charset errors
+        claude-code-enable-notifications nil)  ; disable - vterm bell detection is broken
 
   ;; Configure claude buffer display (function defined in +functions.el)
-  (setq display-buffer-alist
-        (cons '("^\\*claude"
-                (my/claude-display-buffer)
-                (inhibit-same-window . t))
-              (assq-delete-all "^\\*claude" display-buffer-alist)))
+  ;; Use claude-code-display-window-fn directly instead of display-buffer-alist
+  ;; to avoid vterm's pop-to-buffer/bury-buffer dance interfering with window layout
+  (setq claude-code-display-window-fn
+        (lambda (buffer) (my/claude-display-buffer buffer nil)))
+
+  ;; Patch claude-code-toggle to use claude-code-display-window-fn
+  ;; (the original function bypasses it with a hardcoded display-buffer call)
+  (defun my/claude-code-toggle-advice (orig-fn)
+    "Use custom display function for claude-code-toggle."
+    (let ((claude-code-buffer (claude-code--get-or-prompt-for-buffer)))
+      (if claude-code-buffer
+          (if (get-buffer-window claude-code-buffer)
+              (delete-window (get-buffer-window claude-code-buffer))
+            (let ((window (funcall claude-code-display-window-fn claude-code-buffer)))
+              (when window
+                (set-window-parameter window 'no-delete-other-windows claude-code-no-delete-other-windows)
+                (when claude-code-toggle-auto-select
+                  (select-window window)))))
+        (claude-code--show-not-running-message))))
+  (advice-add 'claude-code-toggle :around #'my/claude-code-toggle-advice)
+
+  ;; Patch vterm buffer creation to preserve window configuration
+  ;; (the original pop-to-buffer/delete-window dance disrupts window layout)
+  (defun my/claude-code-vterm-make-advice (orig-fn backend buffer-name program &optional switches)
+    "Preserve window configuration during vterm buffer creation."
+    (if (eq backend 'vterm)
+        (let ((window-config (current-window-configuration)))
+          (prog1 (funcall orig-fn backend buffer-name program switches)
+            (set-window-configuration window-config)))
+      (funcall orig-fn backend buffer-name program switches)))
+  (advice-add 'claude-code--term-make :around #'my/claude-code-vterm-make-advice)
+
+  ;; Disable vterm bell detector - it triggers on OSC sequences causing spam
+  ;; Terminal output arrives in chunks so regex filtering doesn't work reliably
+  (advice-remove 'vterm--filter #'claude-code--vterm-bell-detector)
 
   ;; Enable IDE integration support
   (add-hook 'claude-code-process-environment-functions #'monet-start-server-function)
   (monet-mode 1)
 
+  ;; Disable IDE file mentions in @ picker (show only filesystem files)
+  (setq monet-get-open-editors-tool (lambda () nil))
+
   ;; Focus the new claude buffer (but don't re-display it)
   (add-hook 'claude-code-start-hook
             (lambda ()
-              ;; Reduce flickering
-              (setq-local eat-minimum-latency 0.033
-                          eat-maximum-latency 0.1)
               (let ((window (get-buffer-window (current-buffer) t)))
                 (when window (select-window window)))))
 

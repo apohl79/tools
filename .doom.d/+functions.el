@@ -732,71 +732,65 @@ Uses `claude-code-ide-window-width' if available, otherwise defaults to 105."
     105))
 
 (defun my/claude-display-buffer (buffer alist)
-  "Display BUFFER using regular window splits with specific width for claude buffers.
-- If 1 window exists: split to create 2 windows, show buffer in one
-- If 2+ windows exist: show buffer in a window (prefer non-claude window, or opposite window)
+  "Display BUFFER in the other (non-active) window.
+- If buffer is already displayed: use that window
+- If 1 window exists: split to create 2 windows, show buffer in the new one
+- If 2+ windows exist: show buffer in the other (non-selected) window
 Split direction is based on frame dimensions: horizontal if width > height, vertical otherwise."
+  (message "[claude-display] CALLED with buffer=%s alist=%S" buffer alist)
   ;; Check if buffer is already displayed
   (let ((existing-window (get-buffer-window buffer t)))
+    (message "[claude-display] existing-window=%s" existing-window)
     (if existing-window
         (progn
+          (message "[claude-display] Buffer already displayed, selecting existing window")
           (select-window existing-window)
           ;; Ensure width is correct for existing window
           (my/claude-set-window-width existing-window)
           existing-window)
 
       ;; Determine split direction based on frame dimensions
-      (let* ((split-direction (if (> (frame-pixel-width) (frame-pixel-height))
-                                  'right  ; Put claude buffer on the right
-                                'below))
+      (let* ((frame-w (frame-pixel-width))
+             (frame-h (frame-pixel-height))
+             (split-direction (if (> frame-w frame-h) 'right 'below))
              (all-windows (window-list))
-             (window-count (length all-windows))
-             (claude-windows nil)
-             (non-claude-windows nil))
+             (window-count (length all-windows)))
 
-        ;; Categorize windows
-        (dolist (window all-windows)
-          (if (string-match-p "^\\*claude" (buffer-name (window-buffer window)))
-              (push window claude-windows)
-            (push window non-claude-windows)))
+        (message "[claude-display] frame: %dx%d, split-direction=%s, window-count=%d"
+                 frame-w frame-h split-direction window-count)
 
         (let ((target-window
                (cond
-                ;; Only 1 window exists - split it 50/50
+                ;; Only 1 window - split 50/50
                 ((= window-count 1)
-                 (let* ((main-window (car all-windows))
+                 (message "[claude-display] CASE: 1 window, splitting 50/50")
+                 (let* ((main-window (selected-window))
                         (new-window (split-window main-window nil split-direction)))
+                   (message "[claude-display] split created new-window=%s from main=%s" new-window main-window)
                    (set-window-buffer new-window buffer)
                    new-window))
 
-                ;; 2+ windows exist and there's a non-claude window - use one that's not current
-                ((and (>= window-count 2) non-claude-windows)
-                 (let* ((current-window (selected-window))
-                        (other-non-claude (remove current-window non-claude-windows))
-                        (win (or (car other-non-claude)
-                                 (car (remove current-window all-windows))
-                                 (car non-claude-windows))))
-                   (set-window-buffer win buffer)
-                   win))
-
-                ;; 2+ windows exist, all are claude - use the opposite window from current
+                ;; 2+ windows - always use the other (non-active) window
                 ((>= window-count 2)
                  (let* ((current-window (selected-window))
                         (other-windows (remove current-window all-windows))
                         (win (car other-windows)))
+                   (message "[claude-display] CASE: 2+ windows, using other win=%s (keeping current=%s)" win current-window)
                    (set-window-buffer win buffer)
                    win))
 
                 ;; Fallback - should not happen
                 (t
+                 (message "[claude-display] CASE: FALLBACK")
                  (set-window-buffer (selected-window) buffer)
                  (selected-window)))))
 
-         ;; Select the window (don't resize - keep existing layout)
-         (select-window target-window)
-         ;; Force terminal to recalculate size (delay allows window layout to settle)
-         (run-with-timer 0.2 nil #'my/claude-refresh-terminal-size target-window)
-         target-window)))))
+          (message "[claude-display] target-window=%s, selecting it" target-window)
+          ;; Select the window (don't resize - keep existing layout)
+          (select-window target-window)
+          ;; Force terminal to recalculate size (delay allows window layout to settle)
+          (run-with-timer 0.2 nil #'my/claude-refresh-terminal-size target-window)
+          target-window)))))
 
 (defun my/claude-set-window-width (window)
   "Set WINDOW width to target claude width if in a horizontal split."

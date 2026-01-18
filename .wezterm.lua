@@ -49,6 +49,12 @@ config.colors = {
 
 local act = wezterm.action
 config.keys = {
+  -- Right Option + n for tilde (German keyboard)
+  {
+    key = 'n',
+    mods = 'OPT',
+    action = act.SendString('~'),
+  },
   -- claude shift+enter support
   {
     key = "Enter",
