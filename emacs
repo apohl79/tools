@@ -30,7 +30,7 @@ else
 fi
 if [ "$(uname)" = "Darwin" ]; then
     if [ $no_client -eq 0 ]; then
-        $bin/emacsclient -c $nw_flag "$@" || ($bin/emacs $nw_flag "$@")
+        $bin/emacsclient -c $nw_flag "$@" 2>/dev/null || ($bin/emacs $nw_flag "$@")
     else
         $bin/emacs $nw_flag "$@"
     fi
