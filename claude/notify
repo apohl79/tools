@@ -13,7 +13,7 @@ cwd=$(echo "$json_input" | jq -r '.cwd // empty' 2>/dev/null | xargs basename)
 
 # Use terminal-notifier for macOS notifications
 if [[ -n "$cwd" ]]; then
-    terminal-notifier -title "Claude Code" -subtitle ":: $cwd" -message "$message" -contentImage /Applications/Claude.app/Contents/Resources/electron.icns
+    terminal-notifier -title "Claude Code" -subtitle ":: $cwd" -message "$message" -contentImage /Applications/Claude.app/Contents/Resources/electron.icns -activate com.github.wez.wezterm
 else
-    terminal-notifier -title "Claude Code" -message "$message" -contentImage /Applications/Claude.app/Contents/Resources/electron.icns
+    terminal-notifier -title "Claude Code" -message "$message" -contentImage /Applications/Claude.app/Contents/Resources/electron.icns -activate com.github.wez.wezterm
 fi
