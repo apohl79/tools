@@ -63,6 +63,11 @@ config.keys = {
   },
   -- remove keys I need in emacs
   {
+    key = 'Enter',
+    mods = 'ALT',
+    action = act.DisableDefaultAssignment,
+  },
+  {
     key = '_',
     mods = 'CTRL|SHIFT',
     action = act.DisableDefaultAssignment,
