@@ -14,6 +14,18 @@
 ;; Restore last session automatically
 (add-hook 'doom-after-init-hook #'my/quickload-session)
 
+;; Ensure proper terminal setup for emacsclient frames
+(defun my/setup-terminal-frame (frame)
+  "Configure terminal frame for proper Unicode/icon display."
+  (with-selected-frame frame
+    (unless (display-graphic-p frame)
+      ;; Ensure UTF-8 encoding for terminal
+      (set-terminal-coding-system 'utf-8)
+      (set-keyboard-coding-system 'utf-8)
+      ;; Force redisplay to pick up terminal capabilities
+      (redraw-frame frame))))
+(add-hook 'after-make-frame-functions #'my/setup-terminal-frame)
+
 (message "*** General / General behavior")
 
 ;; Make all "yes or no" prompts show "y or n" instead
