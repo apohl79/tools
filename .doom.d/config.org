@@ -21,11 +21,19 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 ;; Restore last session automatically
 (add-hook 'doom-after-init-hook #'my/quickload-session)
 
+;; Decode xterm-style escape sequences for M-arrows (works in terminal)
+(define-key input-decode-map "\e[1;3A" [M-up])
+(define-key input-decode-map "\e[1;3B" [M-down])
+(define-key input-decode-map "\e[1;3C" [M-right])
+(define-key input-decode-map "\e[1;3D" [M-left])
+
 ;; Ensure proper terminal setup for emacsclient frames
 (defun my/setup-terminal-frame (frame)
   "Configure terminal frame for proper Unicode/icon display."
   (with-selected-frame frame
     (unless (display-graphic-p frame)
+      ;; Disable menu bar in terminal
+      (menu-bar-mode -1)
       ;; Ensure UTF-8 encoding for terminal
       (set-terminal-coding-system 'utf-8)
       (set-keyboard-coding-system 'utf-8)
@@ -137,10 +145,12 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
   (map! :map markdown-mode-map
         "C-x n" nil)
 
-  ;; Make URLs clickable with mouse and C-c RET
   (add-hook! 'markdown-mode-hook
-    #'goto-address-mode
-    #'visual-line-mode))
+             ;; Org mode tables in markdown
+             #'orgtbl-mode
+             ;; Make URLs clickable with mouse and C-c RET
+             #'goto-address-mode))
+
 #+end_src
 
 ** PDF
@@ -303,6 +313,8 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
  ;"RET" #'lsp-bridge-peek-jump
  ;"<up>" #'lsp-bridge-peek-list-prev-line
  ;"<down>" #'lsp-bridge-peek-list-next-line
+ :map python-ts-mode-map
+ "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
  :map gptel-mode-map
  "C-c RET" #'gptel-menu
  "C-<return>" #'gptel-send
@@ -620,7 +632,7 @@ Visual indication for the active buffer by dimming inactive ones and adding a bo
   :config
   (setq org-modern-star 'replace
         org-modern-label-border 0.3
-        org-modern-table-vertical 1
+        org-modern-table nil
         org-modern-replace-stars "￭￭￭￭￭"
         org-modern-todo-faces (quote (("WAIT" :inherit org-modern-todo :height 1.2 :foreground "goldenrod")
                                       ("HOLD" :inherit org-modern-todo :height 1.2 :foreground "indian red")
@@ -1154,7 +1166,50 @@ Enable/disable vterm-copy-mode automatically when scrolling up/down via mouse.
   ;; S-return arrives as M-RET - send CSI u encoding for newline in Claude
   (define-key vterm-mode-map (kbd "M-RET") (lambda () (interactive) (vterm-send-string "\e[13;2u")))
   ;; Enable clickable URLs in vterm buffers
-  (add-hook 'vterm-mode-hook #'goto-address-mode))
+  (add-hook 'vterm-mode-hook #'goto-address-mode)
+
+  ;; Mouse selection to clipboard (works in terminal emacs via pbcopy)
+  (defun my/copy-to-clipboard (text)
+    "Copy TEXT to system clipboard (works in terminal)."
+    (let ((process-connection-type nil))
+      (let ((proc (start-process "pbcopy" nil "pbcopy")))
+        (process-send-string proc text)
+        (process-send-eof proc))))
+
+  (defun my/vterm-mouse-select-to-clipboard (event)
+    "Select text in vterm and copy to clipboard."
+    (interactive "e")
+    (when (eq major-mode 'vterm-mode)
+      (let ((was-in-copy-mode vterm-copy-mode))
+        (unless was-in-copy-mode (vterm-copy-mode 1))
+        (mouse-set-region event)
+        (when (use-region-p)
+          (my/copy-to-clipboard
+           (buffer-substring-no-properties (region-beginning) (region-end)))
+          (message "Copied to clipboard"))
+        (unless was-in-copy-mode
+          (vterm-copy-mode -1)))))
+
+  (defun my/vterm-double-click-to-clipboard (event)
+    "Select word at point in vterm and copy to clipboard."
+    (interactive "e")
+    (when (eq major-mode 'vterm-mode)
+      (let ((was-in-copy-mode vterm-copy-mode))
+        (unless was-in-copy-mode (vterm-copy-mode 1))
+        (mouse-set-point event)
+        (let ((bounds (bounds-of-thing-at-point 'word)))
+          (when bounds
+            (set-mark (car bounds))
+            (goto-char (cdr bounds))
+            (my/copy-to-clipboard
+             (buffer-substring-no-properties (car bounds) (cdr bounds)))
+            (message "Copied to clipboard")))
+        (unless was-in-copy-mode
+          (vterm-copy-mode -1)))))
+
+  (define-key vterm-mode-map [down-mouse-1] nil)
+  (define-key vterm-mode-map [drag-mouse-1] #'my/vterm-mouse-select-to-clipboard)
+  (define-key vterm-mode-map [double-mouse-1] #'my/vterm-double-click-to-clipboard))
 
 ;; Refresh vterm on window configuration changes
 (add-hook 'window-configuration-change-hook
@@ -1298,13 +1353,18 @@ Setup a default connection function for pgmacs
         claude-code-ide-vterm-render-delay 0.05
         claude-code-ide-terminal-backend 'vterm
         claude-code-ide-cli-extra-flags "--dangerously-skip-permissions")
-  (claude-code-ide-emacs-tools-setup))
+  (claude-code-ide-emacs-tools-setup)
+
+  ;; Disable IDE file suggestions by overriding the handler directly
+  (with-eval-after-load 'claude-code-ide-mcp-handlers
+    (fset 'claude-code-ide-mcp-handle-get-open-editors
+          (lambda (_args) '((editors . []))))))
 
 (use-package! claude-code
   ;:bind-keymap ("C-s-x" . claude-code-command-map)
   :bind ("C-M-x" . claude-code-transient)
   :config
-  (setq ;;claude-code-program-switches '("--dangerously-skip-permissions")
+  (setq claude-code-program-switches '("--dangerously-skip-permissions")
         claude-code-confirm-kill 'nil
         claude-code-terminal-backend 'vterm  ; use vterm to avoid eat charset errors
         claude-code-enable-notifications nil)  ; disable - vterm bell detection is broken
@@ -1350,8 +1410,12 @@ Setup a default connection function for pgmacs
   (add-hook 'claude-code-process-environment-functions #'monet-start-server-function)
   (monet-mode 1)
 
-  ;; Disable IDE file mentions in @ picker (show only filesystem files)
-  (setq monet-get-open-editors-tool (lambda () nil))
+  ;; Disable IDE file resources in @ picker (no ide:// entries)
+  (setq monet-get-open-editors-tool
+        (lambda ()
+          (list `((type . "text")
+                  (text . ,(json-encode '((editors . []))))))))
+  (advice-add 'monet--get-file-resources :override (lambda (&optional _cursor) nil))
 
   ;; Focus the new claude buffer (but don't re-display it)
   (add-hook 'claude-code-start-hook

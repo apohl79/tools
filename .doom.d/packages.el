@@ -14,6 +14,9 @@
 ;(package! elysium)
 (package! org-modern)
 (package! ob-typescript)
+
+;; Disable legacy typescript-mode to avoid conflict with tree-sitter
+(package! typescript-mode :disable t)
 ;(package! valign)
 (package! pdf-tools)
 (package! simple-httpd)

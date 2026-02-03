@@ -4,17 +4,6 @@
   },
   "model": "opus",
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/supervisor user-prompt-submit"
-          }
-        ]
-      }
-    ],
     "Notification": [
       {
         "matcher": "",
@@ -26,41 +15,12 @@
         ]
       }
     ],
-    "Stop": [
+    "SessionStart": [
       {
-        "matcher": "",
-        "hooks": []
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/supervisor pre-tool-use"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/supervisor post-tool-use"
-          }
-        ]
-      }
-    ],
-    "PermissionRequest": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/supervisor permission-request"
+            "command": "node \"/Users/andreas.pohl/.claude/hooks/gsd-check-update.js\""
           }
         ]
       }
@@ -86,6 +46,5 @@
   },
   "alwaysThinkingEnabled": true,
   "promptSuggestionEnabled": false,
-  "autoUpdatesChannel": "stable",
-  "tipsEnabled": false
+  "spinnerTipsEnabled": false
 }

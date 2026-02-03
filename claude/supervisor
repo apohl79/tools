@@ -979,26 +979,22 @@ function callCodex(prompt) {
 function outputDecision(decision, reason, hookEventName, options = {}) {
   const { showMessage = true, source = '' } = options;
 
+  // Claude Code PreToolUse hooks expect this structure
   const output = {
     hookSpecificOutput: {
-      hookEventName,
+      hookEventName: hookEventName || 'PreToolUse',
       permissionDecision: decision,
-      permissionDecisionReason: reason,
+      permissionDecisionReason: reason || '',
     }
   };
 
-  // Add a system message for visibility
-  if (showMessage) {
+  // Add system message for user visibility (if supported by Claude Code)
+  if (showMessage && decision !== 'ask') {
     const sourceInfo = source ? ` [${source}]` : '';
-    if (decision === 'allow') {
-      output.systemMessage = `[Supervisor] Auto-approved${sourceInfo}: ${reason}`;
-    } else if (decision === 'ask') {
-      output.systemMessage = `[Supervisor] Asking${sourceInfo}: ${reason}`;
-    } else if (decision === 'deny') {
-      output.systemMessage = `[Supervisor] Blocked${sourceInfo}: ${reason}`;
-    }
+    output.hookSpecificOutput.additionalContext = `[Supervisor]${sourceInfo}: ${reason}`;
   }
 
+  debug('Output:', JSON.stringify(output));
   console.log(JSON.stringify(output));
 }
 
@@ -1029,8 +1025,8 @@ async function readStdin() {
       finish();
     });
 
-    // Fallback timeout - increased from 100ms to 5000ms
-    // This should only trigger if stdin never closes
+    // Fallback timeout in case stdin never closes
+    // Claude Code has a 60-second hook timeout, so this is just a safety net
     setTimeout(finish, 5000);
   });
 }
@@ -1092,12 +1088,33 @@ async function main() {
       return;
     }
 
-    // Handle permission-request: User is already being prompted, just pass through
-    // This avoids re-evaluating and potentially confusing Claude Code
+    // Handle permission-request: Try to auto-approve using the same logic as pre-tool-use
+    // Sub-agents may only trigger permission-request (not pre-tool-use), so we need to handle it
     if (hookType === 'permission-request') {
+      debug('Permission request - evaluating for auto-approval');
+
+      // Check session state for learned patterns
+      const permSessionCheck = checkSessionAllowed(sessionId, input);
+      if (permSessionCheck.allowed) {
+        debug('Permission request allowed by session learning:', permSessionCheck.pattern);
+        log('INFO', 'Permission request allowed by session learning', { pattern: permSessionCheck.pattern });
+        logDecision('allow', `Previously allowed pattern: ${permSessionCheck.pattern}`, 'session-learned', input);
+        outputDecision('allow', permSessionCheck.pattern, 'PermissionRequest');
+        return;
+      }
+
+      // Try fast-path rules
+      const permFastPath = checkFastPathRules(input);
+      if (permFastPath && permFastPath.decision === 'allow') {
+        debug('Permission request allowed by fast-path:', permFastPath.reason);
+        logDecision('allow', permFastPath.reason, 'fast-path', input);
+        outputDecision('allow', permFastPath.reason, 'PermissionRequest');
+        return;
+      }
+
+      // Not auto-allowed - pass through to show prompt
       debug('Permission request - passing through to user prompt');
       log('INFO', 'Permission request passthrough', { toolName: input.tool_name });
-      // Return nothing (no output) to let the default behavior proceed
       return;
     }
 

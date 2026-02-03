@@ -44,6 +44,7 @@ end)
 -- hs.spotify.playpause() end)
 --
 -- Parloa Okta login helper
+-- Username and password
 hs.hotkey.bind({"ctrl", "cmd"}, "P", function()
     local output, status = hs.execute("op item get 'parloa okta' --fields username,password --reveal", true)
     if status then
@@ -57,12 +58,23 @@ hs.hotkey.bind({"ctrl", "cmd"}, "P", function()
     end
 end)
 
+-- Password
 hs.hotkey.bind({"ctrl", "option", "cmd"}, "P", function()
     local output, status = hs.execute("op item get 'parloa okta' --fields username,password --reveal", true)
     if status then
         output = output:gsub("%s+$", "")
         local username, password = output:match("([^,]+),([^,]+)")
         hs.eventtap.keyStrokes(password)
+    else
+        hs.alert.show("Failed to retrieve credentials from 1Password")
+    end
+end)
+
+hs.hotkey.bind({"option", "cmd"}, "P", function()
+    local output, status = hs.execute("op item get 'parloa email' --fields username --reveal", true)
+    if status then
+        output = output:gsub("%s+$", "")
+        hs.eventtap.keyStrokes(output)
     else
         hs.alert.show("Failed to retrieve credentials from 1Password")
     end

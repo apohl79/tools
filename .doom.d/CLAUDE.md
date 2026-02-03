@@ -17,7 +17,7 @@
 
 ## Project Organization
 - **init.el**: Controls Doom modules and their load order
-- **config.el**: Personal configuration settings
+- **config.org**: Personal configuration settings in org format
 - **packages.el**: Additional package declarations
 - **+functions.el**: Custom helper functions
 - **snippets/**: Code templates for various modes
@@ -26,4 +26,4 @@
 - **Emacs Config Directory**: `~/.config/emacs`
 - **Doom Config Directory**: `/Users/andreas/tools/.doom.d`
 
-This configuration emphasizes C++ development with LSP integration and modern features like AI assistance through elysium and gptel packages.
+This configuration emphasizes AI first development using claude code.

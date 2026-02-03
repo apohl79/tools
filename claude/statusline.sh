@@ -5,19 +5,11 @@ input=$(cat)
 cwd=$(echo "$input" | jq -r ".workspace.current_dir")
 model=$(echo "$input" | jq -r ".model.display_name")
 
-# Calculate context usage with 24k overhead for system prompt + system tools
+# Calculate used percentage from remaining_percentage
 context_info=$(echo "$input" | jq -r '
-  ((.context_window.current_usage.input_tokens // 0) +
-   (.context_window.current_usage.cache_creation_input_tokens // 0) +
-   (.context_window.current_usage.cache_read_input_tokens // 0) +
-   23000) as $used_with_overhead |
-  (.context_window.context_window_size // 0) as $total |
-  if $total > 0 then
-    (($used_with_overhead / $total * 100) | floor | if . > 100 then 100 else . end) as $percent |
-    "\($percent)%"
-  else
-    "0%"
-  end
+  (.context_window.remaining_percentage // 100) as $remaining |
+  ((100 - $remaining) | floor | if . < 0 then 0 elif . > 100 then 100 else . end) as $used |
+  "\($used)%"
 ')
 
 #user=$(whoami)
@@ -33,10 +25,13 @@ if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
     else
         status=""
     fi
-    git_info="⏺ ${branch}${status}"
+    git_info="${branch}${status}"
 else
     git_info=""
 fi
 
+# Separator (dark gray)
+sep="\033[38;5;240m⏺\033[0m"
+
 # Output: directory (blue), git branch (green), model (magenta), context usage (cyan)
-printf "\033[34m%s\033[0m \033[32m%s\033[0m \033[35m⏺ %s\033[0m \033[36m⏺ %s\033[0m" "$dir" "$git_info" "$model" "$context_info"
+printf "\033[34m%s\033[0m $sep \033[32m%s\033[0m $sep \033[35m%s\033[0m $sep \033[36m%s\033[0m" "$dir" "$git_info" "$model" "$context_info"
