@@ -2,7 +2,7 @@
   "permissions": {
     "allow": []
   },
-  "model": "opus",
+  "model": "opus[1m]",
   "hooks": {
     "Notification": [
       {
@@ -17,12 +17,7 @@
     ],
     "SessionStart": [
       {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"/Users/andreas.pohl/.claude/hooks/gsd-check-update.js\""
-          }
-        ]
+        "hooks": []
       }
     ]
   },
@@ -44,7 +39,8 @@
     "typescript-services@claudes-kitchen": true,
     "workflows@claudes-kitchen": true
   },
+  "spinnerTipsEnabled": false,
   "alwaysThinkingEnabled": true,
   "promptSuggestionEnabled": false,
-  "spinnerTipsEnabled": false
+  "fastMode": true
 }

@@ -1,19 +1,27 @@
 #!/bin/bash
 # Claude Code status line script
+# Delegates model/context resolution to claude-code-proxy statusline command
 
 input=$(cat)
 cwd=$(echo "$input" | jq -r ".workspace.current_dir")
-model=$(echo "$input" | jq -r ".model.display_name")
 
-# Calculate used percentage from remaining_percentage
-context_info=$(echo "$input" | jq -r '
-  (.context_window.remaining_percentage // 100) as $remaining |
-  ((100 - $remaining) | floor | if . < 0 then 0 elif . > 100 then 100 else . end) as $used |
-  "\($used)%"
-')
+# Get model and context from proxy CLI (reads stdin JSON, queries proxy API)
+proxy_info=$(echo "$input" | claude-code-proxy statusline 2>/dev/null)
 
-#user=$(whoami)
-#host=$(hostname -s)
+if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.model' >/dev/null 2>&1; then
+    model=$(echo "$proxy_info" | jq -r '.model')
+    context_remaining=$(echo "$proxy_info" | jq -r '.context_remaining')
+    context_info="$((100 - context_remaining))%"
+else
+    # Fallback: read directly from Claude Code's input
+    model=$(echo "$input" | jq -r '.model.id // "unknown"')
+    context_info=$(echo "$input" | jq -r '
+      (.context_window.remaining_percentage // 100) as $remaining |
+      ((100 - $remaining) | floor | if . < 0 then 0 elif . > 100 then 100 else . end) as $used |
+      "\($used)%"
+    ')
+fi
+
 dir=$(basename "$cwd")
 
 # Git info
