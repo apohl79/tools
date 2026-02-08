@@ -123,7 +123,6 @@ fi
 export PATH="/Users/andreas/.codeium/windsurf/bin:$PATH"
 
 alias git-branch-local-cleanup='git fetch --prune; git branch -vv | grep ": gone]" | awk "{print \$1}" | xargs git branch -D'
-alias cc='claude update && claude "read ./CLAUDE.md carefully. make sure you follow all of the defined rules and settings for code style, comments, testing, the development process and diagnostics like using an lsp via mcp when available. use you your builtin read tool to read file instead of using an mcp."'
 
 export VCPKG_ROOT="$HOME/vcpkg"
 export GPG_TTY=$(tty)
@@ -140,6 +139,9 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
 [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
 
-[ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
+# Claude Code Proxy
+export ANTHROPIC_BASE_URL=http://localhost:9000
 
 stty -ixon 2>/dev/null
+
+[ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
