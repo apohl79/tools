@@ -122,6 +122,22 @@
   (map! :map markdown-mode-map
         "C-x n" nil)
 
+  ;; Use pandoc with GFM for proper table rendering
+  (setq markdown-command "pandoc -f gfm -t html5")
+
+  ;; GitHub light theme for preview
+  (setq markdown-css-paths
+        '("https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"))
+  (setq markdown-xhtml-header-content
+        "<style>
+          body { box-sizing: border-box; min-width: 200px; max-width: 980px;
+                 margin: 0 auto; padding: 45px; }
+          .markdown-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                           Helvetica, Arial, sans-serif; }
+        </style>")
+  (setq markdown-xhtml-body-preamble "<article class=\"markdown-body\">")
+  (setq markdown-xhtml-body-epilogue "</article>")
+
   (add-hook! 'markdown-mode-hook
              ;; Org mode tables in markdown
              #'orgtbl-mode
