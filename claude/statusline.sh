@@ -24,6 +24,9 @@ fi
 
 dir=$(basename "$cwd")
 
+# Separator (dark gray)
+sep="\033[38;5;240m⏺\033[0m"
+
 # Git info
 if git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
     branch=$(git -C "$cwd" --no-optional-locks rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -38,8 +41,9 @@ else
     git_info=""
 fi
 
-# Separator (dark gray)
-sep="\033[38;5;240m⏺\033[0m"
-
 # Output: directory (blue), git branch (green), model (magenta), context usage (cyan)
-printf "\033[34m%s\033[0m $sep \033[32m%s\033[0m $sep \033[35m%s\033[0m $sep \033[36m%s\033[0m" "$dir" "$git_info" "$model" "$context_info"
+git_part=""
+if [ -n "$git_info" ]; then
+    git_part=" $sep \033[32m${git_info}\033[0m"
+fi
+printf "\033[34m%s\033[0m%b $sep \033[35m%s\033[0m $sep \033[36m%s\033[0m" "$dir" "$git_part" "$model" "$context_info"
