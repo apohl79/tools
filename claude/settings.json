@@ -41,6 +41,7 @@
   },
   "spinnerTipsEnabled": false,
   "alwaysThinkingEnabled": true,
+  "fastMode": true,
   "promptSuggestionEnabled": false,
-  "fastMode": true
+  "autoUpdatesChannel": "latest"
 }
