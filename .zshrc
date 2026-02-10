@@ -142,6 +142,14 @@ export NVM_DIR="$HOME/.nvm"
 # Claude Code Proxy
 export ANTHROPIC_BASE_URL=http://localhost:9000
 
+# Playwright configuration
+# run: npx playwright install firefox
+PLAYWRIGHT_MCP_BROWSER=firefox
+PLAYWRIGHT_MCP_USER_DATA_DIR=my
+PLAYWRIGHT_MCP_HEADLESS=0
+PLAYWRIGHT_MCP_ISOLATED=0
+PLAYWRIGHT_MCP_SHARED_BROWSER_CONTEXT=1
+
 stty -ixon 2>/dev/null
 
 [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
