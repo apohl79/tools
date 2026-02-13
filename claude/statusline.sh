@@ -37,14 +37,14 @@ cwd=$(echo "$input" | jq -r '.workspace.current_dir')
 proxy_info=$(echo "$input" | claude-code-proxy statusline 2>/dev/null)
 
 if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.model' >/dev/null 2>&1; then
-    model=$(echo "$proxy_info" | jq -r '.model')
+    model=$(echo "$proxy_info" | jq -r '.model | sub("^claude-"; "")')
     context_remaining=$(echo "$proxy_info" | jq -r '.context_remaining')
     context_info="$((100 - context_remaining))%"
 else
     if [ "$MODEL_DISPLAY" = "display_name" ]; then
-        model=$(echo "$input" | jq -r '.model.display_name // .model.id // "unknown"')
+        model=$(echo "$input" | jq -r '(.model.display_name // .model.id // "unknown") | sub("^claude-"; "")')
     else
-        model=$(echo "$input" | jq -r '.model.id // "unknown"')
+        model=$(echo "$input" | jq -r '(.model.id // "unknown") | sub("^claude-"; "")')
     fi
     # used_percentage can be null early in a session
     context_info=$(echo "$input" | jq -r '
