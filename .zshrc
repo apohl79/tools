@@ -145,7 +145,7 @@ export ANTHROPIC_BASE_URL=http://localhost:9000
 # Playwright configuration
 # run: npx playwright install firefox
 export PLAYWRIGHT_MCP_BROWSER=firefox
-export PLAYWRIGHT_MCP_USER_DATA_DIR=my
+export PLAYWRIGHT_MCP_USER_DATA_DIR=~/.playwright-my-data
 export PLAYWRIGHT_MCP_HEADLESS=0
 export PLAYWRIGHT_MCP_ISOLATED=0
 export PLAYWRIGHT_MCP_SHARED_BROWSER_CONTEXT=1
