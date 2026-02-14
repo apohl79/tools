@@ -311,31 +311,20 @@ Otherwise call `indent-for-tab-command'."
             right-margin-width 0)
       (set-window-buffer (selected-window) loading-buffer)
 
-      ;; Insert text with display properties to center it
-      (insert "\n\n\n\n")
-
-      ;; Calculate padding to center "Loading Session..."
-      (let* ((text1 "Restoring Session")
-             (text2 "Please wait while your workspace is restored")
-             (text3 "0% ")
-             ;; text1 uses :height 1.5, so scale offset by 1.5 to account for wider characters
-             (padding1 (propertize " " 'display `(space :align-to (- center ,(round (* 1.5 (/ (length text1) 2.0)))))))
-             (padding2 (propertize " " 'display `(space :align-to (- center ,(/ (length text2) 2)))))
-             ;; text3 uses :height 1.2, so scale offset by 1.2 to account for wider characters
-             (padding3 (propertize " " 'display `(space :align-to (- center ,(round (* 1.2 (/ (length text3) 2.0))))))))
-
-        (insert padding1)
-        (insert (propertize text1 'face `(:height 1.5 :weight bold :foreground ,(doom-color 'blue))))
+      (insert "\n\n")
+      (let ((margin "  "))
+        (insert margin)
+        (insert (propertize "Restoring Session" 'face `(:height 1.5 :weight bold :foreground ,(doom-color 'blue))))
         (insert "\n\n")
 
-        (insert padding2)
-        (insert text2)
+        (insert margin)
+        (insert "Please wait while your workspace is restored")
         (insert "\n\n")
 
         ;; Insert progress line with a marker for updates
-        (insert padding3)
+        (insert margin)
         (setq-local progress-start-marker (point-marker))
-        (insert (propertize text3 'face `(:height 1.2 :foreground ,(doom-color 'green))))
+        (insert (propertize "0% " 'face `(:height 1.2 :foreground ,(doom-color 'green))))
         (setq-local progress-end-marker (point-marker)))
 
       (setq buffer-read-only t))

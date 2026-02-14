@@ -11,8 +11,11 @@
 ;; Save frame geometry and font size on exit
 (add-hook 'kill-emacs-hook #'my/save-frame-geometry)
 
-;; Restore last session automatically
-(add-hook 'doom-after-init-hook #'my/quickload-session)
+;; Restore last session automatically (skip when files were passed on command line)
+(add-hook 'doom-after-init-hook
+          (lambda ()
+            (unless (cl-some #'buffer-file-name (buffer-list))
+              (my/quickload-session))))
 
 ;; Decode xterm-style escape sequences for M-arrows (works in terminal)
 (define-key input-decode-map "\e[1;3A" [M-up])
