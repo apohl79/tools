@@ -46,7 +46,7 @@ end)
 -- Parloa Okta login helper
 -- Username and password
 hs.hotkey.bind({"ctrl", "cmd"}, "P", function()
-    local output, status = hs.execute("op item get 'parloa okta' --fields username,password --reveal", true)
+    local output, status = hs.execute("op item --account my.1password.eu get 'parloa okta' --fields username,password --reveal", true)
     if status then
         output = output:gsub("%s+$", "")
         local username, password = output:match("([^,]+),([^,]+)")
@@ -60,7 +60,7 @@ end)
 
 -- Password
 hs.hotkey.bind({"ctrl", "option", "cmd"}, "P", function()
-    local output, status = hs.execute("op item get 'parloa okta' --fields username,password --reveal", true)
+    local output, status = hs.execute("op item --account my.1password.eu get 'parloa okta' --fields username,password --reveal", true)
     if status then
         output = output:gsub("%s+$", "")
         local username, password = output:match("([^,]+),([^,]+)")
@@ -71,7 +71,7 @@ hs.hotkey.bind({"ctrl", "option", "cmd"}, "P", function()
 end)
 
 hs.hotkey.bind({"option", "cmd"}, "P", function()
-    local output, status = hs.execute("op item get 'parloa email' --fields username --reveal", true)
+    local output, status = hs.execute("op item --account my.1password.eu get 'parloa email' --fields username --reveal", true)
     if status then
         output = output:gsub("%s+$", "")
         hs.eventtap.keyStrokes(output)
