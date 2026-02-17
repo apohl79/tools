@@ -855,8 +855,8 @@ To make this work
         lsp-enable-indentation nil
         lsp-modeline-code-actions-enable t
         lsp-log-io t  ; Enable LSP communication logging
-        ;; Use xcode's clangd
-        lsp-clients-clangd-executable "/opt/homebrew/Cellar/llvm@19/19.1.7/bin/clangd"
+        ;; Use homebrews clangd
+        ;;lsp-clients-clangd-executable "/opt/homebrew/Cellar/llvm@19/19.1.7/bin/clangd"
         lsp-clients-clangd-args '("--log=error"
                                   "--background-index"
                                   "--clang-tidy"
@@ -1263,7 +1263,7 @@ Automatically hide the compilation buffer when successful. Keep it open otherwis
 
 This is based on: https://stackoverflow.com/questions/11043004/emacs-compile-buffer-auto-close
 
-#+begin_src emacs-lisp :tangle yes
+#+begin_src emacs-lisp :tangle no
 (message "*** Coding / Compilation Buffer")
 
 (add-hook 'compilation-start-hook 'my/compilation-started)

@@ -627,8 +627,8 @@
         lsp-enable-indentation nil
         lsp-modeline-code-actions-enable t
         lsp-log-io t  ; Enable LSP communication logging
-        ;; Use xcode's clangd
-        lsp-clients-clangd-executable "/opt/homebrew/Cellar/llvm@19/19.1.7/bin/clangd"
+        ;; Use homebrews clangd
+        ;;lsp-clients-clangd-executable "/opt/homebrew/Cellar/llvm@19/19.1.7/bin/clangd"
         lsp-clients-clangd-args '("--log=error"
                                   "--background-index"
                                   "--clang-tidy"
@@ -987,11 +987,6 @@
         "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
         "C-<left>" (lambda () (interactive) (eat-term-send-string eat-terminal "\e[1;5D"))
         "C-<right>" (lambda () (interactive) (eat-term-send-string eat-terminal "\e[1;5C"))))
-
-(message "*** Coding / Compilation Buffer")
-
-(add-hook 'compilation-start-hook 'my/compilation-started)
-(add-hook 'compilation-finish-functions 'my/hide-compile-buffer-if-successful)
 
 (use-package! kubernetes)
 
