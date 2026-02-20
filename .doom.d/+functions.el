@@ -669,6 +669,33 @@ This prevents unnecessary terminal reflows when only height changes."
              (get-current-persp))
     (set-persp-parameter 'persp-last-switch-time (float-time) (get-current-persp))))
 
+(defun my/workspace-switch-to-mru ()
+  "Switch to a workspace, with candidates sorted by most recently used."
+  (interactive)
+  (let* ((names (cl-remove persp-nil-name (copy-sequence persp-names-cache) :count 1))
+         (current (+workspace-current-name))
+         ;; Remove current workspace - no point switching to where we already are
+         (candidates (remove current names))
+         ;; Sort by last switch time (most recent first)
+         (sorted (sort candidates
+                       (lambda (a b)
+                         (let* ((pa (persp-get-by-name a))
+                                (pb (persp-get-by-name b))
+                                (ta (or (and pa (persp-parameter 'persp-last-switch-time pa)) 0))
+                                (tb (or (and pb (persp-parameter 'persp-last-switch-time pb)) 0)))
+                           (time-less-p tb ta)))))
+         (_ (when (null sorted) (user-error "No other workspaces to switch to")))
+         (choice (completing-read "Switch to workspace: "
+                                  (lambda (str pred action)
+                                    (if (eq action 'metadata)
+                                        '(metadata (display-sort-function . identity)
+                                                   (cycle-sort-function . identity))
+                                      (complete-with-action action sorted str pred)))
+                                  nil t)))
+    (when (and choice (not (string-empty-p choice)))
+      (+workspace-switch choice t)
+      (+workspace/display))))
+
 ;; Frame geometry persistence
 (defvar my/frame-geometry-file "~/.config/emacs/frame-geometry"
   "File to store frame geometry and font size.")

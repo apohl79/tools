@@ -17,15 +17,11 @@
             (unless (cl-some #'buffer-file-name (buffer-list))
               (my/quickload-session))))
 
-;; Decode xterm-style escape sequences for M-arrows (works in terminal)
-(define-key input-decode-map "\e[1;3A" [M-up])
-(define-key input-decode-map "\e[1;3B" [M-down])
-(define-key input-decode-map "\e[1;3C" [M-right])
-(define-key input-decode-map "\e[1;3D" [M-left])
-
-;; Ensure proper terminal setup for emacsclient frames
+;; Ensure proper terminal setup for emacsclient frames.
+;; input-decode-map is terminal-local, so escape sequences must be set up
+;; per frame in daemon mode (each client terminal gets a fresh map).
 (defun my/setup-terminal-frame (frame)
-  "Configure terminal frame for proper Unicode/icon display."
+  "Configure terminal frame for proper Unicode/icon display and key decoding."
   (with-selected-frame frame
     (unless (display-graphic-p frame)
       ;; Disable menu bar in terminal
@@ -33,6 +29,30 @@
       ;; Ensure UTF-8 encoding for terminal
       (set-terminal-coding-system 'utf-8)
       (set-keyboard-coding-system 'utf-8)
+      ;; Decode xterm-style escape sequences (terminal-local)
+      ;; M-arrows (modifier 3)
+      (define-key input-decode-map "\e[1;3A" [M-up])
+      (define-key input-decode-map "\e[1;3B" [M-down])
+      (define-key input-decode-map "\e[1;3C" [M-right])
+      (define-key input-decode-map "\e[1;3D" [M-left])
+      ;; Shift+arrow (modifier 2)
+      (define-key input-decode-map "\e[1;2A" [S-up])
+      (define-key input-decode-map "\e[1;2B" [S-down])
+      (define-key input-decode-map "\e[1;2C" [S-right])
+      (define-key input-decode-map "\e[1;2D" [S-left])
+      ;; Ctrl+arrow (modifier 5)
+      (define-key input-decode-map "\e[1;5A" [C-up])
+      (define-key input-decode-map "\e[1;5B" [C-down])
+      (define-key input-decode-map "\e[1;5C" [C-right])
+      (define-key input-decode-map "\e[1;5D" [C-left])
+      ;; Ctrl+Shift+arrow (modifier 6)
+      (define-key input-decode-map "\e[1;6A" [C-S-up])
+      (define-key input-decode-map "\e[1;6B" [C-S-down])
+      (define-key input-decode-map "\e[1;6C" [C-S-right])
+      (define-key input-decode-map "\e[1;6D" [C-S-left])
+      ;; Cmd+Shift+arrow (custom modifier 10 via WezTerm)
+      (define-key input-decode-map "\e[1;10D" [s-S-left])
+      (define-key input-decode-map "\e[1;10C" [s-S-right])
       ;; Force redisplay to pick up terminal capabilities
       (redraw-frame frame))))
 (add-hook 'after-make-frame-functions #'my/setup-terminal-frame)
@@ -77,6 +97,18 @@
 ;; File name in the mode line
 (setq doom-modeline-buffer-file-name-style 'truncate-with-project)
 
+;; C-x C-c: close current frame, or kill Emacs if it's the last one.
+;; In daemon mode all frames are client frames, so the default
+;; save-buffers-kill-terminal would never actually quit Emacs.
+(defun my/close-frame-or-kill-emacs ()
+  "Close the current frame. If it's the last visible frame, kill Emacs."
+  (interactive)
+  (if (<= (length (visible-frame-list)) 1)
+      (save-buffers-kill-emacs)
+    (delete-frame)))
+
+(global-set-key (kbd "C-x C-c") #'my/close-frame-or-kill-emacs)
+
 (message "*** General / Dashboard")
 
 ;; Add the projects widget to the dashboard (without the shortmenu)
@@ -99,6 +131,10 @@
           (lambda ()
             (display-line-numbers-mode -1)
             (setq-local display-line-numbers nil)))
+
+;; Don't create a new workspace for emacsclient frames — share the current one
+(after! persp-mode
+  (setq persp-emacsclient-init-frame-behaviour-override -1))
 
 (message "*** General / Org")
 
@@ -162,26 +198,6 @@
 
 (message "*** Key Bindings")
 
-;; Terminal: decode modified arrow escape sequences
-(unless (display-graphic-p)
-  ;; Shift+arrow (modifier 2)
-  (define-key input-decode-map "\e[1;2A" [S-up])
-  (define-key input-decode-map "\e[1;2B" [S-down])
-  (define-key input-decode-map "\e[1;2C" [S-right])
-  (define-key input-decode-map "\e[1;2D" [S-left])
-  ;; Ctrl+arrow (modifier 5)
-  (define-key input-decode-map "\e[1;5A" [C-up])
-  (define-key input-decode-map "\e[1;5B" [C-down])
-  (define-key input-decode-map "\e[1;5C" [C-right])
-  (define-key input-decode-map "\e[1;5D" [C-left])
-  ;; Ctrl+Shift+arrow (modifier 6)
-  (define-key input-decode-map "\e[1;6A" [C-S-up])
-  (define-key input-decode-map "\e[1;6B" [C-S-down])
-  (define-key input-decode-map "\e[1;6C" [C-S-right])
-  (define-key input-decode-map "\e[1;6D" [C-S-left])
-  ;; Cmd+Shift+arrow (custom modifier 10 via WezTerm)
-  (define-key input-decode-map "\e[1;10D" [s-S-left])
-  (define-key input-decode-map "\e[1;10C" [s-S-right]))
 
 (undefine-key! "C-z" "s-w" "s-+" "s--")
 (setq doom-localleader-alt-key "C-z")
@@ -289,6 +305,11 @@
  "i" #'mu4e-views-mu4e-view-as-nonblocked-html
  :map org-msg-edit-mode-map
  "C-c C-c" #'my/org-msg-ctrl-c-ctrl-c
+
+ ;; workspace switching (MRU sorted)
+ :leader
+ (:prefix ("w" . "workspaces")
+  :desc "Switch workspace (MRU)" "w" #'my/workspace-switch-to-mru)
  )
 
 (after! treemacs

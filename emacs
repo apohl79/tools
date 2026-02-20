@@ -9,31 +9,35 @@ fi
 no_client=0
 gui_mode=0
 while [ $# -gt 0 ]; do
-    case "$1" in
-        -nc)
-            no_client=1
-            shift
-            ;;
-        -gui)
-            gui_mode=1
-            shift
-            ;;
-        *)
-            break
-            ;;
-    esac
+  case "$1" in
+    -nc)
+      no_client=1
+      shift
+      ;;
+    -gui)
+      gui_mode=1
+      shift
+      ;;
+    -kill)
+      $bin/emacsclient -e '(kill-emacs)' 2>/dev/null && echo "Emacs daemon killed." || echo "No daemon running."
+      exit 0
+      ;;
+    *)
+      break
+      ;;
+  esac
 done
 if [ $gui_mode -eq 1 ]; then
-    nw_flag=""
+  nw_flag=""
 else
-    nw_flag="-nw"
+  nw_flag="-nw"
 fi
-if [ "$(uname)" = "Darwin" ]; then
-    if [ $no_client -eq 0 ]; then
-        $bin/emacsclient -c $nw_flag "$@" 2>/dev/null || ($bin/emacs $nw_flag "$@")
-    else
-        $bin/emacs $nw_flag "$@"
-    fi
+if [ $no_client -eq 1 ]; then
+  $bin/emacs $nw_flag "$@"
 else
-    $bin/emacs $nw_flag "$@"
+  # Try connecting to existing daemon, start one if needed
+  $bin/emacsclient -c $nw_flag "$@" 2>/dev/null || {
+    $bin/emacs --daemon
+    $bin/emacsclient -c $nw_flag "$@"
+  }
 fi
