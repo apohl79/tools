@@ -40,7 +40,7 @@ if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.model' >/dev/null 2>&1; 
     model=$(echo "$proxy_info" | jq -r '.model | sub("^claude-"; "")')
     context_remaining=$(echo "$proxy_info" | jq -r '.context_remaining')
     context_info="$((100 - context_remaining))%"
-    via_proxy=$(echo "$proxy_info" | jq -r '.proxy_enabled // false')
+    via_proxy=$(echo "$proxy_info" | jq -r '.proxy_active // false')
 else
     if [ "$MODEL_DISPLAY" = "display_name" ]; then
         model=$(echo "$input" | jq -r '(.model.display_name // .model.id // "unknown") | sub("^claude-"; "")')
@@ -118,7 +118,7 @@ fi
 # --- Model (magenta) + proxy/direct indicator ---
 if [ "$ENABLE_MODEL" = "1" ] && [ -n "$model" ] && [ "$model" != "unknown" ]; then
     route=""
-    [ "$via_proxy" = "true" ] && route="\033[2m\xe2\x87\x86\033[0m"  # ⇆ dim
+    [ "$via_proxy" = "true" ] && route="\033[33m\xe2\x87\x86\033[0m"  # ⇆ yellow
     parts+=("\033[35m${model}\033[0m${route}")
 fi
 
