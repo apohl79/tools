@@ -1,3 +1,4 @@
+(message "Loading configuration...")
 (message "*** General")
 
 (load! "+functions")
@@ -11,11 +12,21 @@
 ;; Save frame geometry and font size on exit
 (add-hook 'kill-emacs-hook #'my/save-frame-geometry)
 
-;; Restore last session automatically (skip when files were passed on command line)
-(add-hook 'doom-after-init-hook
-          (lambda ()
-            (unless (cl-some #'buffer-file-name (buffer-list))
-              (my/quickload-session))))
+;; Restore last session automatically (skip when files were passed on command line).
+;; Non-daemon: restore after init (frame exists for loading UI).
+;; Daemon: defer to first client frame via after-make-frame-functions,
+;; since restoring during daemon init breaks the daemon (no frame for UI).
+(if (daemonp)
+    (add-hook 'after-make-frame-functions
+              (defun my/restore-session-on-first-frame (frame)
+                (remove-hook 'after-make-frame-functions #'my/restore-session-on-first-frame)
+                (select-frame-set-input-focus frame)
+                (unless (cl-some #'buffer-file-name (buffer-list))
+                  (my/quickload-session))))
+  (add-hook 'doom-after-init-hook
+            (lambda ()
+              (unless (cl-some #'buffer-file-name (buffer-list))
+                (my/quickload-session)))))
 
 ;; Ensure proper terminal setup for emacsclient frames.
 ;; input-decode-map is terminal-local, so escape sequences must be set up
@@ -1084,8 +1095,10 @@
 
 (use-package! claude-code
   ;:bind-keymap ("C-s-x" . claude-code-command-map)
-  :bind ("C-M-x" . claude-code-transient)
   :config
+  ;; Bind C-M-x globally via global-set-key (not :bind) so mode-specific
+  ;; bindings like eval-defun in emacs-lisp-mode take precedence.
+  (global-set-key (kbd "C-M-x") #'claude-code-transient)
   (setq claude-code-program-switches '("--dangerously-skip-permissions")
         claude-code-confirm-kill 'nil
         claude-code-terminal-backend 'vterm  ; use vterm to avoid eat charset errors

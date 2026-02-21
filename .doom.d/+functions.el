@@ -297,121 +297,121 @@ Otherwise call `indent-for-tab-command'."
   "Load the last session with a delay to allow UI rendering and show progress."
   (interactive)
 
-  ;; Create a dedicated loading buffer (not the dashboard buffer)
-  (let ((loading-buffer (get-buffer-create "*session-loading*")))
-    ;; Switch to the loading buffer first
-    (switch-to-buffer loading-buffer)
+  ;; Interactive mode: full UI with loading buffer and progress
+    (let ((loading-buffer (get-buffer-create "*session-loading*")))
+      ;; Switch to the loading buffer first
+      (switch-to-buffer loading-buffer)
 
-    (with-current-buffer loading-buffer
-      (erase-buffer)
-      (setq buffer-read-only nil)
+      (with-current-buffer loading-buffer
+        (erase-buffer)
+        (setq buffer-read-only nil)
 
-      ;; Remove any margins
-      (setq left-margin-width 0
-            right-margin-width 0)
-      (set-window-buffer (selected-window) loading-buffer)
+        ;; Remove any margins
+        (setq left-margin-width 0
+              right-margin-width 0)
+        (set-window-buffer (selected-window) loading-buffer)
 
-      (insert "\n\n")
-      (let ((margin "  "))
-        (insert margin)
-        (insert (propertize "Restoring Session" 'face `(:height 1.5 :weight bold :foreground ,(doom-color 'blue))))
         (insert "\n\n")
+        (let ((margin "  "))
+          (insert margin)
+          (insert (propertize "Restoring Session" 'face `(:height 1.5 :weight bold :foreground ,(doom-color 'blue))))
+          (insert "\n\n")
 
-        (insert margin)
-        (insert "Please wait while your workspace is restored")
-        (insert "\n\n")
+          (insert margin)
+          (insert "Please wait while your workspace is restored")
+          (insert "\n\n")
 
-        ;; Insert progress line with a marker for updates
-        (insert margin)
-        (setq-local progress-start-marker (point-marker))
-        (insert (propertize "0% " 'face `(:height 1.2 :foreground ,(doom-color 'green))))
-        (setq-local progress-end-marker (point-marker)))
+          ;; Insert progress line with a marker for updates
+          (insert margin)
+          (setq-local progress-start-marker (point-marker))
+          (insert (propertize "0% " 'face `(:height 1.2 :foreground ,(doom-color 'green))))
+          (setq-local progress-end-marker (point-marker)))
 
-      (setq buffer-read-only t))
+        (setq buffer-read-only t))
 
-    (redisplay t))
+      (redisplay t))
 
-  ;; Set a timer to load the session after a delay
-  (run-with-timer 0.5 nil
-                 (lambda ()
-                   (let ((original-title frame-title-format)
-                         (buffer-count 0)
-                         (current-count 0)
-                         (last-percentage 0))
+    ;; Set a timer to load the session after a delay
+    (run-with-timer 0.5 nil
+                    (lambda ()
+                      (let ((original-title frame-title-format)
+                            (buffer-count 0)
+                            (current-count 0)
+                            (last-percentage 0))
 
-                     ;; Count def-buffer declarations in the autosave file
-                     (with-temp-buffer
-                       (insert-file-contents "~/.config/emacs/.local/etc/workspaces/autosave")
-                       (goto-char (point-min))
-                       (while (re-search-forward "(def-buffer\\b" nil t)
-                         (setq buffer-count (1+ buffer-count))))
+                        ;; Count def-buffer declarations in the autosave file
+                        (with-temp-buffer
+                          (insert-file-contents "~/.config/emacs/.local/etc/workspaces/autosave")
+                          (goto-char (point-min))
+                          (while (re-search-forward "(def-buffer\\b" nil t)
+                            (setq buffer-count (1+ buffer-count))))
 
-                     ;; Initial title update
-                     (setq frame-title-format "Restoring session...")
-                     (sit-for 0.1) ;; Allow the title to update
+                        ;; Initial title update
+                        (setq frame-title-format "Restoring session...")
+                        (sit-for 0.1)
 
-                     ;; Advise persp-mode functions if available
-                     (when (fboundp 'persp-add-buffer)
-                       (advice-add 'persp-add-buffer :after
-                                (lambda (buffer &rest _)
-                                  (setq current-count (1+ current-count))
-                                  (let* ((percentage (if (> buffer-count 0)
-                                                       (min 100 (floor (* 100 (/ (float current-count) buffer-count))))
-                                                       0))
-                                         (buffer-name (if (bufferp buffer)
-                                                         (buffer-name buffer)
-                                                         (format "%s" buffer))))
-                                    (when (> percentage last-percentage)
-                                      (setq last-percentage percentage)
-                                      (setq progress (format "Restoring session... %d%% (%d/%d) - %s"
-                                                       percentage current-count buffer-count buffer-name))
-                                      (message "%s" progress)
+                        ;; Advise persp-mode functions if available
+                        (when (fboundp 'persp-add-buffer)
+                          (advice-add 'persp-add-buffer :after
+                                      (lambda (buffer &rest _)
+                                        (setq current-count (1+ current-count))
+                                        (let* ((percentage (if (> buffer-count 0)
+                                                              (min 100 (floor (* 100 (/ (float current-count) buffer-count))))
+                                                            0))
+                                               (buffer-name (if (bufferp buffer)
+                                                                (buffer-name buffer)
+                                                              (format "%s" buffer))))
+                                          (when (> percentage last-percentage)
+                                            (setq last-percentage percentage)
+                                            (message "Restoring session... %d%% (%d/%d) - %s"
+                                                     percentage current-count buffer-count buffer-name)
 
-                                      ;; Update the loading buffer with the current percentage
-                                      (let ((loading-buf (get-buffer "*session-loading*")))
-                                        (when (and loading-buf
-                                                   (buffer-live-p loading-buf))
-                                          (with-current-buffer loading-buf
-                                            (when (and (boundp 'progress-start-marker)
-                                                       (boundp 'progress-end-marker)
-                                                       (marker-position progress-start-marker)
-                                                       (marker-position progress-end-marker))
-                                              (let ((inhibit-read-only t)
-                                                    (percent-text (format "%d%% " percentage)))
-                                                ;; Delete old percentage text
-                                                (delete-region progress-start-marker progress-end-marker)
-                                                ;; Insert new percentage
-                                                (goto-char progress-start-marker)
-                                                (insert (propertize percent-text 'face `(:height 1.2 :foreground ,(doom-color 'green))))
-                                                ;; Update end marker
-                                                (set-marker progress-end-marker (point)))
-                                              ;; Force redisplay
-                                              (redisplay t))))))))))
+                                            ;; Update the loading buffer with the current percentage
+                                            (let ((loading-buf (get-buffer "*session-loading*")))
+                                              (when (and loading-buf
+                                                         (buffer-live-p loading-buf))
+                                                (with-current-buffer loading-buf
+                                                  (when (and (boundp 'progress-start-marker)
+                                                             (boundp 'progress-end-marker)
+                                                             (marker-position progress-start-marker)
+                                                             (marker-position progress-end-marker))
+                                                    (let ((inhibit-read-only t)
+                                                          (percent-text (format "%d%% " percentage)))
+                                                      ;; Delete old percentage text
+                                                      (delete-region progress-start-marker progress-end-marker)
+                                                      ;; Insert new percentage
+                                                      (goto-char progress-start-marker)
+                                                      (insert (propertize percent-text 'face `(:height 1.2 :foreground ,(doom-color 'green))))
+                                                      ;; Update end marker
+                                                      (set-marker progress-end-marker (point)))
+                                                    ;; Keep loading buffer visible and force redisplay
+                                                    (switch-to-buffer loading-buf)
+                                                    (redisplay t))))))))))
 
-                     (unwind-protect
-                         (doom/quickload-session t)
-                       ;; Switch back to loading buffer immediately to prevent flash
-                       (when-let ((loading-buf (get-buffer "*session-loading*")))
-                         (switch-to-buffer loading-buf))
+                        (unwind-protect
+                            (doom/quickload-session t)
+                          ;; Switch back to loading buffer immediately to prevent flash
+                          (when-let ((loading-buf (get-buffer "*session-loading*")))
+                            (switch-to-buffer loading-buf))
 
-                       ;; Cleanup
-                       (when (fboundp 'persp-add-buffer)
-                         (advice-remove 'persp-add-buffer (lambda (&rest _) nil)))
+                          ;; Cleanup
+                          (when (fboundp 'persp-add-buffer)
+                            (advice-remove 'persp-add-buffer (lambda (&rest _) nil)))
 
-                       ;; Show doom dashboard after session loads
-                       (run-with-timer 0.2 nil
-                                       (lambda ()
-                                         ;; Show dashboard
-                                         (switch-to-buffer (doom-fallback-buffer))
-                                         (when (fboundp '+doom-dashboard-reload)
-                                           (+doom-dashboard-reload t))
-                                         ;; Kill the loading buffer
-                                         (when (get-buffer "*session-loading*")
-                                           (kill-buffer "*session-loading*"))))
+                          ;; Show doom dashboard after session loads
+                          (run-with-timer 0.2 nil
+                                          (lambda ()
+                                            ;; Show dashboard
+                                            (switch-to-buffer (doom-fallback-buffer))
+                                            (when (fboundp '+doom-dashboard-reload)
+                                              (+doom-dashboard-reload t))
+                                            ;; Kill the loading buffer
+                                            (when (get-buffer "*session-loading*")
+                                              (kill-buffer "*session-loading*"))))
 
-                       (setq frame-title-format original-title)
-                       ;; Ensure the final title update is visible
-                       (sit-for 0.1))))))
+                          (setq frame-title-format original-title)
+                          ;; Ensure the final title update is visible
+                          (sit-for 0.1))))))
 
 (defun my/update-treemacs-icons ()
   "Replace all image (png/svg) icons in treemacs with font based icons."
