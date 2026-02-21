@@ -128,7 +128,7 @@ export VCPKG_ROOT="$HOME/vcpkg"
 export GPG_TTY=$(tty)
 
 # commandline editing
-export VISUAL="emacs -nw"
+export VISUAL="emacs"
 autoload -U edit-command-line
 zle -N edit-command-line
 bindkey '^xe' edit-command-line
@@ -153,3 +153,5 @@ export PLAYWRIGHT_MCP_SHARED_BROWSER_CONTEXT=1
 stty -ixon 2>/dev/null
 
 [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
+
+alias claude-mem='bun "/Users/andreas.pohl/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
