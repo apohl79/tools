@@ -1,0 +1,29 @@
+#!/bin/sh
+bin=/opt/homebrew/bin
+if [ ! -x "$bin/emacs" ]; then
+  bin=/usr/local/bin
+fi
+if [ ! -x "$bin/emacs" ]; then
+  bin=/bin
+fi
+
+if [ -z "$1" ]; then
+  echo "Usage: emacs-switch-workspace <directory-path>" >&2
+  exit 1
+fi
+
+if [ -d "$1" ]; then
+  dir="$(cd "$1" && pwd)"
+elif [ -f "$1" ]; then
+  dir="$(cd "$(dirname "$1")" && pwd)"
+else
+  exit 0
+fi
+
+# Activate WezTerm and switch to the "emacs" tab
+open -a WezTerm
+tab_id=$(wezterm cli list --format json 2>/dev/null \
+  | jq -r '[.[] | select(.title == "emacs")] | first | .tab_id // empty' 2>/dev/null)
+[ -n "$tab_id" ] && wezterm cli activate-tab --tab-id "$tab_id" 2>/dev/null
+
+$bin/emacsclient -e "(my/switch-to-workspace-for-directory \"$dir\")" >/dev/null 2>&1

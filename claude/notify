@@ -1,19 +1,74 @@
 #!/bin/bash
 
-# Claude Code notification script using terminal-notifier
-# Reads JSON from stdin and displays a notification
+# Claude Code notification script using alerter (with terminal-notifier fallback)
+# Reads JSON from stdin and displays a configurable macOS notification.
+# Clicking the notification switches Emacs to the workspace for the cwd.
+
+# ============================================================
+# Configuration
+# ============================================================
+
+# Timeout in seconds. 0 = persistent (stays until dismissed).
+NOTIFICATION_TIMEOUT=0
+
+# Sound to play. Empty string = no sound. "default" for system default.
+NOTIFICATION_SOUND=""
+
+# Icon source (macOS .icns file)
+ICON_SOURCE="/Applications/Claude.app/Contents/Resources/electron.icns"
+
+# Cached PNG icon location (alerter needs PNG, not .icns)
+ICON_CACHE="$HOME/.cache/claude-notify/claude-icon.png"
+
+# Command to run when notification is clicked (receives cwd as argument)
+CLICK_COMMAND="emacs-switch-workspace"
+
+# ============================================================
+# Icon setup
+# ============================================================
+
+ensure_icon() {
+  if [ ! -f "$ICON_CACHE" ] || [ "$ICON_SOURCE" -nt "$ICON_CACHE" ]; then
+    [ -f "$ICON_SOURCE" ] || return 0
+    mkdir -p "$(dirname "$ICON_CACHE")"
+    sips -s format png "$ICON_SOURCE" --out "$ICON_CACHE" >/dev/null 2>&1 || rm -f "$ICON_CACHE"
+  fi
+}
+
+# ============================================================
+# Main
+# ============================================================
 
 json_input=$(cat)
 
-#echo "$json_input" > /tmp/claude-notify.json
+message=$(jq -r '.message // .title // "Claude Code notification"' <<< "$json_input" 2>/dev/null)
+full_cwd=$(jq -r '.cwd // empty' <<< "$json_input" 2>/dev/null)
+cwd_short=$(basename "$full_cwd" 2>/dev/null)
 
-# Extract message and cwd from JSON
-message=$(echo "$json_input" | jq -r '.message // .title // "Claude Code notification"' 2>/dev/null)
-cwd=$(echo "$json_input" | jq -r '.cwd // empty' 2>/dev/null | xargs basename)
+ensure_icon
 
-# Use terminal-notifier for macOS notifications
-if [[ -n "$cwd" ]]; then
-    terminal-notifier -title "Claude Code" -subtitle ":: $cwd" -message "$message" -contentImage /Applications/Claude.app/Contents/Resources/electron.icns -activate com.github.wez.wezterm
-else
-    terminal-notifier -title "Claude Code" -message "$message" -contentImage /Applications/Claude.app/Contents/Resources/electron.icns -activate com.github.wez.wezterm
-fi
+# Build alerter arguments
+args=(
+  --title "Claude Code"
+  --message "$message"
+  --close-label "Dismiss"
+)
+
+# Group by cwd so the same instance replaces its own notification,
+# but different instances (different cwd) stack independently.
+[ -n "$full_cwd" ] && args+=(--group "$full_cwd")
+[ -n "$cwd_short" ] && args+=(--subtitle ":: $cwd_short")
+[ -n "$NOTIFICATION_SOUND" ] && args+=(--sound "$NOTIFICATION_SOUND")
+[ "$NOTIFICATION_TIMEOUT" -gt 0 ] 2>/dev/null && args+=(--timeout "$NOTIFICATION_TIMEOUT")
+[ -f "$ICON_CACHE" ] && args+=(--app-icon "$ICON_CACHE")
+
+# Run alerter in background (it blocks until user interaction or timeout)
+(
+  result=$(alerter "${args[@]}" 2>/dev/null)
+  if [ "$result" = "@CONTENTCLICKED" ] && [ -n "$full_cwd" ]; then
+    "$CLICK_COMMAND" "$full_cwd"
+  fi
+) &
+disown
+
+exit 0

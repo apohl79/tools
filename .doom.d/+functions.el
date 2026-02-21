@@ -849,3 +849,38 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
               (when (and process (fboundp 'vterm--window-adjust-process-window-size))
                 (vterm--window-adjust-process-window-size process window)))
             (vterm-reset-cursor-point))))))))
+
+(defun my/switch-to-workspace-for-directory (dir)
+  "Switch to the workspace whose project root contains DIR.
+Workspaces are checked in MRU order (most recently used first).
+Returns the workspace name if found and switched, nil otherwise."
+  (when (and (bound-and-true-p persp-mode)
+             dir
+             (not (string-empty-p dir)))
+    (let* ((target-dir (file-name-as-directory (expand-file-name dir)))
+           (names (cl-remove persp-nil-name (copy-sequence persp-names-cache) :count 1))
+           (sorted (sort names
+                         (lambda (a b)
+                           (let* ((pa (persp-get-by-name a))
+                                  (pb (persp-get-by-name b))
+                                  (ta (or (and pa (persp-parameter 'persp-last-switch-time pa)) 0))
+                                  (tb (or (and pb (persp-parameter 'persp-last-switch-time pb)) 0)))
+                             (time-less-p tb ta))))))
+      (catch 'found
+        (dolist (ws-name sorted)
+          (let* ((persp (persp-get-by-name ws-name))
+                 (project-root
+                  (when persp
+                    (catch 'root
+                      (dolist (buf (persp-buffers persp))
+                        (when (buffer-live-p buf)
+                          (when-let ((root (ignore-errors
+                                            (with-current-buffer buf
+                                              (and (buffer-file-name)
+                                                   (projectile-project-root))))))
+                            (throw 'root (file-name-as-directory (expand-file-name root))))))))))
+            (when (and project-root
+                       (string-prefix-p project-root target-dir))
+              (+workspace-switch ws-name t)
+              (select-frame-set-input-focus (selected-frame))
+              (throw 'found ws-name))))))))
