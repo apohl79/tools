@@ -21,7 +21,7 @@ ICON_SOURCE="/Applications/Claude.app/Contents/Resources/electron.icns"
 ICON_CACHE="$HOME/.cache/claude-notify/claude-icon.png"
 
 # Command to run when notification is clicked (receives cwd as argument)
-CLICK_COMMAND="emacs-switch-workspace"
+CLICK_COMMAND="$(dirname "$(readlink -f "$0")")/../emacs-switch-workspace"
 
 # ============================================================
 # Icon setup
@@ -54,9 +54,10 @@ args=(
   --close-label "Dismiss"
 )
 
-# Group by cwd so the same instance replaces its own notification,
-# but different instances (different cwd) stack independently.
-[ -n "$full_cwd" ] && args+=(--group "$full_cwd")
+# Group by md5 hash of cwd (paths with slashes don't work as group IDs).
+# The OS replaces the old notification automatically when a new one with the
+# same group arrives — no need to kill or remove the old alerter process.
+[ -n "$full_cwd" ] && args+=(--group "$(echo "$full_cwd" | md5 -q)")
 [ -n "$cwd_short" ] && args+=(--subtitle ":: $cwd_short")
 [ -n "$NOTIFICATION_SOUND" ] && args+=(--sound "$NOTIFICATION_SOUND")
 [ "$NOTIFICATION_TIMEOUT" -gt 0 ] 2>/dev/null && args+=(--timeout "$NOTIFICATION_TIMEOUT")
