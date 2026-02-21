@@ -1,0 +1,5 @@
+#!/bin/bash
+# Get external IP address
+
+curl -s $* ifconfig.me
+echo
