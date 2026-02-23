@@ -1289,6 +1289,26 @@ Enable/disable vterm-copy-mode automatically when scrolling up/down via mouse.
 ;; Optimize vterm window resizing to avoid rerenders on height changes
 (after! vterm
   (my/vterm-configure-resize-optimization)
+
+  ;; Fix Emacs 31 unicode-string-p errors when pasting special characters.
+  ;; Emacs 31's copy_string_contents (module API) rejects strings with eight-bit
+  ;; chars (codepoints > U+10FFFF). Catch the error at the C module boundary and
+  ;; re-decode non-unicode bytes as mac-roman (macOS clipboard encoding).
+  (defun my/vterm--update-ensure-unicode (orig-fn term &rest args)
+    "Handle Emacs 31 unicode-string-p check in vterm--update."
+    (condition-case err
+        (apply orig-fn term args)
+      (wrong-type-argument
+       (if (and (eq (cadr err) 'unicode-string-p)
+                args (stringp (car args)))
+           (apply orig-fn term
+                  (decode-coding-string
+                   (encode-coding-string (car args) 'raw-text-unix)
+                   'mac-roman)
+                  (cdr args))
+         (signal (car err) (cdr err))))))
+  (advice-add 'vterm--update :around #'my/vterm--update-ensure-unicode)
+
   ;; Add small margins to prevent wrapping issues
   (setq-default left-margin-width 1
                 right-margin-width 1)
