@@ -129,6 +129,7 @@ export GPG_TTY=$(tty)
 
 # commandline editing
 export VISUAL="emacs"
+export EMACS=/opt/homebrew/bin/emacs
 autoload -U edit-command-line
 zle -N edit-command-line
 bindkey '^xe' edit-command-line
@@ -138,9 +139,6 @@ bindkey '^x^e' edit-command-line
 export NVM_DIR="$HOME/.nvm"
 [ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"  # This loads nvm
 [ -s "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm" ] && \. "/opt/homebrew/opt/nvm/etc/bash_completion.d/nvm"
-
-# Claude Code Proxy
-export ANTHROPIC_BASE_URL=http://localhost:9000
 
 # Playwright configuration
 # run: npx playwright install firefox
@@ -155,3 +153,7 @@ stty -ixon 2>/dev/null
 [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
 
 alias claude-mem='bun "/Users/andreas.pohl/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
+
+# Claude Code Proxy
+export ANTHROPIC_BASE_URL="http://localhost:9000"
+command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure 2>/dev/null
