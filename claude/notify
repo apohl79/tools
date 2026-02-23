@@ -49,7 +49,7 @@ ensure_icon
 
 # Build alerter arguments
 args=(
-  --title "Claude Code"
+  --title "Claude Code - [$(date +%H:%M)]"
   --message "$message"
   --close-label "Dismiss"
 )
