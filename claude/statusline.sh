@@ -35,6 +35,7 @@ cwd=$(echo "$input" | jq -r '.workspace.current_dir')
 
 # Get model and context from proxy CLI (reads stdin JSON, queries proxy API)
 proxy_info=$(echo "$input" | claude-code-proxy statusline 2>/dev/null)
+proxy_error=""
 
 if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.model' >/dev/null 2>&1; then
     model=$(echo "$proxy_info" | jq -r '.model | sub("^claude-"; "")')
@@ -57,6 +58,13 @@ else
         "0%"
       end
     ')
+fi
+
+# Detect proxy error: ANTHROPIC_BASE_URL is set but proxy is not running
+if [ -n "$ANTHROPIC_BASE_URL" ]; then
+    if ! claude-code-proxy status 2>/dev/null | grep -q "Running"; then
+        proxy_error=1
+    fi
 fi
 
 # Helpers
@@ -119,6 +127,7 @@ fi
 if [ "$ENABLE_MODEL" = "1" ] && [ -n "$model" ] && [ "$model" != "unknown" ]; then
     route=""
     [ "$via_proxy" = "true" ] && route="\033[33m\xe2\x87\x86\033[0m"  # ⇆ yellow
+    [ "$proxy_error" = "1" ] && route="\033[31m\xe2\x9a\xa0\033[0m"   # ⚠ red
     parts+=("\033[35m${model}\033[0m${route}")
 fi
 
