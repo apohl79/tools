@@ -696,6 +696,43 @@ This prevents unnecessary terminal reflows when only height changes."
       (+workspace-switch choice t)
       (+workspace/display))))
 
+;; Extract MRU sorting (pattern already exists in my/workspace-switch-to-mru)
+(defun my/workspace-names-mru-sorted ()
+  "Return workspace names sorted by last switch time, most recent first."
+  (when (bound-and-true-p persp-mode)
+    (let ((names (cl-remove persp-nil-name (copy-sequence persp-names-cache) :count 1)))
+      (sort names
+            (lambda (a b)
+              (let* ((pa (persp-get-by-name a))
+                     (pb (persp-get-by-name b))
+                     (ta (or (and pa (persp-parameter 'persp-last-switch-time pa)) 0))
+                     (tb (or (and pb (persp-parameter 'persp-last-switch-time pb)) 0)))
+                (time-less-p tb ta)))))))
+
+;; tab-bar format function: returns menu-item list for clickable workspace tabs
+(defun my/tab-bar-workspaces ()
+  "Format function for `tab-bar-format': renders persp-mode workspaces MRU-sorted."
+  (when (bound-and-true-p persp-mode)
+    (let ((current (+workspace-current-name))
+          (workspaces (my/workspace-names-mru-sorted)))
+      (mapcar
+       (lambda (name)
+         (let ((face (if (equal name current)
+                         'my/workspace-tab-active
+                       'my/workspace-tab-inactive)))
+           `(,(intern (concat "ws-" name))
+             menu-item
+             ,(propertize (format " %s " name) 'face face)
+             (lambda () (interactive) (+workspace-switch ,name t))
+             :help ,(format "Switch to workspace: %s" name))))
+       workspaces))))
+
+;; Refresh hook for tab-bar workspace display
+(defun my/workspace-bar-refresh (&rest _)
+  "Force tab-bar redraw after workspace state changes."
+  (when (bound-and-true-p tab-bar-mode)
+    (force-mode-line-update t)))
+
 ;; Frame geometry persistence
 (defvar my/frame-geometry-file "~/.config/emacs/frame-geometry"
   "File to store frame geometry and font size.")

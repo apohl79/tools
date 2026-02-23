@@ -160,7 +160,87 @@ Press =C-c C-v t= to update =config.el= followed by ~doom/reload~ or ~doom/resta
 
 ;; Don't create a new workspace for emacsclient frames — share the current one
 (after! persp-mode
-  (setq persp-emacsclient-init-frame-behaviour-override -1))
+  (setq persp-emacsclient-init-frame-behaviour-override -1)
+  ;; Disable persp-mode's built-in auto-save (unreliable in daemon mode)
+  (setq persp-auto-save-opt 0
+        persp-auto-save-num-of-backups 2)
+
+  ;; Our own periodic auto-save timer (every 5 minutes)
+  (run-with-timer 300 300
+    (lambda ()
+      (when (bound-and-true-p persp-mode)
+        (let ((inhibit-message t))
+          (persp-save-state-to-file)))))
+
+  ;; Save workspaces when the last client frame closes
+  (add-hook 'delete-frame-functions
+    (lambda (_frame)
+      (when (and (bound-and-true-p persp-mode)
+                 (daemonp)
+                 (<= (length (filtered-frame-list
+                              (lambda (f) (not (frame-parameter f 'parent-frame)))))
+                     2))
+        (let ((inhibit-message t))
+          (persp-save-state-to-file))))))
+#+end_src
+
+** Workspace Bar
+
+Permanently visible bar showing all workspaces MRU-sorted left to right, with the active one
+highlighted. Uses =tab-bar-mode= as a display layer for persp-mode workspaces. Works in terminal
+mode (Emacs 28+ supports =tab-bar-lines= in TTY). Clicking a workspace switches to it.
+
+Functions =my/workspace-names-mru-sorted=, =my/tab-bar-workspaces=, and =my/workspace-bar-refresh=
+are defined in =+functions.el=.
+
+#+begin_src emacs-lisp :tangle yes
+;; Workspace tab bar faces
+(defface my/workspace-tab-active
+  '((t :inherit tab-bar-tab :weight bold :box nil))
+  "Face for the active workspace in the tab bar.")
+
+(defface my/workspace-tab-inactive
+  '((t :inherit tab-bar-tab-inactive :weight normal :box nil))
+  "Face for inactive workspaces in the tab bar.")
+
+;; Theme-aware colors (`:height` is ignored in TTY, which is fine)
+(add-hook 'doom-load-theme-hook
+  (lambda ()
+    (set-face-attribute 'tab-bar nil :background (doom-darken (doom-color 'bg-alt) 0.2) :box nil :height 0.9)
+    (set-face-attribute 'my/workspace-tab-active nil
+                        :background (doom-color 'blue) :foreground (doom-color 'bg) :weight 'bold)
+    (set-face-attribute 'my/workspace-tab-inactive nil
+                        :background (doom-darken (doom-color 'bg-alt) 0.2) :foreground (doom-color 'fg-alt))))
+
+;; Workspace bar via tab-bar-mode
+(after! persp-mode
+  ;; Return a stub so Doom's tab-bar save/restore sees nothing interesting
+  (setq tab-bar-tabs-function
+        (lambda (&optional _frame)
+          (list (list 'current-tab (cons 'name (+workspace-current-name)) (cons 'explicit-name t)))))
+
+  ;; Disable native tab-bar UI elements and keybindings
+  (setq tab-bar-define-keys nil
+        tab-bar-close-button-show nil
+        tab-bar-new-button-show nil
+        tab-bar-show t
+        tab-bar-format '(my/tab-bar-workspaces))
+
+  ;; Enable tab-bar-mode first, so Doom's integration hook fires and adds its hooks
+  (tab-bar-mode 1)
+
+  ;; Now remove Doom's native tab save/restore per workspace
+  ;; (added by +workspaces-set-up-tab-bar-integration-h when tab-bar-mode starts)
+  (remove-hook 'persp-before-deactivate-functions #'+workspaces-save-tab-bar-data-h)
+  (remove-hook 'persp-activated-functions #'+workspaces-load-tab-bar-data-h)
+
+  ;; Refresh on workspace changes
+  (add-hook 'persp-activated-functions #'my/workspace-bar-refresh)
+  (add-hook 'persp-created-functions #'my/workspace-bar-refresh)
+  (add-hook 'persp-before-kill-functions
+            (lambda (&rest _)
+              (run-at-time 0 nil #'my/workspace-bar-refresh)))
+  (add-hook 'persp-renamed-functions #'my/workspace-bar-refresh))
 #+end_src
 
 ** Org
