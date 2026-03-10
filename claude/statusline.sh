@@ -1,6 +1,6 @@
 #!/bin/bash
 # Claude Code status line script
-# Delegates model/context resolution to claude-code-proxy statusline command
+# Queries proxy API via curl+jq for model/context resolution (no CLI binary needed)
 #
 # Feature flags — set via environment to override defaults (1=on, 0=off)
 # Project directory basename (blue)
@@ -29,26 +29,71 @@ ENABLE_VIM_MODE=${ENABLE_VIM_MODE:-0}
 ENABLE_AGENT=${ENABLE_AGENT:-0}
 # Model display: "id" (default) or "display_name"
 MODEL_DISPLAY=${MODEL_DISPLAY:-id}
+# Cost source: "claude" (client-side), "proxy" (server-side), or "both"
+COST_SOURCE=${COST_SOURCE:-proxy}
 
 input=$(cat)
 cwd=$(echo "$input" | jq -r '.workspace.current_dir')
 
-# Get model and context from proxy CLI (reads stdin JSON, queries proxy API)
-proxy_info=$(echo "$input" | claude-code-proxy statusline 2>/dev/null)
+# Get model and context from proxy API (direct HTTP, no CLI binary needed)
+proxy_info=""
 proxy_error=""
+via_proxy=""
+proxy_cost=""
 
-if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.model' >/dev/null 2>&1; then
-    model=$(echo "$proxy_info" | jq -r '.model | sub("^claude-"; "")')
-    context_remaining=$(echo "$proxy_info" | jq -r '.context_remaining')
-    context_info="$((100 - context_remaining))%"
-    via_proxy=$(echo "$proxy_info" | jq -r '.proxy_active // false')
+session_id=$(echo "$input" | jq -r '.session_id // empty')
+if [ -n "$session_id" ] && [ -n "$ANTHROPIC_BASE_URL" ]; then
+    proxy_info=$(curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/_proxy/sessions/$session_id" 2>/dev/null)
+fi
+
+if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.session' >/dev/null 2>&1; then
+    # Resolve model from proxy; fall back to Claude Code if proxy returns "default"
+    proxy_model=$(echo "$proxy_info" | jq -r '
+        .session |
+        if .modelOverride != null and .modelOverride != "" then
+            .modelOverride
+        elif (.fallbackState.active // false) == true and .fallbackState.currentFallbackModel != null then
+            .fallbackState.currentFallbackModel
+        else
+            .model // "default"
+        end
+    ')
+
+    if [ "$proxy_model" = "default" ]; then
+        # Passthrough mode: use Claude Code's model name (includes suffixes like [1m])
+        if [ "$MODEL_DISPLAY" = "display_name" ]; then
+            model=$(echo "$input" | jq -r '(.model.display_name // .model.id // "unknown") | sub("^claude-"; "")')
+        else
+            model=$(echo "$input" | jq -r '(.model.id // "unknown") | sub("^claude-"; "")')
+        fi
+    else
+        model=$(echo "$proxy_model" | sed 's/^claude-//')
+    fi
+
+    # Context remaining: use the model_usage entry with the highest lastInputSnapshot
+    context_info=$(echo "$proxy_info" | jq -r '
+        .session |
+        ([.modelUsage[].lastInputSnapshot // 0] | max // 0) as $fill_tokens |
+        if .contextWindowSize > 0 and $fill_tokens > 0 then
+            (($fill_tokens / .contextWindowSize * 100)
+             | round | [., 100] | min | [., 0] | max) as $fill |
+            "\($fill)%"
+        else
+            "0%"
+        end
+    ')
+
+    # Cost from the computed field
+    proxy_cost=$(echo "$proxy_info" | jq -r '.sessionCostUsd // empty')
+
+    via_proxy=true
 else
+    # Proxy not available: use Claude Code's stdin data
     if [ "$MODEL_DISPLAY" = "display_name" ]; then
         model=$(echo "$input" | jq -r '(.model.display_name // .model.id // "unknown") | sub("^claude-"; "")')
     else
         model=$(echo "$input" | jq -r '(.model.id // "unknown") | sub("^claude-"; "")')
     fi
-    # used_percentage can be null early in a session
     context_info=$(echo "$input" | jq -r '
       if .context_window.used_percentage != null then
         "\(.context_window.used_percentage)%"
@@ -60,9 +105,9 @@ else
     ')
 fi
 
-# Detect proxy error: ANTHROPIC_BASE_URL is set but proxy is not running
+# Detect proxy error: ANTHROPIC_BASE_URL is set but proxy is not responding
 if [ -n "$ANTHROPIC_BASE_URL" ]; then
-    if ! claude-code-proxy status 2>/dev/null | grep -q "Running"; then
+    if ! curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/health" >/dev/null 2>&1; then
         proxy_error=1
     fi
 fi
@@ -153,11 +198,37 @@ fi
 
 # --- Cost (yellow) ---
 if [ "$ENABLE_COST" = "1" ]; then
-    cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
-    if [ -n "$cost" ] && echo "$cost" | awk '{exit ($1 == 0)}'; then
-        cost_fmt=$(printf '$%.2f' "$cost")
-        parts+=("\033[33m${cost_fmt}\033[0m")
-    fi
+    claude_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
+    cost_text=""
+    case "$COST_SOURCE" in
+        proxy)
+            if [ -n "$proxy_cost" ] && [ "$proxy_cost" != "null" ] && echo "$proxy_cost" | awk '{exit ($1 == 0)}'; then
+                cost_text=$(printf '$%.2f' "$proxy_cost")
+            fi
+            ;;
+        both)
+            c_fmt="" p_fmt=""
+            if [ -n "$claude_cost" ] && echo "$claude_cost" | awk '{exit ($1 == 0)}'; then
+                c_fmt=$(printf '$%.2f' "$claude_cost")
+            fi
+            if [ -n "$proxy_cost" ] && [ "$proxy_cost" != "null" ] && echo "$proxy_cost" | awk '{exit ($1 == 0)}'; then
+                p_fmt=$(printf '$%.2f' "$proxy_cost")
+            fi
+            if [ -n "$c_fmt" ] && [ -n "$p_fmt" ]; then
+                cost_text="${c_fmt}/${p_fmt}"
+            elif [ -n "$c_fmt" ]; then
+                cost_text="$c_fmt"
+            elif [ -n "$p_fmt" ]; then
+                cost_text="$p_fmt"
+            fi
+            ;;
+        *)  # claude (default)
+            if [ -n "$claude_cost" ] && echo "$claude_cost" | awk '{exit ($1 == 0)}'; then
+                cost_text=$(printf '$%.2f' "$claude_cost")
+            fi
+            ;;
+    esac
+    [ -n "$cost_text" ] && parts+=("\033[33m${cost_text}\033[0m")
 fi
 
 # --- Lines changed (green +N / red -N) ---
