@@ -102,7 +102,7 @@ if [ -x /opt/homebrew/bin/brew ]; then
     export XML_CATALOG_FILES=/usr/local/etc/xml/catalog
 fi
 
-export PATH=$HOME/bin:$HOME/bin/tools/ccscript:$HOME/bin/tools:$HOME/.local/bin:$HOME/.config/emacs/bin:/usr/local/bin:/usr/local/sbin:$HOME/.claude/local:$PATH
+export PATH=$HOME/bin:$HOME/bin/tools/ccscript:$HOME/bin/tools:$HOME/.local/bin:$HOME/.config/emacs/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/local/sbin:$HOME/.claude/local:$PATH
 
 alias ll='ls -la --color=auto'
 
@@ -152,8 +152,7 @@ stty -ixon 2>/dev/null
 
 [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
 
-alias claude-mem='bun "/Users/andreas.pohl/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
-
 # Claude Code Proxy
 export ANTHROPIC_BASE_URL="http://localhost:9000"
 command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure 2>/dev/null
+. "$HOME/.cargo/env"
