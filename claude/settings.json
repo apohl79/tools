@@ -26,22 +26,39 @@
     "command": "~/.claude/statusline.sh"
   },
   "enabledPlugins": {
-    "agent-orchestrator@claudes-kitchen": true,
+    "playwright@claude-plugins-official": true,
+    "Notion@claude-plugins-official": true,
+    "skills-development@claudes-kitchen": true,
     "backend-services@claudes-kitchen": true,
+    "typescript-services@claudes-kitchen": true,
+    "python-services@claudes-kitchen": true,
+    "workflows@claudes-kitchen": true,
     "career-development@claudes-kitchen": true,
+    "agent-orchestrator@claudes-kitchen": true,
     "document-skills@claudes-kitchen": true,
     "hiring@claudes-kitchen": true,
-    "operational-excellence@claudes-kitchen": true,
-    "parloa-toolkit-services@claudes-kitchen": true,
-    "python-services@claudes-kitchen": true,
     "scrum@claudes-kitchen": true,
-    "skills-development@claudes-kitchen": true,
-    "typescript-services@claudes-kitchen": true,
-    "workflows@claudes-kitchen": true
+    "dev-flow@claudes-kitchen": true,
+    "parloa-toolkit-services@claudes-kitchen": true,
+    "security@claudes-kitchen": true,
+    "operational-excellence@claudes-kitchen": true,
+    "threat-modeling@claudes-kitchen": true,
+    "coaching-feedback@claudes-kitchen": true,
+    "gateway@claudes-kitchen": false,
+    "rust-services@claudes-kitchen": true,
+    "atlassian@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "claudes-kitchen": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/andreas.pohl/workspace/code/claudes-kitchen"
+      }
+    }
   },
   "spinnerTipsEnabled": false,
   "alwaysThinkingEnabled": true,
-  "fastMode": true,
   "promptSuggestionEnabled": false,
-  "autoUpdatesChannel": "latest"
+  "autoUpdatesChannel": "latest",
+  "skipDangerousModePermissionPrompt": true
 }
