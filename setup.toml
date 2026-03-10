@@ -286,3 +286,13 @@ target = "{home}/.claude/supervisor"
 name = "claude-notify"
 source = "{script_dir}/claude/notify"
 target = "{home}/.claude/notify"
+
+[[layer5.symlinks]]
+name = "claude-commands"
+source = "{script_dir}/claude/commands"
+target = "{home}/.claude/commands"
+
+[[layer5.symlinks]]
+name = "claude-skills"
+source = "{script_dir}/claude/skills"
+target = "{home}/.claude/skills"
