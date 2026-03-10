@@ -234,7 +234,9 @@
       :map org-mode-map
       "C-x n" nil           ; allow other-window
       "C-S-<up>" nil        ; allow block selection
-      "C-S-<down>" nil)
+      "C-S-<down>" nil
+      :localleader
+      "p" #'my/org-preview)
 
 (after! markdown-mode
   ;; Unbind the C-x n prefix to allow using it for other-window
@@ -632,6 +634,25 @@
 
   (add-hook 'org-mode-hook 'org-add-color-keywords))
 
+(defun my/org-preview ()
+  "Export current org buffer to styled HTML and open in browser."
+  (interactive)
+  (let* ((tmp-file (make-temp-file "org-preview-" nil ".html"))
+         (org-html-head
+          (concat
+           "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css\">"
+           "<style>"
+           "body { box-sizing: border-box; min-width: 200px; max-width: 980px;"
+           "       margin: 0 auto; padding: 45px; }"
+           ".markdown-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',"
+           "                 Helvetica, Arial, sans-serif; }"
+           "</style>"))
+         (org-html-head-include-default-style nil)
+         (org-html-body-preamble (lambda (_) "<article class=\"markdown-body\">"))
+         (org-html-body-epilogue (lambda (_) "</article>")))
+    (org-export-to-file 'html tmp-file nil nil nil nil nil)
+    (browse-url (concat "file://" tmp-file))))
+
 (use-package! org-modern
   :after org
   :hook ((org-mode . global-org-modern-mode)
@@ -682,6 +703,19 @@
   (setq pgmacs-row-colors '("#1D252C" "#181E24")
         pgmacs-deleted-color "#B93448")
   )
+
+(after! ibuffer
+  (setq ibuffer-formats
+        `((mark modified read-only locked
+                " " (icon 2 2 :left :elide)
+                ,(propertize " " 'display `(space :align-to 8))
+                (name 45 45 :left :elide)
+                " " (size 9 -1 :right)
+                " " (mode 16 16 :left :elide)
+                ,@(when (require 'ibuffer-vc nil t)
+                    '(" " (vc-status 12 :left)))
+                " " filename-and-process)
+          (mark " " (name 16 -1) " " filename))))
 
 (message "*** Coding / General")
 
