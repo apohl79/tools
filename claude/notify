@@ -47,6 +47,11 @@ cwd_short=$(basename "$full_cwd" 2>/dev/null)
 
 ensure_icon
 
+# Notification timeout override
+if [ "$message" = "Claude is waiting for your input" ]; then
+  NOTIFICATION_TIMEOUT=10
+fi
+
 # Build alerter arguments
 args=(
   --title "Claude Code - [$(date +%H:%M)]"
