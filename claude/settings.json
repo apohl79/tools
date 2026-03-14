@@ -19,6 +19,17 @@
       {
         "hooks": []
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/post-edit-check.sh"
+          }
+        ]
+      }
     ]
   },
   "statusLine": {
@@ -60,7 +71,7 @@
     "my-tools": {
       "source": {
         "source": "directory",
-        "path": "/Users/andreas.pohl/tools/claude/my-plugin"
+        "path": "~/tools/claude/my-plugin"
       }
     }
   },

@@ -296,3 +296,8 @@ target = "{home}/.claude/commands"
 name = "claude-skills"
 source = "{script_dir}/claude/skills"
 target = "{home}/.claude/skills"
+
+[[layer5.symlinks]]
+name = "claude-post-edit-check"
+source = "{script_dir}/claude/post-edit-check.sh"
+target = "{home}/.claude/post-edit-check.sh"
