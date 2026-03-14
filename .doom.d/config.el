@@ -634,25 +634,6 @@
 
   (add-hook 'org-mode-hook 'org-add-color-keywords))
 
-(defun my/org-preview ()
-  "Export current org buffer to styled HTML and open in browser."
-  (interactive)
-  (let* ((tmp-file (make-temp-file "org-preview-" nil ".html"))
-         (org-html-head
-          (concat
-           "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css\">"
-           "<style>"
-           "body { box-sizing: border-box; min-width: 200px; max-width: 980px;"
-           "       margin: 0 auto; padding: 45px; }"
-           ".markdown-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',"
-           "                 Helvetica, Arial, sans-serif; }"
-           "</style>"))
-         (org-html-head-include-default-style nil)
-         (org-html-body-preamble (lambda (_) "<article class=\"markdown-body\">"))
-         (org-html-body-epilogue (lambda (_) "</article>")))
-    (org-export-to-file 'html tmp-file nil nil nil nil nil)
-    (browse-url (concat "file://" tmp-file))))
-
 (use-package! org-modern
   :after org
   :hook ((org-mode . global-org-modern-mode)
