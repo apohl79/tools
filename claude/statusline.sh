@@ -41,8 +41,17 @@ proxy_error=""
 via_proxy=""
 proxy_cost=""
 
+# Check proxy health first (sets via_proxy/proxy_error before session fetch)
+if [ -n "$ANTHROPIC_BASE_URL" ]; then
+    if curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/health" >/dev/null 2>&1; then
+        via_proxy=true
+    else
+        proxy_error=1
+    fi
+fi
+
 session_id=$(echo "$input" | jq -r '.session_id // empty')
-if [ -n "$session_id" ] && [ -n "$ANTHROPIC_BASE_URL" ]; then
+if [ "$via_proxy" = "true" ] && [ -n "$session_id" ]; then
     proxy_info=$(curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/_proxy/sessions/$session_id" 2>/dev/null)
 fi
 
@@ -85,10 +94,8 @@ if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.session' >/dev/null 2>&1
 
     # Cost from the computed field
     proxy_cost=$(echo "$proxy_info" | jq -r '.sessionCostUsd // empty')
-
-    via_proxy=true
 else
-    # Proxy not available: use Claude Code's stdin data
+    # Proxy session not available yet or no proxy: use Claude Code's stdin data
     if [ "$MODEL_DISPLAY" = "display_name" ]; then
         model=$(echo "$input" | jq -r '(.model.display_name // .model.id // "unknown") | sub("^claude-"; "")')
     else
@@ -103,13 +110,6 @@ else
         "0%"
       end
     ')
-fi
-
-# Detect proxy error: ANTHROPIC_BASE_URL is set but proxy is not responding
-if [ -n "$ANTHROPIC_BASE_URL" ]; then
-    if ! curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/health" >/dev/null 2>&1; then
-        proxy_error=1
-    fi
 fi
 
 # Helpers
