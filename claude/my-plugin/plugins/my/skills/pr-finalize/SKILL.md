@@ -22,7 +22,7 @@ You are fixing bugs in PRs.
 
 ### Workflow
 
-Use `/loop 1m` to run the following check-and-fix cycle. Record the **push timestamp** and **HEAD SHA** of the PR before starting.
+Use `/loop 5m` to run the following check-and-fix cycle. Record the **push timestamp** and **HEAD SHA** of the PR before starting.
 
 #### Each iteration
 
@@ -37,13 +37,19 @@ Use `/loop 1m` to run the following check-and-fix cycle. Record the **push times
   - If you need to checkout the PR and you are on the right project, use a new worktree.
   - If the PR is on a different project, check it out to /tmp.
 
+3. **Run** all tests locally and confirm passing.
+
 3. **Push** the fixes to the PR. Update the **push timestamp** and **HEAD SHA**.
 
 4. **Reply** to the bug comments and resolve the conversations.
   - Reply to each comment individually on the thread and resolve the conversation thread before moving on.
   - If the work item came from a compliance check rather than a review thread, add a PR comment summarizing what was fixed.
 
+Do NOT skip any step. Report status of each step.
+
 #### Stop condition
+
+Before you tell me this PR is done, list: (1) all unresolved review threads, (2) CI check status for every check, (3) SonarCloud gate status. Only say 'done' if all are green.
 
 Stop the loop when **all** of the following are true:
 1. Cursor Bugbot check run `status` is `"completed"`.

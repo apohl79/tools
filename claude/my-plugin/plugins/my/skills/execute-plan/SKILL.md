@@ -133,9 +133,9 @@ After all implementation and integration testing is complete, run a code-review 
 
 3. **Launch the review sub-agent** using the Task tool with `subagent_type: "general-purpose"`.
 
-4. **Launch a codex review agent** IF the codex mcp is availble.
+4. **Launch a Codex review agent (if available):** Check your available tools for `mcp__codex__codex`. If it exists, you MUST launch a parallel Codex review by calling `mcp__codex__codex` with a prompt asking it to review the diff on the current branch for bugs, logic errors, and code quality issues. Run this IN PARALLEL with the sub-agent from step 3 — do NOT skip it just because you already have a recipe-based reviewer. The two reviewers serve different purposes (recipe compliance vs general code quality). If `mcp__codex__codex` is not in your tool list, skip this step.
 
-5. **Evaluate the review results:**
+5. **Evaluate the review results** (from BOTH the recipe reviewer AND Codex, if launched):
    - If the reviewer found **CRITICAL** or **IMPORTANT** issues:
      a. Create a `.tmp-subtask-review-fixes.md` file containing:
         - Every CRITICAL and IMPORTANT finding from the review (copy them verbatim — file paths, code snippets, issue descriptions, and fix suggestions).
@@ -151,6 +151,8 @@ After all implementation and integration testing is complete, run a code-review 
 # PHASE 6: PLAN VALIDATION LOOP (MANDATORY — DO NOT SKIP)
 
 **THIS PHASE IS MANDATORY. You MUST execute Phase 6 before proceeding to Phase 7. Skipping this phase is a BLOCKING violation — under NO circumstances may you proceed to Phase 7 without completing Phase 6 first. There are NO exceptions, regardless of time pressure, context length, or how confident you are in the implementation correctness.**
+
+**ANTI-SHORTCUT RULE: You MUST launch an actual validation sub-agent using the Agent tool. You are FORBIDDEN from performing the validation yourself — no "quick targeted validation", no "checking acceptance criteria myself", no "the changes are straightforward so I'll verify directly". The orchestrator NEVER validates. A dedicated sub-agent validates. This is non-negotiable. If you catch yourself writing validation checks instead of launching a sub-agent, STOP and launch the sub-agent.**
 
 Validate that the ENTIRE plan has been implemented correctly according to its specification. This phase can repeat up to **5 times**. Track the current iteration as `validation_attempt` (starting at 1).
 
@@ -216,7 +218,19 @@ Validate that the ENTIRE plan has been implemented correctly according to its sp
 2. Run the full build, lint, and test pipeline one final time. Fix any issues.
 3. **UNLESS --no-pr**: Commit all changes with a meaningful commit message referencing jira ticket $2.
 4. **UNLESS --no-pr**: Push the branch and create a DRAFT PR using `gh pr create --draft`. The PR title must include the jira ticket. The PR body should summarize what was implemented, organized by sub-task. If there were unresolved gaps from Phase 6, include them in a "Known Gaps" section of the PR body.
-5. **UNLESS --draft-pr**: Mark the PR ready and run the `my:pr-finalize` skill to finalize it.
+5. **UNLESS --draft-pr**: Mark the PR ready and run the `my:pr-finalize` skill to finalize it. **This step is NOT optional. If the user did not pass `--draft-pr`, you MUST invoke `my:pr-finalize`. Do NOT skip it, forget it, or rationalize that the PR is "already done". The PR is NOT done until `my:pr-finalize` has run.**
+
+   **PR FINALIZATION COMPLETION RULE (NON-NEGOTIABLE):**
+   The `my:pr-finalize` skill runs a check-and-fix loop that polls for Bugbot completion and review comments. You MUST NOT consider the PR finalized, print the execution summary, or end your work until ALL of the following are confirmed true:
+   1. The Cursor Bugbot check run `status` is `"completed"` (not `"in_progress"`, not `"queued"`).
+   2. There are ZERO unresolved review threads from the `cursor` bot posted after the most recent push.
+   3. There are ZERO failing compliance checks posted after the most recent push.
+
+   **If Bugbot is slow:** Keep polling. Use `/loop 2m` or manual checks every 2-3 minutes. Do NOT cancel the loop, do NOT rationalize stopping early, do NOT cite "polling limits" as a reason to abandon. The CLAUDE.md guidance about spacing out polls means "wait between checks" — it does NOT mean "give up after N checks." You wait as long as it takes.
+
+   **If Bugbot posts bug comments:** Fix them in the worktree, push, reply to the threads, resolve them, then re-enter the polling loop for the NEW commit's Bugbot run. Repeat until a clean Bugbot run completes with no new comments.
+
+   **The execution summary (Phase 8) MUST NOT be printed until this rule is fully satisfied.** Printing the summary is your signal that ALL work is done. If you print it while Bugbot is still running, you have violated this rule.
 
 # CRITICAL RULES
 
@@ -229,6 +243,9 @@ Validate that the ENTIRE plan has been implemented correctly according to its sp
 - If a sub-agent's work is unsatisfactory, you may re-run it with a corrected sub-task description, but do NOT take over and write the code yourself.
 - The validation loop (Phase 6) runs a MAXIMUM of 5 times. After 5 failed attempts, report to the user and let them decide.
 - **MANDATORY PHASE ORDERING: Phases MUST execute in strict order: 1 → 2 → 3 → 4 → 5 → 6 → 7. You MUST NOT skip Phase 5 (Code Review) or Phase 6 (Plan Validation). These review phases are NON-NEGOTIABLE prerequisites for Phase 7 (PR creation). Proceeding to Phase 7 without completing both Phase 5 AND Phase 6 is a critical workflow violation. No exceptions — not for time, context length, confidence level, or any other reason.**
+- **NO SELF-VALIDATION: The orchestrator MUST NOT perform validation checks itself. Phase 5 (Code Review) and Phase 6 (Plan Validation) MUST each launch a dedicated sub-agent via the Agent tool. "Doing it myself because it's faster/simpler/straightforward" is explicitly forbidden. The whole point of these phases is independent verification by a separate agent with fresh context.**
+- **NO SKIPPING PR FINALIZATION: Unless `--draft-pr` was explicitly passed, Phase 7 step 5 MUST invoke `my:pr-finalize` via the Skill tool after marking the PR ready. The PR is incomplete without finalization. Do NOT stop at "PR created" or "PR marked ready" — you MUST run the finalize skill. Forgetting this step means the PR is unfinished.**
+- **NO EARLY TERMINATION OF PR FINALIZATION: Once `my:pr-finalize` is invoked, you MUST wait for the Bugbot check to reach `status: "completed"` and all bug comments to be fixed and resolved BEFORE moving to Phase 8. You are FORBIDDEN from canceling the polling loop, printing the execution summary, or declaring the work done while Bugbot is still `in_progress`. "It's taking too long" is NOT a valid reason to stop. "Polling limits" means space out your checks — it does NOT mean give up. You poll until Bugbot completes, fix any bugs it finds, and only THEN proceed to Phase 8.**
 
 # PHASE 8: EXECUTION SUMMARY (MANDATORY — DO NOT SKIP)
 
