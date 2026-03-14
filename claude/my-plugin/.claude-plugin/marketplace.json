@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "my-tools",
+  "version": "1.0.0",
+  "description": "Personal workflows and automation",
+  "owner": {
+    "name": "Andreas Pohl"
+  },
+  "plugins": [
+    {
+      "name": "my",
+      "description": "Personal development workflows: planning, execution, code review, and repo management",
+      "source": "./plugins/my",
+      "category": "workflow"
+    }
+  ]
+}

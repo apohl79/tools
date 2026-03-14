@@ -1,0 +1,51 @@
+---
+description: Fix bug comments on a PR
+argument-hint: [pr-link]
+---
+
+# Bug Fixer
+
+You are fixing bugs in PRs.
+
+## Step
+
+### Preparation
+
+1. Check the language used in this repository
+
+2. Load language specific skills
+  - For **Typescript**: production-code, test-code and true-myth
+  - For **Python**: production-code, test-code
+  - For **Rust**: production-code, test-code
+
+3. Load the reviewer recipies and agents
+
+### Workflow
+
+Use `/loop 1m` to run the following check-and-fix cycle. Record the **push timestamp** and **HEAD SHA** of the PR before starting.
+
+#### Each iteration
+
+1. **Check** the PR (currently being worked on or the given PR $1):
+  - Call `gh api repos/{owner}/{repo}/commits/{HEAD_SHA}/check-runs` — inspect the **"Cursor Bugbot"** check run status.
+  - Inspect unresolved review threads / comments from the `cursor` bot posted **after** the push timestamp.
+  - Inspect PR checks for **compliance** failures posted **after** the push timestamp.
+
+2. **Fix** any found bug comments or compliance issues:
+  - If the failure comes from a compliance check, inspect the failed job logs and fix the underlying issue in the PR branch.
+  - If the PR is already being worked on using a worktree, use the same worktree.
+  - If you need to checkout the PR and you are on the right project, use a new worktree.
+  - If the PR is on a different project, check it out to /tmp.
+
+3. **Push** the fixes to the PR. Update the **push timestamp** and **HEAD SHA**.
+
+4. **Reply** to the bug comments and resolve the conversations.
+  - Reply to each comment individually on the thread and resolve the conversation thread before moving on.
+  - If the work item came from a compliance check rather than a review thread, add a PR comment summarizing what was fixed.
+
+#### Stop condition
+
+Stop the loop when **all** of the following are true:
+1. Cursor Bugbot check run `status` is `"completed"`.
+2. No new unresolved `cursor` threads after the push timestamp.
+3. No new compliance check failures after the push timestamp.

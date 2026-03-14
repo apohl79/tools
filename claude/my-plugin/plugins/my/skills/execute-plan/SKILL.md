@@ -1,6 +1,6 @@
 ---
 description: Execute a development plan by orchestrating focused sub-agents for each task
-argument-hint: [plan-document] [jira-ticket] [--no-worktree] [--no-pr]
+argument-hint: [plan-document] [jira-ticket] [--no-worktree] [--no-pr] [--draft-pr]
 allowed-tools: AskUserQuestion, Read, Write, Edit, Glob, Grep, Bash(code:*), Bash(cursor:*), Bash(git *), Bash(gh *), Bash(npm *), Bash(npx *), Bash(pnpm *), Bash(yarn *), Bash(bun *), Bash(pip *), Bash(poetry *), Bash(python *), Bash(node *), Bash(rm *), Bash(mkdir *), Bash(ls *), Bash(cat *), Bash(open:*), Task, Skill, mcp__atlassian__*
 ---
 
@@ -20,13 +20,14 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
 
 1. Read the plan document fully and understand all tasks, their dependencies, and their order.
 2. Update the repo (`git pull`) before starting.
-3. **UNLESS --no-worktree**: Create a git worktree for this work using the `workflows:worktree-recipe` skill. Use jira ticket $2 for the branch name. If no jira ticket was provided, use the AskUserQuestion tool to ask the user for one. Create the worktree in the repo directory under `.claude/worktrees/[title_without_spaces]-[jira_ticket_if_available]`.
+3. **UNLESS --no-worktree**: Create a git worktree for this work using the `workflows:worktree-recipe` skill. Use jira ticket $2 for the branch name. If no jira ticket was provided, use the AskUserQuestion tool to ask the user for one. Create the worktree in the repo directory under `.claude/worktrees/[repo_name]-[short_title_without_spaces]-[jira_ticket_if_available]`.
 4. If the codebase is in Python, TypeScript or Rust: note which recipe skills (production-code, test-code, true-myth) sub-agents should load — you will instruct them to do so.
 
 # PHASE 2: TASK DECOMPOSITION
 
 Break the plan into discrete, ordered sub-tasks. For each sub-task, produce a DETAILED sub-task description that includes:
 
+- **Granularity** - A sub-task should not take more than 5min to execute.
 - **All implementation details for THIS task only** — copy every relevant detail, code snippet, file path, interface definition, type, constant, config value, and acceptance criterion from the plan that pertains to this task. Do NOT summarize or abbreviate — the sub-agent will have NO access to the original plan.
 - **Dependency context** — for tasks that depend on earlier tasks, include a summary of what the earlier tasks produced (e.g. "Task 1 created `src/utils/parser.ts` exporting `parseInput(raw: string): ParsedInput`"). Include relevant type signatures, file paths, and export names so the sub-agent can import/use them without guessing.
 - **What is OUT OF SCOPE** — explicitly state that the sub-agent must NOT work on any other task and must NOT explore the plan document.
@@ -35,7 +36,7 @@ Break the plan into discrete, ordered sub-tasks. For each sub-task, produce a DE
 
 After producing the sub-task list, organize tasks into **execution waves** based on their dependency graph:
 
-- **Wave 1**: all sub-tasks with NO dependencies (can run in parallel).
+- **Wave 1**: all sub-tasks with NO dependencies - eg. tasks from different tracks (can run in parallel).
 - **Wave 2**: sub-tasks that depend ONLY on Wave 1 tasks (can run in parallel once Wave 1 completes).
 - **Wave N**: sub-tasks that depend ONLY on tasks from earlier waves.
 
@@ -132,7 +133,9 @@ After all implementation and integration testing is complete, run a code-review 
 
 3. **Launch the review sub-agent** using the Task tool with `subagent_type: "general-purpose"`.
 
-4. **Evaluate the review results:**
+4. **Launch a codex review agent** IF the codex mcp is availble.
+
+5. **Evaluate the review results:**
    - If the reviewer found **CRITICAL** or **IMPORTANT** issues:
      a. Create a `.tmp-subtask-review-fixes.md` file containing:
         - Every CRITICAL and IMPORTANT finding from the review (copy them verbatim — file paths, code snippets, issue descriptions, and fix suggestions).
@@ -143,7 +146,7 @@ After all implementation and integration testing is complete, run a code-review 
      d. Delete `.tmp-subtask-review-fixes.md`.
    - If the reviewer found only **MINOR** issues or no issues, proceed without fixes.
 
-5. **Delete `.tmp-subtask-code-review.md`.**
+6. **Delete `.tmp-subtask-code-review.md`.**
 
 # PHASE 6: PLAN VALIDATION LOOP (MANDATORY — DO NOT SKIP)
 
@@ -213,6 +216,7 @@ Validate that the ENTIRE plan has been implemented correctly according to its sp
 2. Run the full build, lint, and test pipeline one final time. Fix any issues.
 3. **UNLESS --no-pr**: Commit all changes with a meaningful commit message referencing jira ticket $2.
 4. **UNLESS --no-pr**: Push the branch and create a DRAFT PR using `gh pr create --draft`. The PR title must include the jira ticket. The PR body should summarize what was implemented, organized by sub-task. If there were unresolved gaps from Phase 6, include them in a "Known Gaps" section of the PR body.
+5. **UNLESS --draft-pr**: Mark the PR ready and run the `my:pr-finalize` skill to finalize it.
 
 # CRITICAL RULES
 

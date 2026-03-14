@@ -25,8 +25,8 @@ Every commit message MUST follow:
 
 | Element | Rule | Examples |
 |---------|------|----------|
-| **type** | One of: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `ci`, `chore` | `fix`, `feat` |
-| **scope** | Ticket number or `CCP-0` for untracked work. Always required. | `CCP-123`, `CCP-0` |
+| **type** | One of: `feat`, `fix`, `chore` | `fix`, `feat` |
+| **scope** | Ticket number or `VC-0` for untracked work. Always required. | `CPL-123`, `VC-0` |
 | **description** | Lowercase, imperative, no period at end | `add retry logic for auth failures` |
 
 ### PR Title

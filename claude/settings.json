@@ -46,13 +46,21 @@
     "coaching-feedback@claudes-kitchen": true,
     "gateway@claudes-kitchen": false,
     "rust-services@claudes-kitchen": true,
-    "atlassian@claude-plugins-official": true
+    "atlassian@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "my@my-tools": true
   },
   "extraKnownMarketplaces": {
     "claudes-kitchen": {
       "source": {
         "source": "directory",
-        "path": "/Users/andreas.pohl/workspace/code/claudes-kitchen"
+        "path": "~/workspace/code/claudes-kitchen"
+      }
+    },
+    "my-tools": {
+      "source": {
+        "source": "directory",
+        "path": "/Users/andreas.pohl/tools/claude/my-plugin"
       }
     }
   },
