@@ -176,6 +176,11 @@ pip_packages = [
     "websockets",
 ]
 
+# Claude Code CLI (installed via official curl script)
+[layer2.claude_code]
+install_url = "https://claude.ai/install.sh"
+marketplace_path = "{script_dir}/claude/my-plugin"
+
 # Post-install commands to run after packages are installed
 post_install_commands = [
 ]

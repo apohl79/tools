@@ -410,6 +410,37 @@ def install_npm_packages(packages, check_only=False):
         print(f"all {len(packages)} packages already installed")
 
 
+def install_claude_code(claude_code_config, script_dir, check_only=False):
+    """install Claude Code CLI via official installer and configure marketplace."""
+    if not claude_code_config:
+        return
+
+    install_url = claude_code_config.get('install_url', 'https://claude.ai/install.sh')
+
+    if command_exists("claude"):
+        print("✓ claude code already installed")
+    elif check_only:
+        print(f"would install claude code via {install_url}")
+    else:
+        progress.start_task("claude code")
+        run_command(f'curl -fsSL {install_url} | bash')
+        progress.complete_task()
+
+    # Add marketplace if configured and claude is available
+    marketplace_path = claude_code_config.get('marketplace_path')
+    if marketplace_path and command_exists("claude"):
+        marketplace_path = marketplace_path.format(script_dir=script_dir)
+        # Check if marketplace is already added by listing current marketplaces
+        result = subprocess.run(['claude', 'plugin', 'marketplace', 'list'],
+                                capture_output=True, text=True)
+        if result.returncode == 0 and marketplace_path in result.stdout:
+            print(f"✓ marketplace already configured")
+        elif check_only:
+            print(f"would add marketplace from {marketplace_path}")
+        else:
+            run_command(f'claude plugin marketplace add {marketplace_path}')
+
+
 def install_pip_packages(packages, check_only=False):
     """install missing pip packages."""
     if not packages:
@@ -638,7 +669,7 @@ def layer1_sudo(config, script_dir, home, check_only=False):
             print("\nNo sudo configurations to remove")
 
 
-def layer2_base_packages(config, home, check_only=False):
+def layer2_base_packages(config, script_dir, home, check_only=False):
     """Layer 2: Install all base system packages."""
     layer_name = config['layer2'].get('name', 'Base System Packages')
     print(f"\n{GREEN}=== Layer 2: {layer_name} ==={RESET}")
@@ -661,6 +692,12 @@ def layer2_base_packages(config, home, check_only=False):
     # Install pip packages
     print("\npython packages:")
     install_pip_packages(config['layer2']['pip_packages'], check_only)
+
+    # Install Claude Code CLI
+    claude_code_config = config['layer2'].get('claude_code')
+    if claude_code_config:
+        print("\nclaude code:")
+        install_claude_code(claude_code_config, script_dir, check_only)
 
     # Run post-install commands
     post_install_commands = config['layer2'].get('post_install_commands', [])
@@ -2230,7 +2267,7 @@ def main():
         layer1_sudo(config, script_dir, home, args.check)
 
     if args.layer is None or args.layer == 2:
-        layer2_base_packages(config, home, args.check)
+        layer2_base_packages(config, script_dir, home, args.check)
 
     if args.layer is None or args.layer == 3:
         layer3_emacs(config, home, args.check)
