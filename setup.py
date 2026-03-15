@@ -143,7 +143,7 @@ def run_command(cmd, shell=True, check=False, env=None, stream_output=True, prom
     # Handle failure
     if not success:
         if prompt_on_error:
-            print(f"\n{RED}✗ Command failed with exit code {result.returncode}{RESET}")
+            print(f"\n{RED}✗ Command failed with exit code {result.returncode}: {cmd}{RESET}")
             response = input(f"Continue anyway? [y/N]: ").strip().lower()
             if response not in ['y', 'yes']:
                 print(f"\n{RED}Aborting setup.{RESET}")
