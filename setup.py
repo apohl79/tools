@@ -410,8 +410,83 @@ def install_npm_packages(packages, check_only=False):
         print(f"all {len(packages)} packages already installed")
 
 
-def install_claude_code(claude_code_config, script_dir, check_only=False):
-    """install Claude Code CLI via official installer and configure marketplace."""
+def deep_merge(base, override):
+    """Deep merge override into base dict. Modifies base in place."""
+    for key, value in override.items():
+        if key in base and isinstance(base[key], dict) and isinstance(value, dict):
+            deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
+
+
+def patch_claude_settings(claude_code_config, home, check_only=False):
+    """Patch ~/.claude/settings.json with configured settings."""
+    settings_config = claude_code_config.get('settings')
+    if not settings_config:
+        return
+
+    settings_path = os.path.join(home, '.claude', 'settings.json')
+
+    # Build the desired settings from TOML config
+    desired = {}
+
+    # Copy simple scalar settings
+    for key in ('model', 'spinnerTipsEnabled', 'alwaysThinkingEnabled',
+                'promptSuggestionEnabled', 'autoUpdatesChannel',
+                'skipDangerousModePermissionPrompt'):
+        if key in settings_config:
+            desired[key] = settings_config[key]
+
+    # Build statusLine if configured
+    if 'statusLine' in settings_config:
+        desired['statusLine'] = settings_config['statusLine']
+
+    # Build hooks from simplified TOML config
+    hooks_config = settings_config.get('hooks', {})
+    if hooks_config:
+        hooks = {}
+        for hook_name, hook_def in hooks_config.items():
+            hooks[hook_name] = [{
+                'matcher': hook_def.get('matcher', ''),
+                'hooks': [{
+                    'type': 'command',
+                    'command': hook_def['command']
+                }]
+            }]
+        desired['hooks'] = hooks
+
+    if check_only:
+        print(f"would patch {settings_path} with {len(desired)} settings")
+        return
+
+    # Remove symlink if it exists (migrating from old setup)
+    if os.path.islink(settings_path):
+        print(f"removing old settings symlink")
+        os.unlink(settings_path)
+
+    # Read existing settings
+    existing = {}
+    if os.path.isfile(settings_path):
+        with open(settings_path) as f:
+            existing = json.load(f)
+
+    # Deep merge desired settings into existing
+    deep_merge(existing, desired)
+
+    # Ensure parent directory exists
+    os.makedirs(os.path.dirname(settings_path), exist_ok=True)
+
+    # Write back
+    with open(settings_path, 'w') as f:
+        json.dump(existing, f, indent=2)
+        f.write('\n')
+
+    print(f"✓ settings patched")
+
+
+def install_claude_code(claude_code_config, script_dir, home, check_only=False):
+    """install Claude Code CLI via official installer, configure marketplace and settings."""
     if not claude_code_config:
         return
 
@@ -439,6 +514,21 @@ def install_claude_code(claude_code_config, script_dir, check_only=False):
             print(f"would add marketplace from {marketplace_path}")
         else:
             run_command(f'claude plugin marketplace add {marketplace_path}')
+
+    # Install plugin if configured
+    plugin_name = claude_code_config.get('plugin')
+    if plugin_name and command_exists("claude"):
+        result = subprocess.run(['claude', 'plugin', 'list'],
+                                capture_output=True, text=True)
+        if result.returncode == 0 and plugin_name.split('@')[0] in result.stdout:
+            print(f"✓ plugin {plugin_name} already installed")
+        elif check_only:
+            print(f"would install plugin {plugin_name}")
+        else:
+            run_command(f'claude plugin install {plugin_name}')
+
+    # Patch settings
+    patch_claude_settings(claude_code_config, home, check_only)
 
 
 def install_pip_packages(packages, check_only=False):
@@ -697,7 +787,7 @@ def layer2_base_packages(config, script_dir, home, check_only=False):
     claude_code_config = config['layer2'].get('claude_code')
     if claude_code_config:
         print("\nclaude code:")
-        install_claude_code(claude_code_config, script_dir, check_only)
+        install_claude_code(claude_code_config, script_dir, home, check_only)
 
     # Run post-install commands
     post_install_commands = config['layer2'].get('post_install_commands', [])

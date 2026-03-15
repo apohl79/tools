@@ -180,6 +180,28 @@ pip_packages = [
 [layer2.claude_code]
 install_url = "https://claude.ai/install.sh"
 marketplace_path = "{script_dir}/claude/my-plugin"
+plugin = "my@my-tools"
+
+# Settings to patch into ~/.claude/settings.json after install
+[layer2.claude_code.settings]
+model = "opus[1m]"
+spinnerTipsEnabled = false
+alwaysThinkingEnabled = true
+promptSuggestionEnabled = false
+autoUpdatesChannel = "latest"
+skipDangerousModePermissionPrompt = true
+
+[layer2.claude_code.settings.statusLine]
+type = "command"
+command = "~/.claude/statusline.sh"
+
+[layer2.claude_code.settings.hooks.Notification]
+matcher = ""
+command = "~/.claude/notify"
+
+[layer2.claude_code.settings.hooks.PostToolUse]
+matcher = "Edit|Write"
+command = "~/.claude/post-edit-check.sh"
 
 # Post-install commands to run after packages are installed
 post_install_commands = [
@@ -280,11 +302,6 @@ target = "{home}/.terminfo"
 name = "claude-statusline"
 source = "{script_dir}/claude/statusline.sh"
 target = "{home}/.claude/statusline.sh"
-
-[[layer5.symlinks]]
-name = "claude-settings"
-source = "{script_dir}/claude/settings.json"
-target = "{home}/.claude/settings.json"
 
 [[layer5.symlinks]]
 name = "claude-supervisor"
