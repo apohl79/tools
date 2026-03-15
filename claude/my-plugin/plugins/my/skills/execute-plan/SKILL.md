@@ -133,7 +133,7 @@ After all implementation and integration testing is complete, run a code-review 
 
 3. **Launch the review sub-agent** using the Task tool with `subagent_type: "general-purpose"`.
 
-4. **Launch a Codex review agent (if available):** Check your available tools for `mcp__codex__codex`. If it exists, you MUST launch a parallel Codex review by calling `mcp__codex__codex` with a prompt asking it to review the diff on the current branch for bugs, logic errors, and code quality issues. Run this IN PARALLEL with the sub-agent from step 3 — do NOT skip it just because you already have a recipe-based reviewer. The two reviewers serve different purposes (recipe compliance vs general code quality). If `mcp__codex__codex` is not in your tool list, skip this step.
+4. **Launch a Codex review agent (if available):** Check your available tools for `mcp__codex__codex`. If it exists, you MUST launch a parallel Codex review by calling `mcp__codex__codex` with a prompt asking it to review the diff on the current branch for bugs, logic errors, and code quality issues. Run this IN PARALLEL with the sub-agent from step 3 — do NOT skip it just because you already have a recipe-based reviewer. The two reviewers serve different purposes (recipe compliance vs general code quality). If `mcp__codex__codex` is not in your tool list, skip this step. **IMPORTANT: Do NOT pass a `model` parameter to `mcp__codex__codex` — always use the default model. Passing unsupported model names (e.g. `o4-mini`) will cause the call to fail.**
 
 5. **Evaluate the review results** (from BOTH the recipe reviewer AND Codex, if launched):
    - If the reviewer found **CRITICAL** or **IMPORTANT** issues:
