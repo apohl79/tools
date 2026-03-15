@@ -55,6 +55,7 @@ brew_taps = [
 
 # All brew packages (formulae and casks) to install
 brew_packages = [
+    "1password-cli",
     "arc",
     "base64",
     "basedpyright",
@@ -66,21 +67,23 @@ brew_packages = [
     "clipgrab",
     "cmake",
     "codex",
+    "colima",
     "contexts",
     "coreutils",
     "cryptomator",
+    "curl",
     "dcfldd",
     "dos2unix",
     "drawio",
     "editorconfig",
     "enchant",
-    "ffmpeg",
     "font-iosevka-comfy",
     "font-iosevka-term-nerd-font",
     "font-jetbrains-mono-nerd-font",
     "font-juliamono",
     "font-roboto",
     "font-symbols-only-nerd-font",
+    "gemini-cli",
     "gh",
     "gimp",
     "git",
@@ -112,7 +115,6 @@ brew_packages = [
     "markdown",
     "menumeters",
     "meson",
-    "mosquitto",
     "msgpack-tools",
     "msmtp",
     "mu",
@@ -148,6 +150,7 @@ brew_packages = [
     "uv",
     "virtualenv",
     "vlc",
+    "watch",
     "wezterm",
     "wget",
     "whatsapp",
@@ -157,7 +160,7 @@ brew_packages = [
 
 # NPM global packages
 npm_packages = [
-    "@anthropic-ai/claude-code",
+    "@playwright/cli",
     "@tailwindcss/language-server",
     "@vtsls/language-server",
     "bash-language-server",
@@ -170,6 +173,7 @@ npm_packages = [
 # Python packages
 pip_packages = [
     "typing_extensions",
+    "websockets",
 ]
 
 # Post-install commands to run after packages are installed
