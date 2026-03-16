@@ -244,6 +244,4 @@ Task 4 ────────────┘
 
 3. If changes are requested, update the plan document.
 
-4. Open the plan in the editor: `open <file>`
-
-5. Tell the user: "Plan saved to `<filename>`. Run `/my:execute-plan <filename>` to implement it."
+4. Tell the user: "Plan saved to `<filename>`. Run `/my:execute-plan <filename>` to implement it."

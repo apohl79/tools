@@ -27,8 +27,12 @@ Use `/loop 5m` to run the following check-and-fix cycle. Record the **push times
 #### Each iteration
 
 1. **Check** the PR (currently being worked on or the given PR $1):
-  - Call `gh api repos/{owner}/{repo}/commits/{HEAD_SHA}/check-runs` — inspect the **"Cursor Bugbot"** check run status.
-  - Inspect unresolved review threads / comments from the `cursor` bot posted **after** the push timestamp.
+  - Call `gh api repos/{owner}/{repo}/commits/{HEAD_SHA}/check-runs` — inspect **all** check run statuses including Cursor Bugbot and SonarCloud.
+  - **Check for Bugbot review comments** (these are PR review comments, NOT reviews):
+    - Call `gh api repos/{owner}/{repo}/pulls/{PR_NUMBER}/comments --jq '.[] | select(.user.login == "cursor[bot]") | {id: .id, body: .body, created: .created_at}'`
+    - Also check for unresolved review threads via GraphQL: `gh api graphql -f query='{ repository(owner: "{owner}", name: "{repo}") { pullRequest(number: {PR_NUMBER}) { reviewThreads(first: 50) { nodes { id isResolved comments(first: 1) { nodes { author { login } body } } } } } } }' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .comments.nodes[0].author.login == "cursor")'`
+    - IMPORTANT: Bugbot posts inline review comments, NOT reviews. You MUST check `pulls/{pr}/comments` — checking only `pulls/{pr}/reviews` will MISS Bugbot findings.
+  - **Check SonarCloud status**: If SonarCloud failed, fetch the full sonarqubecloud PR comment via `gh pr view {PR_NUMBER} --json comments --jq '.comments[] | select(.author.login == "sonarqubecloud") | .body'` and investigate the specific issues. Do NOT dismiss SonarCloud failures as "pre-existing" without evidence.
   - Inspect PR checks for **compliance** failures posted **after** the push timestamp.
 
 2. **Fix** any found bug comments or compliance issues:
@@ -55,3 +59,4 @@ Stop the loop when **all** of the following are true:
 1. Cursor Bugbot check run `status` is `"completed"`.
 2. No new unresolved `cursor` threads after the push timestamp.
 3. No new compliance check failures after the push timestamp.
+4. SonarCloud Quality Gate is passing (or the failure is verified as pre-existing on the target branch, not introduced by the PR).
