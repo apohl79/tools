@@ -1,13 +1,89 @@
 ---
 description: Fix bug comments on a PR
-argument-hint: [pr-link]
+argument-hint: [pr-link] [--fix]
 ---
 
-# Bug Fixer
+# PR Finalizer
 
-You are fixing bugs in PRs.
+Finalizes PRs by fixing ALL issues — Bugbot comments, compliance checks, CI failures,
+lint errors, SonarCloud findings, and any other failing check.
 
-## Step
+## Mode Detection
+
+This skill operates in two modes based on arguments:
+
+- **No `--fix`** → **Launcher mode**: starts a background monitor script that polls
+  the PR and dispatches non-interactive Claude sessions for fixes. Token-efficient.
+- **`--fix`** → **Fixer mode**: called by the monitor script to fix specific issues.
+
+---
+
+## Launcher Mode (default)
+
+### Step 1: Identify the PR
+
+Parse the PR link from $1. If not provided, detect from current branch:
+```
+gh pr view --json number,headRefName,url
+```
+
+Extract owner, repo, PR number, HEAD SHA:
+```
+PR_NUMBER=$(gh pr view --json number --jq '.number')
+HEAD_SHA=$(gh pr view --json headRefOid --jq '.headRefOid')
+OWNER=$(gh repo view --json owner --jq '.owner.login')
+REPO=$(gh repo view --json name --jq '.name')
+```
+
+### Step 2: Launch the monitor script
+
+The monitor script is in the same directory as this skill. Locate it:
+```
+SKILL_DIR — find via the plugin cache path for my:pr-finalize
+```
+
+Create temp files for summary and log:
+```
+SUMMARY_FILE=$(mktemp /tmp/pr-finalize-summary-XXXXX.md)
+LOG_FILE=$(mktemp /tmp/pr-finalize-log-XXXXX.txt)
+```
+
+Launch the monitor as a background Bash job:
+```bash
+bash <skill-dir>/pr-monitor.sh \
+  --owner "$OWNER" \
+  --repo "$REPO" \
+  --pr "$PR_NUMBER" \
+  --head-sha "$HEAD_SHA" \
+  --push-time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --workdir "$(pwd)" \
+  --summary-file "$SUMMARY_FILE" \
+  --log-file "$LOG_FILE"
+```
+
+Run this via `Bash` tool with `run_in_background: true`.
+
+### Step 3: Wait for completion
+
+The background job will automatically notify you when it finishes. Do NOT poll,
+sleep, or call `TaskOutput` while it is running — you will be notified. Continue
+responding to the user or wait idle until the notification arrives.
+
+### Step 4: Report results
+
+When the job finishes:
+1. Check the exit code. 0 = all checks green.
+2. Read `$SUMMARY_FILE` and display its contents to the user.
+3. If exit code is non-zero, inform the user that the PR still has issues and
+   show the summary of what was attempted.
+4. Clean up temp files.
+
+---
+
+## Fixer Mode (`--fix`)
+
+When invoked with `--fix`, you are running inside a non-interactive Claude session
+dispatched by the monitor script. The prompt contains the specific issues to fix.
 
 ### Preparation
 
@@ -18,45 +94,47 @@ You are fixing bugs in PRs.
   - For **Python**: production-code, test-code
   - For **Rust**: production-code, test-code
 
-3. Load the reviewer recipies and agents
-
 ### Workflow
 
-Use `/loop 5m` to run the following check-and-fix cycle. Record the **push timestamp** and **HEAD SHA** of the PR before starting.
+#### Step 1: Parse the issue description
 
-#### Each iteration
+The prompt contains JSON describing:
+- `failed_checks` — list of check names and their conclusions
+- `new_bugbot_comments` — bugbot review comments with path and body
+- `unresolved_threads` — unresolved review threads
 
-1. **Check** the PR (currently being worked on or the given PR $1):
-  - Call `gh api repos/{owner}/{repo}/commits/{HEAD_SHA}/check-runs` — inspect **all** check run statuses including Cursor Bugbot and SonarCloud.
-  - **Check for Bugbot review comments** (these are PR review comments, NOT reviews):
-    - Call `gh api repos/{owner}/{repo}/pulls/{PR_NUMBER}/comments --jq '.[] | select(.user.login == "cursor[bot]") | {id: .id, body: .body, created: .created_at}'`
-    - Also check for unresolved review threads via GraphQL: `gh api graphql -f query='{ repository(owner: "{owner}", name: "{repo}") { pullRequest(number: {PR_NUMBER}) { reviewThreads(first: 50) { nodes { id isResolved comments(first: 1) { nodes { author { login } body } } } } } } }' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .comments.nodes[0].author.login == "cursor")'`
-    - IMPORTANT: Bugbot posts inline review comments, NOT reviews. You MUST check `pulls/{pr}/comments` — checking only `pulls/{pr}/reviews` will MISS Bugbot findings.
-  - **Check SonarCloud status**: If SonarCloud failed, fetch the full sonarqubecloud PR comment via `gh pr view {PR_NUMBER} --json comments --jq '.comments[] | select(.author.login == "sonarqubecloud") | .body'` and investigate the specific issues. Do NOT dismiss SonarCloud failures as "pre-existing" without evidence.
-  - Inspect PR checks for **compliance** failures posted **after** the push timestamp.
+#### Step 2: Investigate and fix ALL issues
 
-2. **Fix** any found bug comments or compliance issues:
-  - If the failure comes from a compliance check, inspect the failed job logs and fix the underlying issue in the PR branch.
-  - If the PR is already being worked on using a worktree, use the same worktree.
-  - If you need to checkout the PR and you are on the right project, use a new worktree.
-  - If the PR is on a different project, check it out to /tmp.
+For each issue type:
 
-3. **Run** all tests locally and confirm passing.
+**Failed checks:**
+- Inspect the check's job logs: `gh api repos/{owner}/{repo}/actions/runs/{RUN_ID}/jobs --jq '.jobs[] | select(.conclusion == "failure") | .id'`
+- Download logs: `gh api repos/{owner}/{repo}/actions/jobs/{JOB_ID}/logs`
+- For Semgrep: download the report artifact
+- For SonarCloud: check the bot comment via `gh pr view {PR} --json comments --jq '.comments[] | select(.author.login == "sonarqubecloud") | .body'`
+- Fix the code
 
-3. **Push** the fixes to the PR. Update the **push timestamp** and **HEAD SHA**.
+**Bugbot comments:**
+- Read the comment body to understand what needs fixing
+- Fix the code at the indicated path/line
 
-4. **Reply** to the bug comments and resolve the conversations.
-  - Reply to each comment individually on the thread and resolve the conversation thread before moving on.
-  - If the work item came from a compliance check rather than a review thread, add a PR comment summarizing what was fixed.
+**Unresolved threads:**
+- Read each thread's comment to understand the request
+- Fix the code
 
-Do NOT skip any step. Report status of each step.
+#### Step 3: Run all tests locally and confirm passing
 
-#### Stop condition
+#### Step 4: Push the fixes
 
-Before you tell me this PR is done, list: (1) all unresolved review threads, (2) CI check status for every check, (3) SonarCloud gate status. Only say 'done' if all are green.
+Commit and push. Use a conventional commit message describing what was fixed.
 
-Stop the loop when **all** of the following are true:
-1. Cursor Bugbot check run `status` is `"completed"`.
-2. No new unresolved `cursor` threads after the push timestamp.
-3. No new compliance check failures after the push timestamp.
-4. SonarCloud Quality Gate is passing (or the failure is verified as pre-existing on the target branch, not introduced by the PR).
+#### Step 5: Reply to review comments and resolve threads
+
+- Reply to each Bugbot comment on its thread and resolve the conversation
+- If fixes came from compliance checks, add a PR comment summarizing what was fixed
+
+### Anti-patterns (DO NOT do these)
+
+- Do NOT only check Bugbot and ignore Semgrep/SonarCloud/other checks
+- Do NOT dismiss compliance failures without investigating the logs
+- Do NOT assume a failing check is "pre-existing" without evidence from the target branch
