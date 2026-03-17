@@ -690,7 +690,7 @@
         `((mark modified read-only locked
                 " " (icon 2 2 :left :elide)
                 ,(propertize " " 'display `(space :align-to 8))
-                (name 45 45 :left :elide)
+                (name 55 55 :left :elide)
                 " " (size 9 -1 :right)
                 " " (mode 16 16 :left :elide)
                 ,@(when (require 'ibuffer-vc nil t)
