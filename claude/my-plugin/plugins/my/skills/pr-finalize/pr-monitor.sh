@@ -236,13 +236,24 @@ retry_infra_checks() {
 #   JSON object       — actionable code issues for Claude to fix
 collect_issues() {
     local classified new_comments unresolved_threads pending_checks
-    local bugbot_status
+    local bugbot_status merge_conflicts
 
     classified=$(get_classified_failures) || classified="ERROR"
     new_comments=$(get_new_bugbot_comments) || new_comments="[]"
     unresolved_threads=$(get_unresolved_threads) || unresolved_threads="[]"
     pending_checks=$(get_pending_checks) || pending_checks="[]"
     bugbot_status=$(get_bugbot_status) || bugbot_status="unknown"
+
+    # Check for merge conflicts
+    local mergeable base_branch
+    mergeable=$(gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}" --jq '.mergeable' 2>/dev/null || echo "unknown")
+    if [[ "$mergeable" == "CONFLICTING" ]]; then
+        base_branch=$(gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}" --jq '.base.ref' 2>/dev/null || echo "main")
+        merge_conflicts="{\"conflicting\": true, \"base_branch\": \"${base_branch}\"}"
+        echo "[$(date +%H:%M:%S)] ⚠ PR has merge conflicts with ${base_branch}"
+    else
+        merge_conflicts="{\"conflicting\": false}"
+    fi
 
     # If the check-runs API failed, treat as PENDING (don't false-declare clean)
     if [[ "$classified" == "ERROR" ]]; then
@@ -254,12 +265,13 @@ collect_issues() {
     code_failures=$(echo "$classified" | jq '.code // []')
     infra_failures=$(echo "$classified" | jq '.infra // []')
 
-    local has_code has_comments has_threads has_pending has_infra bugbot_pending
+    local has_code has_comments has_threads has_pending has_infra has_conflicts bugbot_pending
     has_code=$(echo "$code_failures" | jq 'length > 0')
     has_comments=$(echo "$new_comments" | jq 'length > 0')
     has_threads=$(echo "$unresolved_threads" | jq 'length > 0')
     has_pending=$(echo "$pending_checks" | jq 'length > 0')
     has_infra=$(echo "$infra_failures" | jq 'length > 0')
+    has_conflicts=$(echo "$merge_conflicts" | jq '.conflicting')
 
     # "unknown" means no Bugbot app is installed on this repo — don't block on it
     if [[ "$bugbot_status" == "pending" ]]; then
@@ -280,12 +292,13 @@ collect_issues() {
     fi
 
     # Actionable code issues for Claude to fix
-    if [[ "$has_code" == "true" || "$has_comments" == "true" || "$has_threads" == "true" ]]; then
+    if [[ "$has_code" == "true" || "$has_comments" == "true" || "$has_threads" == "true" || "$has_conflicts" == "true" ]]; then
         jq -n \
             --argjson failed "$code_failures" \
             --argjson comments "$new_comments" \
             --argjson threads "$unresolved_threads" \
-            '{failed_checks: $failed, new_bugbot_comments: $comments, unresolved_threads: $threads}'
+            --argjson conflicts "$merge_conflicts" \
+            '{failed_checks: $failed, new_bugbot_comments: $comments, unresolved_threads: $threads, merge_conflicts: $conflicts}'
         return
     fi
 
@@ -349,10 +362,11 @@ format_claude_stream() {
 build_fix_prompt() {
     local issues="$1"
 
-    local failed_checks new_comments unresolved_threads
+    local failed_checks new_comments unresolved_threads merge_conflicts
     failed_checks=$(echo "$issues" | jq -r '.failed_checks // []')
     new_comments=$(echo "$issues" | jq -r '.new_bugbot_comments // []')
     unresolved_threads=$(echo "$issues" | jq -r '.unresolved_threads // []')
+    merge_conflicts=$(echo "$issues" | jq -r '.merge_conflicts // {"conflicting": false}')
 
     cat <<PROMPT
 /my:pr-finalize --fix
@@ -362,6 +376,9 @@ HEAD SHA: ${HEAD_SHA}
 Working directory: ${WORKDIR}
 
 The following issues were detected on this PR. Fix ALL of them, run tests locally, push the fixes, and resolve any review threads you addressed.
+
+Merge conflicts:
+${merge_conflicts}
 
 Failed checks (these are code failures, not infrastructure issues):
 ${failed_checks}
@@ -553,7 +570,7 @@ main() {
             local has_code_issues
             has_code_issues=$(echo "$issues" | jq '(.failed_checks | length > 0) or (.new_bugbot_comments | length > 0)' 2>/dev/null || echo "false")
 
-            if [[ "$has_new_threads" == "false" && "$has_code_issues" == "false" ]]; then
+            if [[ "$has_new_threads" == "false" && "$has_code_issues" == "false" && "$has_conflicts" == "false" ]]; then
                 # All remaining issues are threads we've already attempted — avoid infinite loop
                 echo "[$(date +%H:%M:%S)] All remaining unresolved threads were already attempted. Treating as done."
                 echo "[$(date +%H:%M:%S)] Unresolved thread IDs: ${current_thread_ids:-none}"

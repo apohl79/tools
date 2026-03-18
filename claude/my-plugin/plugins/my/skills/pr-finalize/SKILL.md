@@ -104,13 +104,34 @@ dispatched by the monitor script. The prompt contains the specific issues to fix
 #### Step 1: Parse the issue description
 
 The prompt contains JSON describing:
+- `merge_conflicts` — `{"conflicting": true, "base_branch": "main"}` if the PR has merge conflicts
 - `failed_checks` — list of check names and their conclusions
 - `new_bugbot_comments` — bugbot review comments with path and body
 - `unresolved_threads` — unresolved review threads
 
 #### Step 2: Investigate and fix ALL issues
 
-For each issue type:
+**Merge conflicts (handle FIRST, before anything else):**
+
+If `merge_conflicts.conflicting` is `true`:
+1. Identify the base branch from `merge_conflicts.base_branch`
+2. Fetch the base branch and rebase:
+   ```bash
+   git fetch <remote> <base_branch>
+   git rebase <remote>/<base_branch>
+   ```
+3. If there are conflicts, resolve them:
+   - For each conflicted file, inspect the conflict markers and apply the correct resolution
+   - Keep the intent of BOTH sides where possible; prefer the PR branch's changes for code it owns
+   - `git add <resolved_file>` after resolving each file
+   - `git rebase --continue`
+4. Force-push the rebased branch:
+   ```bash
+   git push --force-with-lease
+   ```
+5. Continue with remaining issues below (failed checks, comments, threads)
+
+For each other issue type:
 
 **Failed checks:**
 - Inspect the check's job logs: `gh api repos/{owner}/{repo}/actions/runs/{RUN_ID}/jobs --jq '.jobs[] | select(.conclusion == "failure") | .id'`
