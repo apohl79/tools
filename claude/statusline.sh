@@ -41,10 +41,11 @@ proxy_error=""
 via_proxy=""
 proxy_cost=""
 
-# Check proxy health first (sets via_proxy/proxy_error before session fetch)
+# Check proxy health first (sets proxy_reachable/proxy_error before session fetch)
+proxy_reachable=""
 if [ -n "$ANTHROPIC_BASE_URL" ]; then
     if curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/health" >/dev/null 2>&1; then
-        via_proxy=true
+        proxy_reachable=true
     else
         proxy_error=1
     fi
@@ -54,7 +55,7 @@ session_id_raw=$(echo "$input" | jq -r '.session_id // empty')
 # Normalize JSON-blob session IDs: {"device_id":"...","session_id":"uuid"} → uuid
 session_id=$(echo "$session_id_raw" | jq -r 'if type == "object" then (.session_id // empty) else . end' 2>/dev/null || echo "$session_id_raw")
 [ -z "$session_id" ] && session_id="$session_id_raw"
-if [ "$via_proxy" = "true" ] && [ -n "$session_id" ]; then
+if [ "$proxy_reachable" = "true" ] && [ -n "$session_id" ]; then
     proxy_info=$(curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/_proxy/sessions/$session_id" 2>/dev/null)
 fi
 
@@ -115,13 +116,6 @@ else
         "0%"
       end
     ')
-fi
-
-# Detect proxy error: ANTHROPIC_BASE_URL is set but proxy is not responding
-if [ -n "$ANTHROPIC_BASE_URL" ]; then
-    if ! curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/health" >/dev/null 2>&1; then
-        proxy_error=1
-    fi
 fi
 
 # Helpers
