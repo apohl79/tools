@@ -128,18 +128,22 @@ If any sub-tasks had "tests deferred to integration test task", create a dedicat
 
 4. Delete the temporary file.
 
-# PHASE 5: CODE REVIEW (MANDATORY — DO NOT SKIP)
+# PHASE 5: CODE REVIEW LOOP (MANDATORY — DO NOT SKIP)
 
-**Mark the Phase 5 task `in_progress` before starting. Mark it `completed` when done.**
+**Mark the Phase 5 task `in_progress` before starting. Mark it `completed` when the loop exits clean.**
 
 **THIS PHASE IS MANDATORY. You MUST execute Phase 5 before proceeding to Phase 6 or Phase 7. Skipping this phase is a BLOCKING violation — under NO circumstances may you proceed to Phase 6 or Phase 7 without completing Phase 5 first. There are NO exceptions, regardless of time pressure, context length, or how confident you are in the code quality.**
 
-After all implementation and integration testing is complete, run a code-review sub-agent to catch issues before the PR.
+After all implementation and integration testing is complete, run a code-review loop. The loop repeats until BOTH reviewers return no CRITICAL or IMPORTANT findings. Track `review_attempt` starting at 1.
+
+**Preparation (once, before the loop):**
 
 1. **Determine the language** — if TypeScript, the reviewer loads `typescript-services:production-code-recipe`, `typescript-services:test-code-recipe`, and `typescript-services:true-myth-recipe`. If Python, the reviewer loads `python-services:production-code-recipe` and `python-services:test-code-recipe`. If Rust, the reviewer loads `rust-services:production-code-recipe` and `rust-services:test-code-recipe`.
 
+**Each loop iteration:**
+
 2. **Create a temporary review file** at `.tmp-subtask-code-review.md` in the worktree root containing:
-   - A list of ALL files created or modified during Phases 3 and 4 (absolute paths).
+   - A list of ALL files created or modified during Phases 3 and 4 (absolute paths). On re-reviews, also include files touched by fix sub-agents in prior iterations.
    - The exact recipe skill names to load (determined in step 1).
    - The following instructions for the reviewer:
 
@@ -164,18 +168,19 @@ After all implementation and integration testing is complete, run a code-review 
 
 4. **Launch a Codex review agent (if available):** Check your available tools for `mcp__codex__codex`. If it exists, you MUST launch a parallel Codex review by calling `mcp__codex__codex` with a prompt asking it to review the diff on the current branch for bugs, logic errors, and code quality issues. Run this IN PARALLEL with the sub-agent from step 3 — do NOT skip it just because you already have a recipe-based reviewer. The two reviewers serve different purposes (recipe compliance vs general code quality). If `mcp__codex__codex` is not in your tool list, skip this step. **IMPORTANT: Do NOT pass a `model` parameter to `mcp__codex__codex` — always use the default model. Passing unsupported model names (e.g. `o4-mini`) will cause the call to fail.**
 
-5. **Evaluate the review results** (from BOTH the recipe reviewer AND Codex, if launched):
-   - If the reviewer found **CRITICAL** or **IMPORTANT** issues:
+5. **Delete `.tmp-subtask-code-review.md`.**
+
+6. **Evaluate the combined review results** (from BOTH the recipe reviewer AND Codex, if launched):
+   - If **no CRITICAL or IMPORTANT findings** remain across both reviewers: exit the loop and proceed to Phase 6.
+   - If **CRITICAL or IMPORTANT issues were found**:
      a. Create a `.tmp-subtask-review-fixes.md` file containing:
-        - Every CRITICAL and IMPORTANT finding from the review (copy them verbatim — file paths, code snippets, issue descriptions, and fix suggestions).
+        - Every CRITICAL and IMPORTANT finding from ALL reviewers in this iteration (copy them verbatim — file paths, code snippets, issue descriptions, and fix suggestions).
         - The recipe skill names to load.
         - Clear instruction: "Fix each issue listed below. Do NOT change anything else. Do NOT look for or read any plan document."
      b. Launch a fix sub-agent using the Task tool with `subagent_type: "general-purpose"`.
      c. After the fix sub-agent completes, run the full build, lint, and test pipeline to verify no regressions.
      d. Delete `.tmp-subtask-review-fixes.md`.
-   - If the reviewer found only **MINOR** issues or no issues, proceed without fixes.
-
-6. **Delete `.tmp-subtask-code-review.md`.**
+     e. Increment `review_attempt` and **return to step 2** (start a new review iteration on the updated code).
 
 # PHASE 6: PLAN VALIDATION LOOP (MANDATORY — DO NOT SKIP)
 
@@ -276,8 +281,9 @@ Validate that the ENTIRE plan has been implemented correctly according to its sp
 - Always clean up temporary files before creating the PR.
 - If a sub-agent's work is unsatisfactory, you may re-run it with a corrected sub-task description, but do NOT take over and write the code yourself.
 - The validation loop (Phase 6) runs a MAXIMUM of 5 times. After 5 failed attempts, report to the user and let them decide.
-- **MANDATORY PHASE ORDERING: Phases MUST execute in strict order: 1 → 2 → 3 → 4 → 5 → 6 → 7. You MUST NOT skip Phase 5 (Code Review) or Phase 6 (Plan Validation). These review phases are NON-NEGOTIABLE prerequisites for Phase 7 (PR creation). Proceeding to Phase 7 without completing both Phase 5 AND Phase 6 is a critical workflow violation. No exceptions — not for time, context length, confidence level, or any other reason.**
-- **NO SELF-VALIDATION: The orchestrator MUST NOT perform validation checks itself. Phase 5 (Code Review) and Phase 6 (Plan Validation) MUST each launch a dedicated sub-agent via the Agent tool. "Doing it myself because it's faster/simpler/straightforward" is explicitly forbidden. The whole point of these phases is independent verification by a separate agent with fresh context.**
+- **MANDATORY PHASE ORDERING: Phases MUST execute in strict order: 1 → 2 → 3 → 4 → 5 → 6 → 7. You MUST NOT skip Phase 5 (Code Review Loop) or Phase 6 (Plan Validation). These review phases are NON-NEGOTIABLE prerequisites for Phase 7 (PR creation). Proceeding to Phase 7 without completing both Phase 5 AND Phase 6 is a critical workflow violation. No exceptions — not for time, context length, confidence level, or any other reason.**
+- **NO SELF-VALIDATION: The orchestrator MUST NOT perform validation checks itself. Phase 5 (Code Review Loop) and Phase 6 (Plan Validation) MUST each launch dedicated sub-agents via the Agent tool. "Doing it myself because it's faster/simpler/straightforward" is explicitly forbidden. The whole point of these phases is independent verification by separate agents with fresh context.**
+- **CODE REVIEW LOOP MUST CONVERGE: Phase 5 loops until BOTH reviewers (recipe sub-agent and Codex, if available) return zero CRITICAL or IMPORTANT findings in the same iteration. Finding fixes in iteration N do NOT count as a clean pass — a new review iteration must confirm they are resolved. Do NOT exit the loop after fixing — always re-review.**
 - **NO SKIPPING PR FINALIZATION: Unless `--draft-pr` was explicitly passed, Phase 7 step 5 MUST invoke `my:pr-finalize` via the Skill tool after marking the PR ready. The PR is incomplete without finalization. Do NOT stop at "PR created" or "PR marked ready" — you MUST run the finalize skill. Forgetting this step means the PR is unfinished.**
 - **NO EARLY TERMINATION OF PR FINALIZATION: Once `my:pr-finalize` is invoked, you MUST wait for the Bugbot check to reach `status: "completed"` and all bug comments to be fixed and resolved BEFORE moving to Phase 8. You are FORBIDDEN from canceling the polling loop, printing the execution summary, or declaring the work done while Bugbot is still `in_progress`. "It's taking too long" is NOT a valid reason to stop. "Polling limits" means space out your checks — it does NOT mean give up. You poll until Bugbot completes, fix any bugs it finds, and only THEN proceed to Phase 8.**
 
