@@ -66,13 +66,18 @@ Run this via `Bash` tool with `run_in_background: true`.
 ### Step 3: Wait for completion
 
 The background job will automatically notify you when it finishes. Do NOT poll,
-sleep, or call `TaskOutput` while it is running — you will be notified. Continue
-responding to the user or wait idle until the notification arrives.
+sleep, or call `TaskOutput` while it is running — you will be notified.
+
+**What "truly done" means:** The monitor will NOT exit until:
+1. All CI checks are passing (no failures or pending checks).
+2. No new Bugbot comments since the last push.
+3. No unresolved review threads.
+4. **At least 6 minutes have elapsed since the last fix push** — this ensures Bugbot has had time to analyze the new commit and post any follow-up comments before we declare victory. Without this wait, the monitor could exit while Bugbot is still running.
 
 ### Step 4: Report results
 
 When the job finishes:
-1. Check the exit code. 0 = all checks green.
+1. Check the exit code. 0 = all checks green, truly done.
 2. Read `$SUMMARY_FILE` and display its contents to the user.
 3. If exit code is non-zero, inform the user that the PR still has issues and
    show the summary of what was attempted.

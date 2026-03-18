@@ -12,7 +12,9 @@ set -euo pipefail
 #   --log-file <path>      Path to write formatted Claude output log
 
 POLL_INTERVAL=15
-MAX_CONSECUTIVE_CLEAN=3  # require N consecutive clean polls before declaring done
+MAX_CONSECUTIVE_CLEAN=3   # require N consecutive clean polls before declaring done
+MIN_BUGBOT_WAIT_SECS=360  # wait at least 6 min after last push before counting clean polls
+                          # (CI takes ~2min, Bugbot analysis takes ~2-3min after CI)
 
 OWNER=""
 REPO=""
@@ -22,6 +24,7 @@ PUSH_TIME=""
 WORKDIR=""
 SUMMARY_FILE=""
 LOG_FILE=""
+LAST_PUSH_EPOCH=0  # epoch seconds of the last fix push; 0 = no fix pushed yet
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -300,6 +303,21 @@ main() {
             consecutive_clean=0
             echo "[$(date +%H:%M:%S)] Checks still running, waiting..."
         elif [[ -z "$issues" ]]; then
+            # If we pushed a fix, enforce a minimum wait before counting clean polls.
+            # Bugbot analyzes the new commit *after* CI passes, so we must wait for
+            # it to finish before we can trust "no new comments" as a clean signal.
+            local now elapsed
+            now=$(date +%s)
+            if [[ $LAST_PUSH_EPOCH -gt 0 ]]; then
+                elapsed=$((now - LAST_PUSH_EPOCH))
+                if [[ $elapsed -lt $MIN_BUGBOT_WAIT_SECS ]]; then
+                    local remaining=$((MIN_BUGBOT_WAIT_SECS - elapsed))
+                    echo "[$(date +%H:%M:%S)] Checks clean — waiting for Bugbot analysis (${elapsed}s elapsed, ~${remaining}s remaining)..."
+                    consecutive_clean=0
+                    sleep "$POLL_INTERVAL"
+                    continue
+                fi
+            fi
             consecutive_clean=$((consecutive_clean + 1))
             echo "[$(date +%H:%M:%S)] Clean poll ($consecutive_clean/$MAX_CONSECUTIVE_CLEAN)"
             if [[ $consecutive_clean -ge $MAX_CONSECUTIVE_CLEAN ]]; then
@@ -312,12 +330,15 @@ main() {
             fix_count=$((fix_count + 1))
             echo "[$(date +%H:%M:%S)] Issues found — launching fix session #${fix_count}"
             launch_fix_session "$issues" "$fix_count"
-            # Update HEAD SHA and push timestamp after fix
+            # Update HEAD SHA and push timestamp after fix.
+            # Also record when we pushed so we know to wait for Bugbot.
             local new_sha
             new_sha=$(gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}" --jq '.head.sha') || new_sha="$HEAD_SHA"
             if [[ "$new_sha" != "$HEAD_SHA" ]]; then
                 HEAD_SHA="$new_sha"
                 PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                LAST_PUSH_EPOCH=$(date +%s)
+                echo "[$(date +%H:%M:%S)] Fix pushed. Will wait ${MIN_BUGBOT_WAIT_SECS}s for Bugbot before counting clean polls."
             fi
         fi
 
