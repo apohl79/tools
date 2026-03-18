@@ -135,7 +135,16 @@ Commit and push. Use a conventional commit message describing what was fixed.
 
 #### Step 5: Reply to review comments and resolve threads
 
-- Reply to each Bugbot comment on its thread and resolve the conversation
+**This step is mandatory — unresolved threads cause the monitor to loop forever.**
+
+For every Bugbot comment or review thread you addressed:
+1. Reply to the thread explaining what was fixed
+2. **Resolve the conversation** — use `gh api` to mark it resolved:
+   ```bash
+   gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "THREAD_ID"}) { thread { isResolved } } }'
+   ```
+3. Verify it is resolved before finishing — the monitor checks `isResolved == false` to detect remaining issues
+
 - If fixes came from compliance checks, add a PR comment summarizing what was fixed
 
 ### Anti-patterns (DO NOT do these)
@@ -144,3 +153,4 @@ Commit and push. Use a conventional commit message describing what was fixed.
 - Do NOT dismiss compliance failures without investigating the logs
 - Do NOT assume a failing check is "pre-existing" without evidence from the target branch
 - Do NOT open any URLs in a browser (Playwright or WebFetch) — use `gh` CLI or the GitHub MCP tools exclusively for all GitHub operations (PR views, check logs, comments, workflow runs)
+- Do NOT leave review threads unresolved after fixing — the monitor will re-trigger on the same threads if they stay open
