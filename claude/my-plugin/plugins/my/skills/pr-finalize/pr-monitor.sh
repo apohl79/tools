@@ -260,7 +260,8 @@ collect_issues() {
     has_pending=$(echo "$pending_checks" | jq 'length > 0')
     has_infra=$(echo "$infra_failures" | jq 'length > 0')
 
-    if [[ "$bugbot_status" == "pending" || "$bugbot_status" == "unknown" ]]; then
+    # "unknown" means no Bugbot app is installed on this repo — don't block on it
+    if [[ "$bugbot_status" == "pending" ]]; then
         bugbot_pending=true
     else
         bugbot_pending=false
