@@ -414,7 +414,9 @@ launch_fix_session() {
         echo ""
     } >> "$SUMMARY_FILE"
 
-    local FIX_TIMEOUT_SECS=600  # 10 min per attempt
+    # Startup timeout: how long to wait for the FIRST line of output before giving up.
+    # Once streaming starts, the timeout is cancelled and the session runs to completion.
+    local FIX_STARTUP_TIMEOUT_SECS=120  # 2 min to produce first output line
     local FIX_MAX_RETRIES=3
     local attempt=0
     local exit_code=1
@@ -422,23 +424,57 @@ launch_fix_session() {
     while [[ $attempt -lt $FIX_MAX_RETRIES ]]; do
         attempt=$((attempt + 1))
         local attempt_label="#${fix_num} (attempt ${attempt}/${FIX_MAX_RETRIES})"
-        echo "  [run] Fix session ${attempt_label} (timeout ${FIX_TIMEOUT_SECS}s)"
-        exit_code=0
-        timeout "$FIX_TIMEOUT_SECS" claude -p "$prompt" \
+        echo "  [run] Fix session ${attempt_label} (startup timeout ${FIX_STARTUP_TIMEOUT_SECS}s)"
+
+        # Run claude in background, pipe through a watchdog wrapper that cancels the
+        # startup timer once the first line of output arrives.
+        local fifo
+        fifo=$(mktemp -u /tmp/pr-fix-fifo-XXXXX)
+        mkfifo "$fifo"
+        local timed_out=0
+
+        # Start claude, writing output to the fifo
+        claude -p "$prompt" \
             --output-format stream-json \
             --dangerously-skip-permissions \
             --verbose 2>/dev/null \
-        | format_claude_stream "$LOG_FILE" "$fix_num" \
-        || exit_code=$?
+        > "$fifo" &
+        local claude_pid=$!
 
-        if [[ $exit_code -eq 124 ]]; then
-            echo "  [timeout] Fix session ${attempt_label} timed out after ${FIX_TIMEOUT_SECS}s"
+        # Watchdog: kill claude if no output arrives within startup timeout
+        (sleep "$FIX_STARTUP_TIMEOUT_SECS" && kill "$claude_pid" 2>/dev/null && echo "WATCHDOG_FIRED" > "${fifo}.timeout") &
+        local watchdog_pid=$!
+
+        # Read from fifo; kill watchdog on first line
+        local first_line=true
+        exit_code=0
+        {
+            while IFS= read -r line; do
+                if [[ "$first_line" == "true" ]]; then
+                    first_line=false
+                    kill "$watchdog_pid" 2>/dev/null  # cancel startup timeout
+                fi
+                echo "$line"
+            done
+        } < "$fifo" | format_claude_stream "$LOG_FILE" "$fix_num" || exit_code=$?
+
+        wait "$claude_pid" 2>/dev/null || true
+        kill "$watchdog_pid" 2>/dev/null || true
+        rm -f "$fifo" "${fifo}.timeout"
+
+        # If watchdog fired (claude produced no output), treat as startup timeout
+        if [[ "$first_line" == "true" ]]; then
+            timed_out=1
+        fi
+
+        if [[ $timed_out -eq 1 ]]; then
+            echo "  [timeout] Fix session ${attempt_label}: no output in ${FIX_STARTUP_TIMEOUT_SECS}s"
             if [[ $attempt -lt $FIX_MAX_RETRIES ]]; then
                 echo "  [retry] Retrying..."
                 continue
             else
-                echo "  [fail] All ${FIX_MAX_RETRIES} attempts timed out"
-                echo "**Result:** Timed out after ${FIX_MAX_RETRIES} attempts" >> "$SUMMARY_FILE"
+                echo "  [fail] All ${FIX_MAX_RETRIES} attempts timed out at startup"
+                echo "**Result:** Timed out (no output) after ${FIX_MAX_RETRIES} attempts" >> "$SUMMARY_FILE"
                 echo "" >> "$SUMMARY_FILE"
                 return 0
             fi
