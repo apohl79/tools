@@ -150,7 +150,7 @@ If the user chose "Create one after planning" in Phase 1, create the ticket now 
 
 ## 4.2 Plan Document
 
-Create a markdown file in the **project root** named `plan-<short-title>.md`.
+Create the directory `.claude/plans/` in the project root if it doesn't exist, then create a markdown file named `.claude/plans/plan-<short-title>.md`.
 
 The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 
@@ -161,6 +161,7 @@ The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 **JIRA:** <TICKET-123 or "none">
 **Tech Stack:** <detected stack>
 **Code Standards:** <list recipe skill names to load>
+**Executed:** [ ]
 
 ---
 
@@ -325,4 +326,4 @@ After writing the plan document, run an automated review loop to catch gaps befo
 
 3. If changes are requested, update the plan document.
 
-4. Tell the user: "Plan saved to `<filename>`. Run `/my:execute-plan <filename>` to implement it."
+4. Tell the user: "Plan saved to `.claude/plans/<filename>`. Run `/my:execute-plan .claude/plans/<filename>` to implement it."
