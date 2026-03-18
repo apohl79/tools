@@ -15,6 +15,7 @@ POLL_INTERVAL=15
 MAX_CONSECUTIVE_CLEAN=3   # require N consecutive clean polls before declaring done
 MIN_BUGBOT_WAIT_SECS=360  # wait at least 6 min after last push before counting clean polls
                           # (CI takes ~2min, Bugbot analysis takes ~2-3min after CI)
+MAX_INFRA_RETRIES=3       # max times to re-run a failing infra check before giving up on it
 
 OWNER=""
 REPO=""
@@ -25,6 +26,34 @@ WORKDIR=""
 SUMMARY_FILE=""
 LOG_FILE=""
 LAST_PUSH_EPOCH=0  # epoch seconds of the last fix push; 0 = no fix pushed yet
+
+# Temp file used to pass infra-failure JSON from collect_issues → main loop
+INFRA_TMP=""
+
+# Check name substrings that identify infrastructure-only failures.
+# These are NOT code problems — they need a CI re-run or org-level config fix,
+# NOT a Claude fix session. Wiz-cli 401 = credential timeout (flaky).
+# SonarCloud cancelled = Automatic Analysis config (org-level, can't fix from code).
+INFRA_CHECK_PATTERNS=(
+    "SonarCloud"
+    "Wiz-cli Scan"
+    "Wiz Scan"
+    "WizScan"
+    "wiz-scan"
+    "trivy"
+    "Trivy"
+)
+
+# Returns 0 if check name matches an infra pattern, 1 otherwise
+is_infra_check() {
+    local name="$1"
+    for pattern in "${INFRA_CHECK_PATTERNS[@]}"; do
+        if [[ "$name" == *"$pattern"* ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -41,7 +70,6 @@ parse_args() {
         esac
     done
 
-    # Validate required args
     local missing=()
     [[ -z "$OWNER" ]] && missing+=("--owner")
     [[ -z "$REPO" ]] && missing+=("--repo")
@@ -63,10 +91,40 @@ parse_args() {
     fi
 }
 
-# Poll functions
-get_failed_checks() {
-    gh api "repos/${OWNER}/${REPO}/commits/${HEAD_SHA}/check-runs" \
-        --jq '[.check_runs[] | select(.status == "completed" and .conclusion != "success" and .conclusion != "neutral" and .conclusion != "skipped") | {name: .name, conclusion: .conclusion, details_url: .details_url}]'
+# ─── Check-run queries ────────────────────────────────────────────────────────
+
+# All failed check-runs for HEAD_SHA (failure OR cancelled), classified.
+# Outputs JSON: {code: [...], infra: [...]}
+get_classified_failures() {
+    local all_failed
+    all_failed=$(gh api "repos/${OWNER}/${REPO}/commits/${HEAD_SHA}/check-runs" \
+        --jq '[.check_runs[] | select(
+            .status == "completed"
+            and .conclusion != "success"
+            and .conclusion != "neutral"
+            and .conclusion != "skipped"
+        ) | {name: .name, conclusion: .conclusion, details_url: .details_url, run_id: (.details_url | capture("runs/(?<id>[0-9]+)") | .id // "")}]') || all_failed="[]"
+
+    # Split into code vs infra failures using bash pattern matching
+    local code_failures="[]"
+    local infra_failures="[]"
+
+    # Process each check through is_infra_check
+    local count
+    count=$(echo "$all_failed" | jq 'length')
+    for i in $(seq 0 $((count - 1))); do
+        local entry name
+        entry=$(echo "$all_failed" | jq ".[$i]")
+        name=$(echo "$entry" | jq -r '.name')
+        if is_infra_check "$name"; then
+            infra_failures=$(echo "$infra_failures" | jq --argjson e "$entry" '. + [$e]')
+        else
+            code_failures=$(echo "$code_failures" | jq --argjson e "$entry" '. + [$e]')
+        fi
+    done
+
+    jq -n --argjson code "$code_failures" --argjson infra "$infra_failures" \
+        '{code: $code, infra: $infra}'
 }
 
 get_new_bugbot_comments() {
@@ -96,48 +154,122 @@ get_pending_checks() {
         --jq '[.check_runs[] | select(.status != "completed") | {name: .name, status: .status}]'
 }
 
-# Collect and aggregate all issues
-collect_issues() {
-    local failed_checks new_comments unresolved_threads pending_checks
+# Check if Bugbot has completed its run on HEAD_SHA.
+# Returns "complete" / "pending" / "unknown"
+get_bugbot_status() {
+    local status conclusion
+    status=$(gh api "repos/${OWNER}/${REPO}/commits/${HEAD_SHA}/check-runs" \
+        --jq '.check_runs[] | select(.app.slug == "cursor" or (.name | test("Bugbot|bugbot|cursor"; "i"))) | .status' 2>/dev/null | head -1)
+    conclusion=$(gh api "repos/${OWNER}/${REPO}/commits/${HEAD_SHA}/check-runs" \
+        --jq '.check_runs[] | select(.app.slug == "cursor" or (.name | test("Bugbot|bugbot|cursor"; "i"))) | .conclusion' 2>/dev/null | head -1)
 
-    failed_checks=$(get_failed_checks) || failed_checks="[]"
+    if [[ -z "$status" ]]; then
+        echo "unknown"
+    elif [[ "$status" == "completed" ]]; then
+        echo "complete:${conclusion:-unknown}"
+    else
+        echo "pending"
+    fi
+}
+
+# ─── Infra check retry ────────────────────────────────────────────────────────
+
+# Attempt to re-run failed infra checks via `gh run rerun`.
+# Takes the infra_failures JSON array as argument.
+retry_infra_checks() {
+    local infra_failures="$1"
+    local count
+    count=$(echo "$infra_failures" | jq 'length')
+    if [[ "$count" -eq 0 ]]; then return; fi
+
+    echo "[$(date +%H:%M:%S)] Retrying $count infrastructure check(s) (NOT launching fix session — these are not code issues)"
+
+    for i in $(seq 0 $((count - 1))); do
+        local name run_id conclusion
+        name=$(echo "$infra_failures" | jq -r ".[$i].name")
+        run_id=$(echo "$infra_failures" | jq -r ".[$i].run_id // empty")
+        conclusion=$(echo "$infra_failures" | jq -r ".[$i].conclusion")
+
+        echo "[$(date +%H:%M:%S)]   → '${name}' (${conclusion}): run_id=${run_id:-unknown}"
+
+        if [[ -n "$run_id" ]]; then
+            if gh run rerun "$run_id" --failed 2>/dev/null; then
+                echo "[$(date +%H:%M:%S)]   ✓ Re-queued run $run_id"
+            else
+                echo "[$(date +%H:%M:%S)]   ✗ Could not re-run job $run_id (may need manual retry)"
+            fi
+        else
+            echo "[$(date +%H:%M:%S)]   ✗ No run_id found for '${name}' — cannot auto-retry"
+        fi
+    done
+}
+
+# ─── Issue collection ─────────────────────────────────────────────────────────
+
+# Returns one of:
+#   "PENDING"         — checks still running, no actionable issues yet
+#   "INFRA_ONLY"      — only infra failures; infra JSON written to $INFRA_TMP
+#   ""  (empty)       — all checks clean
+#   JSON object       — actionable code issues for Claude to fix
+collect_issues() {
+    local classified new_comments unresolved_threads pending_checks
+    local bugbot_status
+
+    classified=$(get_classified_failures) || classified='{"code":[],"infra":[]}'
     new_comments=$(get_new_bugbot_comments) || new_comments="[]"
     unresolved_threads=$(get_unresolved_threads) || unresolved_threads="[]"
     pending_checks=$(get_pending_checks) || pending_checks="[]"
+    bugbot_status=$(get_bugbot_status) || bugbot_status="unknown"
 
-    local has_failed has_comments has_threads has_pending
-    has_failed=$(echo "$failed_checks" | jq 'length > 0')
+    local code_failures infra_failures
+    code_failures=$(echo "$classified" | jq '.code // []')
+    infra_failures=$(echo "$classified" | jq '.infra // []')
+
+    local has_code has_comments has_threads has_pending has_infra bugbot_pending
+    has_code=$(echo "$code_failures" | jq 'length > 0')
     has_comments=$(echo "$new_comments" | jq 'length > 0')
     has_threads=$(echo "$unresolved_threads" | jq 'length > 0')
     has_pending=$(echo "$pending_checks" | jq 'length > 0')
+    has_infra=$(echo "$infra_failures" | jq 'length > 0')
 
-    # If checks are still pending, don't trigger a fix yet but don't count as clean
-    if [[ "$has_pending" == "true" && "$has_failed" == "false" && "$has_comments" == "false" && "$has_threads" == "false" ]]; then
+    if [[ "$bugbot_status" == "pending" || "$bugbot_status" == "unknown" ]]; then
+        bugbot_pending=true
+    else
+        bugbot_pending=false
+    fi
+
+    # Still waiting for checks or Bugbot to complete
+    if [[ "$has_pending" == "true" || "$bugbot_pending" == "true" ]]; then
         echo "PENDING"
         return
     fi
 
-    if [[ "$has_failed" == "true" || "$has_comments" == "true" || "$has_threads" == "true" ]]; then
+    # Save infra failures to temp file for main loop to read
+    if [[ "$has_infra" == "true" && -n "$INFRA_TMP" ]]; then
+        echo "$infra_failures" > "$INFRA_TMP"
+    fi
+
+    # Actionable code issues for Claude to fix
+    if [[ "$has_code" == "true" || "$has_comments" == "true" || "$has_threads" == "true" ]]; then
         jq -n \
-            --argjson failed "$failed_checks" \
+            --argjson failed "$code_failures" \
             --argjson comments "$new_comments" \
             --argjson threads "$unresolved_threads" \
             '{failed_checks: $failed, new_bugbot_comments: $comments, unresolved_threads: $threads}'
+        return
     fi
+
+    # No code issues — but infra failures may need retry
+    if [[ "$has_infra" == "true" ]]; then
+        echo "INFRA_ONLY"
+        return
+    fi
+
+    # Truly clean — empty output
 }
 
-# Format Claude's stream-json output for human-readable terminal display.
-# Reads from stdin, writes formatted output to stdout and appends to log file.
-#
-# Arguments:
-#   $1 - log_file: path to append formatted output
-#   $2 - fix_num: fix session number for labeling
-#
-# Stream-json event types:
-#   assistant  — Claude's text responses (show as-is, max 5 lines per chunk)
-#   tool_use   — tool being called (show tool name)
-#   tool_result — tool result (skip for brevity)
-#   result     — final result with cost_usd and duration_ms
+# ─── Fix session ──────────────────────────────────────────────────────────────
+
 format_claude_stream() {
     local log_file="$1"
     local fix_num="$2"
@@ -201,7 +333,7 @@ Working directory: ${WORKDIR}
 
 The following issues were detected on this PR. Fix ALL of them, run tests locally, push the fixes, and resolve any review threads you addressed.
 
-Failed checks:
+Failed checks (these are code failures, not infrastructure issues):
 ${failed_checks}
 
 New Bugbot comments (since last push):
@@ -224,7 +356,6 @@ launch_fix_session() {
     echo " Fix Session #${fix_num}"
     echo "=========================================="
 
-    # Record fix start in summary
     {
         echo "## Fix #${fix_num}"
         echo ""
@@ -237,7 +368,6 @@ launch_fix_session() {
         echo ""
     } >> "$SUMMARY_FILE"
 
-    # Launch Claude and pipe through formatter
     local exit_code=0
     claude -p "$prompt" \
         --output-format stream-json \
@@ -255,10 +385,9 @@ launch_fix_session() {
     fi
     echo "" >> "$SUMMARY_FILE"
 
-    return 0  # Don't fail the monitor on a fix failure — keep polling
+    return 0
 }
 
-# Write final summary
 finalize_summary() {
     local total_fixes="$1"
     local status="${2:-All checks passing}"
@@ -273,11 +402,17 @@ finalize_summary() {
     } >> "$SUMMARY_FILE"
 }
 
-# Main loop
+# ─── Main loop ────────────────────────────────────────────────────────────────
+
 main() {
     parse_args "$@"
     local consecutive_clean=0
     local fix_count=0
+    local infra_retry_count=0  # how many times we've tried to re-run infra checks
+
+    # Temp file for infra failure JSON passed from collect_issues
+    INFRA_TMP=$(mktemp /tmp/pr-monitor-infra-XXXXX.json)
+    trap 'rm -f "$INFRA_TMP"' EXIT
 
     echo "=== PR Monitor started ==="
     echo "  PR: ${OWNER}/${REPO}#${PR_NUMBER}"
@@ -286,7 +421,6 @@ main() {
     echo "  Log: ${LOG_FILE}"
     echo ""
 
-    # Initialize summary file
     {
         echo "# PR Finalize Summary"
         echo ""
@@ -296,16 +430,59 @@ main() {
     } > "$SUMMARY_FILE"
 
     while true; do
-        local issues=""
-        issues=$(collect_issues)
+        local issues infra_json
+        echo "[]" > "$INFRA_TMP"  # reset each poll
+        issues=$(collect_issues) || issues=""
+        infra_json=$(cat "$INFRA_TMP" 2>/dev/null) || infra_json="[]"
 
         if [[ "$issues" == "PENDING" ]]; then
             consecutive_clean=0
-            echo "[$(date +%H:%M:%S)] Checks still running, waiting..."
+            echo "[$(date +%H:%M:%S)] Checks still running (or Bugbot pending), waiting..."
+
+        elif [[ "$issues" == "INFRA_ONLY" ]]; then
+            # Only infra failures remain — no code issues, no bugbot threads
+            consecutive_clean=0
+            local infra_names
+            infra_names=$(echo "$infra_json" | jq -r '.[].name' 2>/dev/null | tr '\n' ', ' | sed 's/,$//' || echo "unknown")
+
+            if [[ "$infra_retry_count" -lt "$MAX_INFRA_RETRIES" ]]; then
+                infra_retry_count=$((infra_retry_count + 1))
+                echo "[$(date +%H:%M:%S)] Only infrastructure failures remain: ${infra_names}"
+                echo "[$(date +%H:%M:%S)] Attempting re-run (retry $infra_retry_count/$MAX_INFRA_RETRIES)..."
+                retry_infra_checks "$infra_json"
+                sleep 30  # give re-run time to queue
+            else
+                # Exhausted retries — exit with a clear report
+                echo ""
+                echo "╔══════════════════════════════════════════════════════════════╗"
+                echo "║  PR FINALIZATION CANNOT COMPLETE — INFRASTRUCTURE FAILURES  ║"
+                echo "╚══════════════════════════════════════════════════════════════╝"
+                echo ""
+                echo "The following checks are failing due to INFRASTRUCTURE issues,"
+                echo "NOT code problems. Claude cannot fix these from code changes."
+                echo ""
+                echo "Failing infrastructure checks (after $infra_retry_count re-run attempts):"
+                echo "$infra_json" | jq -r '.[] | "  • \(.name) [\(.conclusion)]"' 2>/dev/null || echo "  • ${infra_names}"
+                echo ""
+                echo "Known root causes and required manual actions:"
+                echo "  SonarCloud CANCELLED → Disable 'Automatic Analysis' in SonarCloud project"
+                echo "    settings (sonarcloud.io), OR remove sonar-project.properties so the CI"
+                echo "    scanner doesn't conflict with the automatic scanner."
+                echo "  Wiz-cli Scan 401    → WIZ_CLIENT_ID / WIZ_CLIENT_SECRET credentials in"
+                echo "    GitHub org secrets are expired or invalid. Rotate them."
+                echo ""
+                echo "✅  All CODE checks pass."
+                echo "✅  All Bugbot review threads resolved."
+                echo "✅  The PR code itself is ready to merge."
+                echo "❌  Only infrastructure configuration blocks finalization."
+                echo ""
+                finalize_summary "$fix_count" "BLOCKED — infrastructure failures require manual action (see output)"
+                exit 2
+            fi
+
         elif [[ -z "$issues" ]]; then
-            # If we pushed a fix, enforce a minimum wait before counting clean polls.
-            # Bugbot analyzes the new commit *after* CI passes, so we must wait for
-            # it to finish before we can trust "no new comments" as a clean signal.
+            # Truly clean — no code failures, no infra failures, no bugbot issues
+            # Enforce minimum wait after a push before counting clean polls
             local now elapsed
             now=$(date +%s)
             if [[ $LAST_PUSH_EPOCH -gt 0 ]]; then
@@ -325,19 +502,22 @@ main() {
                 finalize_summary "$fix_count"
                 exit 0
             fi
+
         else
+            # Actionable code issues — launch Claude fix session
             consecutive_clean=0
             fix_count=$((fix_count + 1))
             echo "[$(date +%H:%M:%S)] Issues found — launching fix session #${fix_count}"
             launch_fix_session "$issues" "$fix_count"
-            # Update HEAD SHA and push timestamp after fix.
-            # Also record when we pushed so we know to wait for Bugbot.
+
+            # Update HEAD SHA and push timestamp after fix
             local new_sha
             new_sha=$(gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}" --jq '.head.sha') || new_sha="$HEAD_SHA"
             if [[ "$new_sha" != "$HEAD_SHA" ]]; then
                 HEAD_SHA="$new_sha"
                 PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
                 LAST_PUSH_EPOCH=$(date +%s)
+                infra_retry_count=0  # reset infra retries after a code push
                 echo "[$(date +%H:%M:%S)] Fix pushed. Will wait ${MIN_BUGBOT_WAIT_SECS}s for Bugbot before counting clean polls."
             fi
         fi
