@@ -14,7 +14,19 @@ The initial idea or description is: $ARGUMENTS
 
 ---
 
+**Before starting Phase 1**, create a progress tasklist using the TaskCreate tool — one task per phase:
+- "Phase 1: Understand the Request"
+- "Phase 2: Interview"
+- "Phase 3: Codebase Analysis"
+- "Phase 4: Create Plan Document"
+- "Phase 4.5: Automated Plan Review"
+- "Phase 5: Review and Handoff"
+
+---
+
 # PHASE 1: UNDERSTAND THE REQUEST
+
+**Mark the Phase 1 task `in_progress` before starting. Mark it `completed` when done.**
 
 ## 1.1 Classify the work type
 
@@ -40,6 +52,8 @@ If a ticket exists, read it and extract any additional context, acceptance crite
 ---
 
 # PHASE 2: INTERVIEW
+
+**Mark the Phase 2 task `in_progress` before starting. Mark it `completed` when done.**
 
 Conduct the interview using AskUserQuestion. Ask questions **one at a time** — do not batch them. Use multiple-choice options where possible to reduce friction. Always include an "Other" or free-text option.
 
@@ -108,6 +122,8 @@ After all questions:
 
 # PHASE 3: CODEBASE ANALYSIS
 
+**Mark the Phase 3 task `in_progress` before starting. Mark it `completed` when done.**
+
 Now analyze the codebase to inform the plan. Do NOT modify any files.
 
 1. **Detect the tech stack** — language, framework, package manager, test runner
@@ -122,6 +138,8 @@ Now analyze the codebase to inform the plan. Do NOT modify any files.
 ---
 
 # PHASE 4: CREATE THE PLAN DOCUMENT
+
+**Mark the Phase 4 task `in_progress` before starting. Mark it `completed` when the plan file is written.**
 
 ## 4.1 JIRA Ticket Creation
 
@@ -231,13 +249,76 @@ Task 4 ────────────┘
 
 ---
 
+# PHASE 4.5: AUTOMATED PLAN REVIEW LOOP
+
+**Mark the Phase 4.5 task `in_progress` before starting. Mark it `completed` when the review passes (or after surfacing unresolved issues to the user).**
+
+After writing the plan document, run an automated review loop to catch gaps before presenting it to the user. This loop runs a maximum of **3 iterations**. Track `review_attempt` starting at 1.
+
+1. **Dispatch a plan-document-reviewer sub-agent** using the Task tool with `subagent_type: "general-purpose"` and the following prompt (substitute `[PLAN_FILE_PATH]` with the absolute path to the plan file):
+
+   ```
+   You are a plan document reviewer. Verify this implementation plan is complete and ready for execution.
+
+   **Plan to review:** [PLAN_FILE_PATH]
+
+   ## What to Check
+
+   | Category | What to Look For |
+   |----------|-----------------|
+   | Completeness | TODOs, placeholders, "TBD", missing steps, incomplete tasks |
+   | Consistency | Internal contradictions, conflicting requirements or file paths |
+   | Clarity | Instructions ambiguous enough to cause a sub-agent to build the wrong thing |
+   | Granularity | Tasks that are too large (>5 min) or too vague to execute atomically |
+   | Dependencies | Missing dependency declarations between tasks; tasks that reference unknown outputs |
+   | Verification | Tasks missing build/test/lint commands to verify correctness |
+   | Scope | Plan covers more than what was requested (over-engineering / YAGNI) |
+
+   ## Calibration
+
+   Only flag issues that would cause real problems during implementation. A missing dependency,
+   a contradiction, or an ambiguous instruction that could be interpreted two different ways —
+   those are issues. Minor wording preferences and "less detail than other sections" are not.
+
+   Approve unless there are serious gaps that would lead to a flawed or incomplete implementation.
+
+   ## Output Format
+
+   ## Plan Review
+
+   **Status:** Approved | Issues Found
+
+   **Issues (if any):**
+   - [Task N / Section]: [specific issue] — [why it matters for execution]
+
+   **Recommendations (advisory, do not block approval):**
+   - [suggestions]
+   ```
+
+2. **Evaluate the review result:**
+
+   - If **Status is "Approved"**: proceed to Phase 5.
+
+   - If **Status is "Issues Found"** and `review_attempt < 3`:
+     a. Fix each reported issue directly in the plan document.
+     b. Increment `review_attempt` and re-dispatch the reviewer (return to step 1).
+
+   - If **Status is "Issues Found"** and `review_attempt >= 3`:
+     a. Do NOT attempt further automated fixes.
+     b. Summarize the remaining issues for the user in Phase 5 and ask them to decide.
+
+---
+
 # PHASE 5: REVIEW AND HANDOFF
+
+**Mark the Phase 5 task `in_progress` before starting. Mark it `completed` after handing off to the user.**
 
 1. Present a summary of the plan to the user:
    - Number of tasks
    - Dependency structure
    - Estimated complexity
    - Any open questions
+   - Any issues from Phase 4.5 that could not be auto-resolved (if `review_attempt >= 3`)
 
 2. Ask: "Would you like to review or adjust the plan before finalizing?"
    - Options: "Looks good", "I want to review it", "Make changes"
