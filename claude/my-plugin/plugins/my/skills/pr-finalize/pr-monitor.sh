@@ -414,13 +414,38 @@ launch_fix_session() {
         echo ""
     } >> "$SUMMARY_FILE"
 
-    local exit_code=0
-    claude -p "$prompt" \
-        --output-format stream-json \
-        --dangerously-skip-permissions \
-        --verbose 2>/dev/null \
-    | format_claude_stream "$LOG_FILE" "$fix_num" \
-    || exit_code=$?
+    local FIX_TIMEOUT_SECS=600  # 10 min per attempt
+    local FIX_MAX_RETRIES=3
+    local attempt=0
+    local exit_code=1
+
+    while [[ $attempt -lt $FIX_MAX_RETRIES ]]; do
+        attempt=$((attempt + 1))
+        local attempt_label="#${fix_num} (attempt ${attempt}/${FIX_MAX_RETRIES})"
+        echo "  [run] Fix session ${attempt_label} (timeout ${FIX_TIMEOUT_SECS}s)"
+        exit_code=0
+        timeout "$FIX_TIMEOUT_SECS" claude -p "$prompt" \
+            --output-format stream-json \
+            --dangerously-skip-permissions \
+            --verbose 2>/dev/null \
+        | format_claude_stream "$LOG_FILE" "$fix_num" \
+        || exit_code=$?
+
+        if [[ $exit_code -eq 124 ]]; then
+            echo "  [timeout] Fix session ${attempt_label} timed out after ${FIX_TIMEOUT_SECS}s"
+            if [[ $attempt -lt $FIX_MAX_RETRIES ]]; then
+                echo "  [retry] Retrying..."
+                continue
+            else
+                echo "  [fail] All ${FIX_MAX_RETRIES} attempts timed out"
+                echo "**Result:** Timed out after ${FIX_MAX_RETRIES} attempts" >> "$SUMMARY_FILE"
+                echo "" >> "$SUMMARY_FILE"
+                return 0
+            fi
+        else
+            break
+        fi
+    done
 
     if [[ $exit_code -eq 0 ]]; then
         echo "  [result] Fix session #${fix_num} succeeded"
