@@ -36,7 +36,6 @@ INFRA_TMP=""
 # NOT a Claude fix session. Wiz-cli 401 = credential timeout (flaky).
 # SonarCloud cancelled = Automatic Analysis config (org-level, can't fix from code).
 INFRA_CHECK_PATTERNS=(
-    "SonarCloud"
     "Wiz-cli Scan"
     "Wiz Scan"
     "WizScan"
@@ -513,9 +512,6 @@ main() {
                 echo "$infra_json" | jq -r '.[] | "  • \(.name) [\(.conclusion)]"' 2>/dev/null || echo "  • ${infra_names}"
                 echo ""
                 echo "Known root causes and required manual actions:"
-                echo "  SonarCloud CANCELLED → Disable 'Automatic Analysis' in SonarCloud project"
-                echo "    settings (sonarcloud.io), OR remove sonar-project.properties so the CI"
-                echo "    scanner doesn't conflict with the automatic scanner."
                 echo "  Wiz-cli Scan 401    → WIZ_CLIENT_ID / WIZ_CLIENT_SECRET credentials in"
                 echo "    GitHub org secrets are expired or invalid. Rotate them."
                 echo ""
