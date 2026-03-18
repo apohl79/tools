@@ -156,3 +156,4 @@ stty -ixon 2>/dev/null
 export ANTHROPIC_BASE_URL="http://localhost:9000"
 command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure >/dev/null 2>&1
 . "$HOME/.cargo/env"
+command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure 2>/dev/null
