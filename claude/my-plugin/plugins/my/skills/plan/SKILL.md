@@ -15,18 +15,18 @@ The initial idea or description is: $ARGUMENTS
 ---
 
 **Before starting Phase 1**, create a progress tasklist using the TaskCreate tool — one task per phase:
-- "Phase 1: Understand the Request"
-- "Phase 2: Interview"
-- "Phase 3: Codebase Analysis"
-- "Phase 4: Create Plan Document"
-- "Phase 4.5: Automated Plan Review"
-- "Phase 5: Review and Handoff"
+- "Understand the Request"
+- "Interview"
+- "Codebase Analysis"
+- "Create Plan Document"
+- "Automated Plan Review"
+- "Review and Handoff"
 
 ---
 
 # PHASE 1: UNDERSTAND THE REQUEST
 
-**Mark the Phase 1 task `in_progress` before starting. Mark it `completed` when done.**
+**Mark the "Understand the Request" task `in_progress` before starting. Mark it `completed` when done.**
 
 ## 1.1 Classify the work type
 
@@ -53,7 +53,7 @@ If a ticket exists, read it and extract any additional context, acceptance crite
 
 # PHASE 2: INTERVIEW
 
-**Mark the Phase 2 task `in_progress` before starting. Mark it `completed` when done.**
+**Mark the "Interview" task `in_progress` before starting. Mark it `completed` when done.**
 
 Conduct the interview using AskUserQuestion. Ask questions **one at a time** — do not batch them. Use multiple-choice options where possible to reduce friction. Always include an "Other" or free-text option.
 
@@ -122,7 +122,7 @@ After all questions:
 
 # PHASE 3: CODEBASE ANALYSIS
 
-**Mark the Phase 3 task `in_progress` before starting. Mark it `completed` when done.**
+**Mark the "Codebase Analysis" task `in_progress` before starting. Mark it `completed` when done.**
 
 Now analyze the codebase to inform the plan. Do NOT modify any files.
 
@@ -139,7 +139,7 @@ Now analyze the codebase to inform the plan. Do NOT modify any files.
 
 # PHASE 4: CREATE THE PLAN DOCUMENT
 
-**Mark the Phase 4 task `in_progress` before starting. Mark it `completed` when the plan file is written.**
+**Mark the "Create Plan Document" task `in_progress` before starting. Mark it `completed` when the plan file is written.**
 
 ## 4.1 JIRA Ticket Creation
 
@@ -252,7 +252,7 @@ Task 4 ────────────┘
 
 # PHASE 4.5: AUTOMATED PLAN REVIEW LOOP
 
-**Mark the Phase 4.5 task `in_progress` before starting. Mark it `completed` when the review passes (or after surfacing unresolved issues to the user).**
+**Mark the "Automated Plan Review" task `in_progress` before starting. Mark it `completed` when the review passes (or after surfacing unresolved issues to the user).**
 
 After writing the plan document, run an automated review loop to catch gaps before presenting it to the user. This loop runs a maximum of **3 iterations**. Track `review_attempt` starting at 1.
 
@@ -312,7 +312,7 @@ After writing the plan document, run an automated review loop to catch gaps befo
 
 # PHASE 5: REVIEW AND HANDOFF
 
-**Mark the Phase 5 task `in_progress` before starting. Mark it `completed` after handing off to the user.**
+**Mark the "Review and Handoff" task `in_progress` before starting. Mark it `completed` after handing off to the user.**
 
 1. Present a summary of the plan to the user:
    - Number of tasks

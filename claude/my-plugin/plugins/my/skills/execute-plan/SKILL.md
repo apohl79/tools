@@ -33,16 +33,8 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
 2. Update the repo (`git pull`) before starting.
 3. **UNLESS --no-worktree**: Create a git worktree for this work using the `workflows:worktree-recipe` skill. Use jira ticket $2 for the branch name. If no jira ticket was provided, use the AskUserQuestion tool to ask the user for one. Create the worktree in the repo directory under `.claude/worktrees/[repo_name]-[short_title_without_spaces]-[jira_ticket_if_available]`.
 4. If the codebase is in Python, TypeScript or Rust: note which recipe skills (production-code, test-code, true-myth) sub-agents should load — you will instruct them to do so.
-5. **Create an initial progress tasklist** using the TaskCreate tool with high-level phases only (waves will be added after Phase 2):
-   - "Phase 2: Task Decomposition"
-   - "Phase 4: Integration Testing"
-   - "Phase 5: Code Review"
-   - "Phase 6: Plan Validation"
-   - "Phase 7: Cleanup and PR"
 
 # PHASE 2: TASK DECOMPOSITION
-
-**Mark the Phase 2 task `in_progress` before starting.**
 
 Break the plan into discrete, ordered sub-tasks. For each sub-task, produce a DETAILED sub-task description that includes:
 
@@ -61,9 +53,12 @@ After producing the sub-task list, organize tasks into **execution waves** based
 
 Within each wave, tasks that touch completely different files and have no shared dependencies can run in parallel (up to 5 concurrent sub-agents). Tasks within the same wave that modify the same files or share dependencies MUST run sequentially within that wave.
 
-Present the numbered sub-task list WITH the wave grouping to the user, then immediately:
-- **Mark the Phase 2 task `completed`.**
-- **Create one TaskCreate per wave** to replace the generic Phase 3 placeholder. Use the title format: `"Phase 3 – Wave N: <N> task(s)"` (e.g. `"Phase 3 – Wave 1: 3 tasks"`, `"Phase 3 – Wave 2: 1 task"`). Create these tasks in wave order.
+Present the numbered sub-task list WITH the wave grouping to the user, then immediately create the **full progress tasklist** in order using TaskCreate — one call per item:
+1. One task per wave: `"Implementation: Wave N – <N> task(s)"` (e.g. `"Implementation: Wave 1 – 3 tasks"`, `"Implementation: Wave 2 – 1 task"`) — create all wave tasks first, in wave order
+2. `"Integration Testing"`
+3. `"Code Review"`
+4. `"Plan Validation"`
+5. `"Cleanup and PR"`
 
 Then proceed to Phase 3 without waiting for approval.
 
