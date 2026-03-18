@@ -95,15 +95,37 @@ parse_args() {
 
 # All failed check-runs for HEAD_SHA (failure OR cancelled), classified.
 # Outputs JSON: {code: [...], infra: [...]}
+# Uses --paginate to ensure ALL check-runs are returned (not just first 30).
+# If the API call fails, returns "ERROR" so callers can treat it as PENDING.
 get_classified_failures() {
     local all_failed
-    all_failed=$(gh api "repos/${OWNER}/${REPO}/commits/${HEAD_SHA}/check-runs" \
+    # NOTE: avoid jq capture() — it silently drops array elements when the regex
+    # doesn't match (returns null mid-pipeline). Use test() + ltrimstr() instead.
+    if ! all_failed=$(gh api "repos/${OWNER}/${REPO}/commits/${HEAD_SHA}/check-runs" \
+        --paginate \
         --jq '[.check_runs[] | select(
             .status == "completed"
             and .conclusion != "success"
             and .conclusion != "neutral"
             and .conclusion != "skipped"
-        ) | {name: .name, conclusion: .conclusion, details_url: .details_url, run_id: (.details_url | capture("runs/(?<id>[0-9]+)") | .id // "")}]') || all_failed="[]"
+        ) | {
+            name: .name,
+            conclusion: .conclusion,
+            details_url: (.details_url // ""),
+            run_id: ((.details_url // "") | if test("actions/runs/[0-9]+") then (split("actions/runs/")[1] | split("/")[0]) else "" end)
+        }]' 2>/dev/null); then
+        echo "ERROR"
+        return 1
+    fi
+    # Deduplicate: for each check name, keep only the entry with the "worst" conclusion.
+    # After a re-run, GitHub returns BOTH the old (failure) and new (success) check-runs.
+    # We want the latest result, so filter: if a check has ANY success, exclude its failures.
+    local success_names
+    success_names=$(gh api "repos/${OWNER}/${REPO}/commits/${HEAD_SHA}/check-runs" \
+        --paginate \
+        --jq '[.check_runs[] | select(.status == "completed" and .conclusion == "success") | .name]' 2>/dev/null || echo "[]")
+    all_failed=$(echo "$all_failed" | jq --argjson successes "$success_names" \
+        '[.[] | select(.name as $n | $successes | index($n) | not)]')
 
     # Split into code vs infra failures using bash pattern matching
     local code_failures="[]"
@@ -215,11 +237,17 @@ collect_issues() {
     local classified new_comments unresolved_threads pending_checks
     local bugbot_status
 
-    classified=$(get_classified_failures) || classified='{"code":[],"infra":[]}'
+    classified=$(get_classified_failures) || classified="ERROR"
     new_comments=$(get_new_bugbot_comments) || new_comments="[]"
     unresolved_threads=$(get_unresolved_threads) || unresolved_threads="[]"
     pending_checks=$(get_pending_checks) || pending_checks="[]"
     bugbot_status=$(get_bugbot_status) || bugbot_status="unknown"
+
+    # If the check-runs API failed, treat as PENDING (don't false-declare clean)
+    if [[ "$classified" == "ERROR" ]]; then
+        echo "PENDING"
+        return
+    fi
 
     local code_failures infra_failures
     code_failures=$(echo "$classified" | jq '.code // []')
@@ -443,7 +471,7 @@ main() {
             # Only infra failures remain — no code issues, no bugbot threads
             consecutive_clean=0
             local infra_names
-            infra_names=$(echo "$infra_json" | jq -r '.[].name' 2>/dev/null | tr '\n' ', ' | sed 's/,$//' || echo "unknown")
+            infra_names=$(echo "$infra_json" | jq -r '[.[].name] | join(", ")' 2>/dev/null || echo "unknown")
 
             if [[ "$infra_retry_count" -lt "$MAX_INFRA_RETRIES" ]]; then
                 infra_retry_count=$((infra_retry_count + 1))
