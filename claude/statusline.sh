@@ -38,7 +38,6 @@ cwd=$(echo "$input" | jq -r '.workspace.current_dir')
 # Get model and context from proxy API (direct HTTP, no CLI binary needed)
 proxy_info=""
 proxy_error=""
-via_proxy=""
 proxy_cost=""
 
 # Check proxy health first (sets proxy_reachable/proxy_error before session fetch)
@@ -98,8 +97,6 @@ if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.session' >/dev/null 2>&1
 
     # Cost from the computed field
     proxy_cost=$(echo "$proxy_info" | jq -r '.sessionCostUsd // empty')
-
-    via_proxy=true
 else
     # Proxy not available: use Claude Code's stdin data
     if [ "$MODEL_DISPLAY" = "display_name" ]; then
@@ -179,7 +176,7 @@ fi
 # --- Model (magenta) + proxy/direct indicator ---
 if [ "$ENABLE_MODEL" = "1" ] && [ -n "$model" ] && [ "$model" != "unknown" ]; then
     route=""
-    [ "$via_proxy" = "true" ] && route="\033[33m\xe2\x87\x86\033[0m"  # ⇆ yellow
+    [ "$proxy_reachable" = "true" ] && route="\033[33m\xe2\x87\x86\033[0m"  # ⇆ yellow
     [ "$proxy_error" = "1" ] && route="\033[31m\xe2\x9a\xa0\033[0m"   # ⚠ red
     parts+=("\033[35m${model}\033[0m${route}")
 fi
