@@ -143,3 +143,4 @@ Commit and push. Use a conventional commit message describing what was fixed.
 - Do NOT only check Bugbot and ignore Semgrep/SonarCloud/other checks
 - Do NOT dismiss compliance failures without investigating the logs
 - Do NOT assume a failing check is "pre-existing" without evidence from the target branch
+- Do NOT open any URLs in a browser (Playwright or WebFetch) — use `gh` CLI or the GitHub MCP tools exclusively for all GitHub operations (PR views, check logs, comments, workflow runs)
