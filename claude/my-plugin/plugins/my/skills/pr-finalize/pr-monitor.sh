@@ -16,6 +16,7 @@ MAX_CONSECUTIVE_CLEAN=3   # require N consecutive clean polls before declaring d
 MIN_BUGBOT_WAIT_SECS=360  # wait at least 6 min after last push before counting clean polls
                           # (CI takes ~2min, Bugbot analysis takes ~2-3min after CI)
 MAX_INFRA_RETRIES=3       # max times to re-run a failing infra check before giving up on it
+MAX_FIX_SESSIONS=20       # max fix sessions before giving up (prevents infinite loops)
 
 OWNER=""
 REPO=""
@@ -438,6 +439,7 @@ main() {
     local consecutive_clean=0
     local fix_count=0
     local infra_retry_count=0  # how many times we've tried to re-run infra checks
+    local seen_thread_ids=""   # space-separated list of thread IDs already attempted
 
     # Temp file for infra failure JSON passed from collect_issues
     INFRA_TMP=$(mktemp /tmp/pr-monitor-infra-XXXXX.json)
@@ -484,7 +486,7 @@ main() {
                 # Exhausted retries — exit with a clear report
                 echo ""
                 echo "╔══════════════════════════════════════════════════════════════╗"
-                echo "║  PR FINALIZATION CANNOT COMPLETE — INFRASTRUCTURE FAILURES  ║"
+                echo "║  PR FINALIZATION CANNOT COMPLETE — INFRASTRUCTURE FAILURES   ║"
                 echo "╚══════════════════════════════════════════════════════════════╝"
                 echo ""
                 echo "The following checks are failing due to INFRASTRUCTURE issues,"
@@ -533,11 +535,56 @@ main() {
             fi
 
         else
-            # Actionable code issues — launch Claude fix session
+            # Actionable code issues — check if all threads are already-seen (no-progress loop guard)
             consecutive_clean=0
+
+            # Extract current thread IDs from issues
+            local current_thread_ids
+            current_thread_ids=$(echo "$issues" | jq -r '[.unresolved_threads[]?.id // empty] | join(" ")' 2>/dev/null || echo "")
+            local has_new_threads=false
+            for tid in $current_thread_ids; do
+                if [[ " $seen_thread_ids " != *" $tid "* ]]; then
+                    has_new_threads=true
+                    break
+                fi
+            done
+
+            # Also check for failed checks or new bugbot comments (those are always actionable)
+            local has_code_issues
+            has_code_issues=$(echo "$issues" | jq '(.failed_checks | length > 0) or (.new_bugbot_comments | length > 0)' 2>/dev/null || echo "false")
+
+            if [[ "$has_new_threads" == "false" && "$has_code_issues" == "false" ]]; then
+                # All remaining issues are threads we've already attempted — avoid infinite loop
+                echo "[$(date +%H:%M:%S)] All remaining unresolved threads were already attempted. Treating as done."
+                echo "[$(date +%H:%M:%S)] Unresolved thread IDs: ${current_thread_ids:-none}"
+                finalize_summary "$fix_count" "All checks passing (some review threads may require manual resolution)"
+                exit 0
+            fi
+
+            # Enforce max fix sessions
+            if [[ $fix_count -ge $MAX_FIX_SESSIONS ]]; then
+                echo ""
+                echo "╔══════════════════════════════════════════════════════════════╗"
+                echo "║  PR FINALIZATION STOPPED — MAX FIX SESSIONS REACHED          ║"
+                echo "╚══════════════════════════════════════════════════════════════╝"
+                echo ""
+                echo "Reached maximum of ${MAX_FIX_SESSIONS} fix sessions without converging."
+                echo "Remaining issues:"
+                echo "$issues" | jq .
+                finalize_summary "$fix_count" "BLOCKED — max fix sessions (${MAX_FIX_SESSIONS}) reached without converging"
+                exit 3
+            fi
+
             fix_count=$((fix_count + 1))
             echo "[$(date +%H:%M:%S)] Issues found — launching fix session #${fix_count}"
             launch_fix_session "$issues" "$fix_count"
+
+            # Record thread IDs we just attempted so we don't re-trigger on them
+            for tid in $current_thread_ids; do
+                if [[ " $seen_thread_ids " != *" $tid "* ]]; then
+                    seen_thread_ids="$seen_thread_ids $tid"
+                fi
+            done
 
             # Update HEAD SHA and push timestamp after fix
             local new_sha
@@ -547,6 +594,8 @@ main() {
                 PUSH_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
                 LAST_PUSH_EPOCH=$(date +%s)
                 infra_retry_count=0  # reset infra retries after a code push
+                # Reset seen threads when code changes — new threads may be different
+                seen_thread_ids=""
                 echo "[$(date +%H:%M:%S)] Fix pushed. Will wait ${MIN_BUGBOT_WAIT_SECS}s for Bugbot before counting clean polls."
             fi
         fi
