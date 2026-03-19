@@ -30,6 +30,7 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
      d. If exactly one unexecuted plan is found, proceed with it automatically (announce which file you chose).
      e. If none are found, ask the user to provide a plan path.
    - Read the chosen plan document fully and understand all tasks, their dependencies, and their order.
+   - **Detect the plan type** from the `**Type:**` header field. If the type is `Deployment / Infra change` or `Research`, set `SKIP_CODE_REVIEW=true` and `SKIP_PR=true` for the rest of execution.
 2. Update the repo (`git pull`) before starting.
 3. **UNLESS --no-worktree**: Create a git worktree for this work using the `workflows:worktree-recipe` skill. Use jira ticket $2 for the branch name. If no jira ticket was provided, use the AskUserQuestion tool to ask the user for one. Create the worktree in the repo directory under `.claude/worktrees/[repo_name]-[short_title_without_spaces]-[jira_ticket_if_available]`.
 4. If the codebase is in Python, TypeScript or Rust: note which recipe skills (production-code, test-code, true-myth) sub-agents should load — you will instruct them to do so.
@@ -123,11 +124,13 @@ If any sub-tasks had "tests deferred to integration test task", create a dedicat
 
 4. Delete the temporary file.
 
-# PHASE 5: CODE REVIEW LOOP (MANDATORY — DO NOT SKIP)
+# PHASE 5: CODE REVIEW LOOP (MANDATORY — except for Deployment/Infra and Research plans)
 
-**Mark the Phase 5 task `in_progress` before starting. Mark it `completed` when the loop exits clean.**
+**Mark the Code Review task `in_progress` before starting. Mark it `completed` when the loop exits clean.**
 
-**THIS PHASE IS MANDATORY. You MUST execute Phase 5 before proceeding to Phase 6 or Phase 7. Skipping this phase is a BLOCKING violation — under NO circumstances may you proceed to Phase 6 or Phase 7 without completing Phase 5 first. There are NO exceptions, regardless of time pressure, context length, or how confident you are in the code quality.**
+**If `SKIP_CODE_REVIEW=true` (plan type is `Deployment / Infra change` or `Research`): mark the task `completed` immediately and skip to Phase 6.**
+
+**Otherwise, THIS PHASE IS MANDATORY. You MUST execute Phase 5 before proceeding to Phase 6 or Phase 7. Skipping this phase is a BLOCKING violation — under NO circumstances may you proceed to Phase 6 or Phase 7 without completing Phase 5 first. There are NO exceptions, regardless of time pressure, context length, or how confident you are in the code quality.**
 
 After all implementation and integration testing is complete, run a code-review loop. The loop repeats until BOTH reviewers return no CRITICAL or IMPORTANT findings. Track `review_attempt` starting at 1.
 
@@ -250,9 +253,10 @@ Validate that the ENTIRE plan has been implemented correctly according to its sp
 1. Verify ALL temporary `.tmp-subtask-*.md` files are deleted. If any remain, delete them now.
 1a. **Mark the plan as executed**: if the plan file is in `.claude/plans/`, update its header by replacing `**Executed:** [ ]` with `**Executed:** [x]`.
 2. Run the full build, lint, and test pipeline one final time. Fix any issues.
-3. **UNLESS --no-pr**: Commit all changes with a meaningful commit message referencing jira ticket $2.
-4. **UNLESS --no-pr**: Push the branch and create a DRAFT PR using `gh pr create --draft`. The PR title must include the jira ticket. The PR body should summarize what was implemented, organized by sub-task. If there were unresolved gaps from Phase 6, include them in a "Known Gaps" section of the PR body.
-5. **UNLESS --draft-pr**: Mark the PR ready and run the `my:pr-finalize` skill to finalize it. **This step is NOT optional. If the user did not pass `--draft-pr`, you MUST invoke `my:pr-finalize`. Do NOT skip it, forget it, or rationalize that the PR is "already done". The PR is NOT done until `my:pr-finalize` has run.**
+3. **UNLESS --no-pr or `SKIP_PR=true`**: Commit all changes with a meaningful commit message referencing jira ticket $2.
+4. **UNLESS --no-pr or `SKIP_PR=true`**: Push the branch and create a DRAFT PR using `gh pr create --draft`. The PR title must include the jira ticket. The PR body should summarize what was implemented, organized by sub-task. If there were unresolved gaps from Phase 6, include them in a "Known Gaps" section of the PR body.
+   - **If `SKIP_PR=true`** (Deployment/Infra or Research plan): skip PR creation. Instead, summarize the completed work to the user directly and note any output artifacts (docs, config files, analysis).
+5. **UNLESS --draft-pr or `SKIP_PR=true`**: Mark the PR ready and run the `my:pr-finalize` skill to finalize it. **This step is NOT optional. If the user did not pass `--draft-pr`, you MUST invoke `my:pr-finalize`. Do NOT skip it, forget it, or rationalize that the PR is "already done". The PR is NOT done until `my:pr-finalize` has run.**
 
    **PR FINALIZATION COMPLETION RULE (NON-NEGOTIABLE):**
    The `my:pr-finalize` skill runs a check-and-fix loop that polls for Bugbot completion and review comments. You MUST NOT consider the PR finalized, print the execution summary, or end your work until ALL of the following are confirmed true:
@@ -276,7 +280,7 @@ Validate that the ENTIRE plan has been implemented correctly according to its sp
 - Always clean up temporary files before creating the PR.
 - If a sub-agent's work is unsatisfactory, you may re-run it with a corrected sub-task description, but do NOT take over and write the code yourself.
 - The validation loop (Phase 6) runs a MAXIMUM of 5 times. After 5 failed attempts, report to the user and let them decide.
-- **MANDATORY PHASE ORDERING: Phases MUST execute in strict order: 1 → 2 → 3 → 4 → 5 → 6 → 7. You MUST NOT skip Phase 5 (Code Review Loop) or Phase 6 (Plan Validation). These review phases are NON-NEGOTIABLE prerequisites for Phase 7 (PR creation). Proceeding to Phase 7 without completing both Phase 5 AND Phase 6 is a critical workflow violation. No exceptions — not for time, context length, confidence level, or any other reason.**
+- **MANDATORY PHASE ORDERING: Phases MUST execute in strict order: 1 → 2 → 3 → 4 → 5 → 6 → 7. Phase 5 (Code Review Loop) MAY be skipped only when `SKIP_CODE_REVIEW=true` (plan type is Deployment/Infra or Research). PR creation in Phase 7 MAY be skipped when `SKIP_PR=true`. In all other cases these are NON-NEGOTIABLE prerequisites. No other exceptions — not for time, context length, or confidence.**
 - **NO SELF-VALIDATION: The orchestrator MUST NOT perform validation checks itself. Phase 5 (Code Review Loop) and Phase 6 (Plan Validation) MUST each launch dedicated sub-agents via the Agent tool. "Doing it myself because it's faster/simpler/straightforward" is explicitly forbidden. The whole point of these phases is independent verification by separate agents with fresh context.**
 - **CODE REVIEW LOOP MUST CONVERGE: Phase 5 loops until BOTH reviewers (recipe sub-agent and Codex, if available) return zero CRITICAL or IMPORTANT findings in the same iteration. Finding fixes in iteration N do NOT count as a clean pass — a new review iteration must confirm they are resolved. Do NOT exit the loop after fixing — always re-review.**
 - **NO SKIPPING PR FINALIZATION: Unless `--draft-pr` was explicitly passed, Phase 7 step 5 MUST invoke `my:pr-finalize` via the Skill tool after marking the PR ready. The PR is incomplete without finalization. Do NOT stop at "PR created" or "PR marked ready" — you MUST run the finalize skill. Forgetting this step means the PR is unfinished.**

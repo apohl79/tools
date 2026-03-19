@@ -35,6 +35,8 @@ Based on the user's input ($ARGUMENTS), determine if this is:
 - **Bug fix** — something broken that needs fixing
 - **Investigation** — research or spike to understand a problem
 - **Refactoring** — restructuring without behavior change
+- **Deployment / Infra change** — infrastructure, config, CI/CD, Terraform, Helm, Kubernetes, or deployment changes with no application code changes
+- **Research** — open-ended exploration, analysis, or technical discovery producing a written output (no code changes)
 
 State your classification and proceed accordingly. The interview questions differ by type.
 
@@ -111,6 +113,28 @@ Only ask these if the work type is **Investigation**:
 8. **Time box**: "How much effort should this investigation take?"
    - Options: "Quick (1-2 hours)", "Medium (half day)", "Deep dive (1+ day)", "Other"
 
+## 2.5 Deployment / Infra-specific Questions
+
+Only ask these if the work type is **Deployment / Infra change**:
+
+6. **Target environment(s)**: "Which environments does this affect?"
+   - Options: "Dev only", "Staging", "Production", "All environments", "Other"
+7. **Rollback plan**: "What's the rollback strategy if something goes wrong?"
+   - Options: "Revert the config/commit", "Feature flag / toggle", "Manual rollback steps", "No rollback needed", "Other"
+8. **Downtime**: "Does this change require downtime or cause service disruption?"
+   - Options: "No downtime", "Brief restart", "Rolling update", "Maintenance window required", "Other"
+
+## 2.6 Research-specific Questions
+
+Only ask these if the work type is **Research**:
+
+6. **Research question**: "What specific question should this research answer?"
+7. **Deliverable**: "What is the expected output?"
+   - Options: "Written analysis / doc", "ADR (Architecture Decision Record)", "Proof of concept", "Recommendation with trade-offs", "Other"
+8. **Time box**: "How much effort should this research take?"
+   - Options: "Quick (1-2 hours)", "Medium (half day)", "Deep dive (1+ day)", "Other"
+9. **Success criteria**: "How will you know the research is done?"
+
 ## 2.5 Final check
 
 After all questions:
@@ -158,9 +182,10 @@ The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 # <Title> Implementation Plan
 
 **Goal:** <One sentence from interview>
+**Type:** <Feature | Bug fix | Investigation | Refactoring | Deployment / Infra change | Research>
 **JIRA:** <TICKET-123 or "none">
 **Tech Stack:** <detected stack>
-**Code Standards:** <list recipe skill names to load>
+**Code Standards:** <list recipe skill names to load, or "n/a" for Deployment/Research>
 **Executed:** [ ]
 
 ---
