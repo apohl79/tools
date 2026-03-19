@@ -444,14 +444,18 @@ launch_fix_session() {
         # Watchdog: kill claude if no output arrives within startup timeout
         (sleep "$FIX_STARTUP_TIMEOUT_SECS" && kill "$claude_pid" 2>/dev/null && echo "WATCHDOG_FIRED" > "${fifo}.timeout") &
         local watchdog_pid=$!
+        disown "$watchdog_pid"  # remove from job table so bash doesn't print "Terminated" on kill
 
-        # Read from fifo; kill watchdog on first line
-        local first_line=true
+        # Read from fifo; kill watchdog on first line.
+        # NOTE: the while loop runs in a pipeline subshell, so variable writes
+        # don't propagate to the parent.  Use the watchdog's own sentinel file
+        # (written only when the watchdog actually fires) to detect timeouts.
         exit_code=0
         {
+            local cancelled_watchdog=false
             while IFS= read -r line; do
-                if [[ "$first_line" == "true" ]]; then
-                    first_line=false
+                if [[ "$cancelled_watchdog" == "false" ]]; then
+                    cancelled_watchdog=true
                     kill "$watchdog_pid" 2>/dev/null  # cancel startup timeout
                 fi
                 echo "$line"
@@ -460,12 +464,13 @@ launch_fix_session() {
 
         wait "$claude_pid" 2>/dev/null || true
         kill "$watchdog_pid" 2>/dev/null || true
-        rm -f "$fifo" "${fifo}.timeout"
 
-        # If watchdog fired (claude produced no output), treat as startup timeout
-        if [[ "$first_line" == "true" ]]; then
+        # Watchdog writes this file only when it fires (sleep completed → no output).
+        # If it doesn't exist, the session produced output and we killed the watchdog.
+        if [[ -f "${fifo}.timeout" ]]; then
             timed_out=1
         fi
+        rm -f "$fifo" "${fifo}.timeout"
 
         if [[ $timed_out -eq 1 ]]; then
             echo "  [timeout] Fix session ${attempt_label}: no output in ${FIX_STARTUP_TIMEOUT_SECS}s"
