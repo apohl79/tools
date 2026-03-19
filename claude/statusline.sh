@@ -163,8 +163,16 @@ if [ "$ENABLE_GIT" = "1" ] && git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1;
     else
         dirty=""
     fi
+    # Detect worktree: git-dir differs from git-common-dir
+    git_dir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)
+    git_common_dir=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+    if [ -n "$git_dir" ] && [ -n "$git_common_dir" ] && [ "$git_dir" != "$git_common_dir" ]; then
+        worktree_indicator=" \033[38;5;172m⎇\033[0m"  # orange ⎇
+    else
+        worktree_indicator=""
+    fi
     git_info="${branch}${dirty}"
-    [ -n "$git_info" ] && parts+=("\033[32m${git_info}\033[0m")
+    [ -n "$git_info" ] && parts+=("\033[32m${git_info}\033[0m${worktree_indicator}")
 fi
 
 # --- Agent name (italic cyan) ---
