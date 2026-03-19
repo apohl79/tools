@@ -146,12 +146,27 @@ sep="\033[38;5;240m\xe2\x8f\xba\033[0m"
 # Collect visible parts — separators are only rendered between non-empty entries
 parts=()
 
+# Detect worktree once (used by both DIR and GIT sections)
+git_dir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)
+git_common_dir=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+if [ -n "$git_dir" ] && [ -n "$git_common_dir" ] && [ "$git_dir" != "$git_common_dir" ]; then
+    is_worktree=1
+else
+    is_worktree=0
+fi
+
 # --- Directory (blue) ---
 if [ "$ENABLE_DIR" = "1" ]; then
     # Resolve main repo root for worktrees (git --git-common-dir points to main .git)
     repo_root=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null | sed 's|/.git$||')
     dir=$(basename "${repo_root:-$cwd}")
-    [ -n "$dir" ] && parts+=("\033[34m${dir}\033[0m")
+    if [ -n "$dir" ]; then
+        if [ "$is_worktree" = "1" ]; then
+            parts+=("\033[34m${dir}\033[38;5;215m⧉\033[0m")  # light orange ⧉
+        else
+            parts+=("\033[34m${dir}\033[0m")
+        fi
+    fi
 fi
 
 # --- Git info (green) ---
@@ -163,16 +178,8 @@ if [ "$ENABLE_GIT" = "1" ] && git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1;
     else
         dirty=""
     fi
-    # Detect worktree: git-dir differs from git-common-dir
-    git_dir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null)
-    git_common_dir=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-    if [ -n "$git_dir" ] && [ -n "$git_common_dir" ] && [ "$git_dir" != "$git_common_dir" ]; then
-        worktree_indicator=" \033[38;5;172m⎇\033[0m"  # orange ⎇
-    else
-        worktree_indicator=""
-    fi
     git_info="${branch}${dirty}"
-    [ -n "$git_info" ] && parts+=("\033[32m${git_info}\033[0m${worktree_indicator}")
+    [ -n "$git_info" ] && parts+=("\033[32m${git_info}\033[0m")
 fi
 
 # --- Agent name (italic cyan) ---
