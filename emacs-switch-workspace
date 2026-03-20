@@ -26,4 +26,11 @@ tab_id=$(wezterm cli list --format json 2>/dev/null \
   | jq -r '[.[] | select(.title == "emacs")] | first | .tab_id // empty' 2>/dev/null)
 [ -n "$tab_id" ] && wezterm cli activate-tab --tab-id "$tab_id" 2>/dev/null
 
-$bin/emacsclient -e "(my/switch-to-workspace-for-directory \"$dir\")" >/dev/null 2>&1
+$bin/emacsclient -e "
+(let* ((dir \"$dir/\")
+       (proj (cl-find-if
+              (lambda (name)
+                (let ((pdir (projects-dir name)))
+                  (and pdir (string-prefix-p pdir dir))))
+              (projects-names-mru))))
+  (when proj (projects-switch proj)))" >/dev/null 2>&1

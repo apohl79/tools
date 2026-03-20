@@ -609,7 +609,21 @@ the window is in copy-mode (user is scrolling) or only height changed."
             (when (and w-changed
                        (boundp 'vterm--term) vterm--term
                        (not (bound-and-true-p vterm-copy-mode)))
-              (vterm--set-size vterm--term height width))))))))
+              (condition-case nil
+                  (vterm--set-size vterm--term height width)
+                (buffer-read-only
+                 ;; Buffer read-only at resize time (vterm still initializing);
+                 ;; retry after 5s when it should be writable.
+                 (let ((buf (current-buffer))
+                       (h height) (w width))
+                   (run-with-timer
+                    5 nil
+                    (lambda ()
+                      (when (buffer-live-p buf)
+                        (with-current-buffer buf
+                          (condition-case nil
+                              (vterm--set-size vterm--term h w)
+                            (error nil))))))))))))))))
 
 (defun my/vterm-resize-all-on-size-change (frame)
   "Resize every vterm window in FRAME after a window size change."
@@ -633,146 +647,43 @@ explicit hook that resizes every visible vterm window independently."
   (remove-hook 'window-size-change-functions #'my/vterm-resize-all-on-size-change)
   (add-hook    'window-size-change-functions #'my/vterm-resize-all-on-size-change))
 
-;; Dashboard workspace widget with sorting by last usage
+;; Dashboard project widget — uses projects.el instead of persp-mode
 (defun my/doom-dashboard-widget-projects ()
-  "Custom widget to show all workspaces/projects as clickable buttons, sorted by last usage."
-  (when (modulep! :ui workspaces)
-    (let* ((workspaces (persp-names))
-           (content-width 75) ; Fixed width for consistent alignment (use most of 80 chars)
-           ;; Sort workspaces by last switch time (most recent first), excluding nil workspace
-           (sorted-workspaces
-            (sort (delq persp-nil-name (copy-sequence workspaces))
-                  (lambda (a b)
-                    (let* ((persp-a (persp-get-by-name a))
-                           (persp-b (persp-get-by-name b))
-                           (time-a (or (and persp-a (persp-parameter 'persp-last-switch-time persp-a)) 0))
-                           (time-b (or (and persp-b (persp-parameter 'persp-last-switch-time persp-b)) 0)))
-                      (time-less-p time-b time-a)))))) ; Sort descending (most recent first)
-      (when sorted-workspaces
+  "Custom widget showing all projects as clickable buttons, sorted by last usage."
+  (when (fboundp 'projects-names-mru)
+    (let* ((names (projects-names-mru))
+           (content-width 75))
+      (when names
         (insert "\n")
-        ;; Center the title using doom's centering function
         (insert (+doom-dashboard--center
                  +doom-dashboard--width
-                 (propertize "Workspaces:" 'face 'doom-dashboard-menu-title)))
+                 (propertize "Projects:" 'face 'doom-dashboard-menu-title)))
         (insert "\n\n")
-        (dolist (workspace sorted-workspaces)
-            ;; Get the project directory for this workspace
-            (let* ((persp (persp-get-by-name workspace))
-                   (workspace-name workspace) ; Capture for closure
-                   (project-dir (when persp
-                                  ;; Try to get project root from workspace buffers
-                                  (let ((buffers (persp-buffers persp)))
-                                    (catch 'found
-                                      (dolist (buf buffers)
-                                        (when-let ((root (ignore-errors
-                                                          (with-current-buffer buf
-                                                            (and (buffer-file-name)
-                                                                 (projectile-project-root))))))
-                                          ;(message "DEBUG: %s: Found project root %s from buffer %s" workspace-name root (buffer-name buf))
-                                          (throw 'found (abbreviate-file-name root))))))))
-                   (project-dir-display (or project-dir ""))
-                   ;; Calculate spacing to right-align the path within content-width
-                   (spacing (max 1 (- content-width (length workspace) (length project-dir-display)))))
-              ;; Center and insert the line
-              (insert
-               (+doom-dashboard--center
-                +doom-dashboard--width
-                (with-temp-buffer
-                  ;; Insert workspace name as button with workspace stored as property
-                  (insert-text-button workspace
-                                      'workspace-name workspace-name
-                                      'action (lambda (button)
-                                                 ;; Get workspace name from button property
-                                                 (let ((ws (button-get button 'workspace-name)))
-                                                   ;; Quit dashboard window first
-                                                   (let ((dashboard-window (get-buffer-window +doom-dashboard-name)))
-                                                     (when dashboard-window
-                                                       (with-selected-window dashboard-window
-                                                         (quit-window t))))
-                                                   ;; Then switch workspace
-                                                   (+workspace-switch ws t)))
-                                      'follow-link t
-                                      'face 'doom-dashboard-menu-desc
-                                      'mouse-face 'doom-dashboard-menu-title
-                                      'help-echo (format "Switch to workspace: %s → %s" workspace-name project-dir-display))
-                  ;; Add spacing
-                  (insert (make-string spacing ?\s))
-                  ;; Add path with same color as "Doom loaded..." text
-                  (let ((start (point)))
-                    (insert project-dir-display)
-                    (add-text-properties start (point) '(face (:foreground "#51606E"))))
-                  (buffer-string))))
-              (insert "\n")))))))
-
-(defun my/update-workspace-switch-time (&rest _)
-  "Update the last switch time for the current workspace."
-  (when (and (bound-and-true-p persp-mode)
-             (get-current-persp))
-    (set-persp-parameter 'persp-last-switch-time (float-time) (get-current-persp))))
-
-(defun my/workspace-switch-to-mru ()
-  "Switch to a workspace, with candidates sorted by most recently used."
-  (interactive)
-  (let* ((names (cl-remove persp-nil-name (copy-sequence persp-names-cache) :count 1))
-         (current (+workspace-current-name))
-         ;; Remove current workspace - no point switching to where we already are
-         (candidates (remove current names))
-         ;; Sort by last switch time (most recent first)
-         (sorted (sort candidates
-                       (lambda (a b)
-                         (let* ((pa (persp-get-by-name a))
-                                (pb (persp-get-by-name b))
-                                (ta (or (and pa (persp-parameter 'persp-last-switch-time pa)) 0))
-                                (tb (or (and pb (persp-parameter 'persp-last-switch-time pb)) 0)))
-                           (time-less-p tb ta)))))
-         (_ (when (null sorted) (user-error "No other workspaces to switch to")))
-         (choice (completing-read "Switch to workspace: "
-                                  (lambda (str pred action)
-                                    (if (eq action 'metadata)
-                                        '(metadata (display-sort-function . identity)
-                                                   (cycle-sort-function . identity))
-                                      (complete-with-action action sorted str pred)))
-                                  nil t)))
-    (when (and choice (not (string-empty-p choice)))
-      (+workspace-switch choice t)
-      (+workspace/display))))
-
-;; Extract MRU sorting (pattern already exists in my/workspace-switch-to-mru)
-(defun my/workspace-names-mru-sorted ()
-  "Return workspace names sorted by last switch time, most recent first."
-  (when (bound-and-true-p persp-mode)
-    (let ((names (cl-remove persp-nil-name (copy-sequence persp-names-cache) :count 1)))
-      (sort names
-            (lambda (a b)
-              (let* ((pa (persp-get-by-name a))
-                     (pb (persp-get-by-name b))
-                     (ta (or (and pa (persp-parameter 'persp-last-switch-time pa)) 0))
-                     (tb (or (and pb (persp-parameter 'persp-last-switch-time pb)) 0)))
-                (time-less-p tb ta)))))))
-
-;; tab-bar format function: returns menu-item list for clickable workspace tabs
-(defun my/tab-bar-workspaces ()
-  "Format function for `tab-bar-format': renders persp-mode workspaces MRU-sorted."
-  (when (bound-and-true-p persp-mode)
-    (let ((current (+workspace-current-name))
-          (workspaces (my/workspace-names-mru-sorted)))
-      (mapcar
-       (lambda (name)
-         (let ((face (if (equal name current)
-                         'my/workspace-tab-active
-                       'my/workspace-tab-inactive)))
-           `(,(intern (concat "ws-" name))
-             menu-item
-             ,(propertize (format " %s " name) 'face face)
-             (lambda () (interactive) (+workspace-switch ,name t))
-             :help ,(format "Switch to workspace: %s" name))))
-       workspaces))))
-
-;; Refresh hook for tab-bar workspace display
-(defun my/workspace-bar-refresh (&rest _)
-  "Force tab-bar redraw after workspace state changes."
-  (when (bound-and-true-p tab-bar-mode)
-    (force-mode-line-update t)))
+        (dolist (name names)
+          (let* ((dir (or (projects-dir name) ""))
+                 (dir-display (abbreviate-file-name dir))
+                 (spacing (max 1 (- content-width (length name) (length dir-display))))
+                 (captured-name name))
+            (insert
+             (+doom-dashboard--center
+              +doom-dashboard--width
+              (with-temp-buffer
+                (insert-text-button
+                 name
+                 'action (lambda (_button)
+                           (let ((win (get-buffer-window +doom-dashboard-name)))
+                             (when win
+                               (with-selected-window win
+                                 (quit-window t))))
+                           (projects-switch captured-name t))
+                 'follow-link t
+                 'face 'doom-dashboard-menu-desc
+                 'mouse-face 'doom-dashboard-menu-title
+                 'help-echo (format "Switch to project: %s → %s" name dir-display))
+                (insert (make-string spacing ?\s))
+                (insert (propertize dir-display 'face 'font-lock-comment-face))
+                (buffer-string))))
+            (insert "\n")))))))
 
 ;; Frame geometry persistence
 (defvar my/frame-geometry-file "~/.config/emacs/frame-geometry"
@@ -928,41 +839,6 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
                 (vterm--window-adjust-process-window-size process (list window))))
             (vterm-reset-cursor-point))))))))
 
-(defun my/switch-to-workspace-for-directory (dir)
-  "Switch to the workspace whose project root contains DIR.
-Workspaces are checked in MRU order (most recently used first).
-Returns the workspace name if found and switched, nil otherwise."
-  (when (and (bound-and-true-p persp-mode)
-             dir
-             (not (string-empty-p dir)))
-    (let* ((target-dir (file-name-as-directory (expand-file-name dir)))
-           (names (cl-remove persp-nil-name (copy-sequence persp-names-cache) :count 1))
-           (sorted (sort names
-                         (lambda (a b)
-                           (let* ((pa (persp-get-by-name a))
-                                  (pb (persp-get-by-name b))
-                                  (ta (or (and pa (persp-parameter 'persp-last-switch-time pa)) 0))
-                                  (tb (or (and pb (persp-parameter 'persp-last-switch-time pb)) 0)))
-                             (time-less-p tb ta))))))
-      (catch 'found
-        (dolist (ws-name sorted)
-          (let* ((persp (persp-get-by-name ws-name))
-                 (project-root
-                  (when persp
-                    (catch 'root
-                      (dolist (buf (persp-buffers persp))
-                        (when (buffer-live-p buf)
-                          (when-let ((root (ignore-errors
-                                            (with-current-buffer buf
-                                              (and (buffer-file-name)
-                                                   (projectile-project-root))))))
-                            (throw 'root (file-name-as-directory (expand-file-name root))))))))))
-            (when (and project-root
-                       (string-prefix-p project-root target-dir))
-              (+workspace-switch ws-name t)
-              (select-frame-set-input-focus (selected-frame))
-              (throw 'found ws-name))))))))
-
 ;;; ---------------------------------------------------------------------------
 ;;; Frame / session
 ;;; ---------------------------------------------------------------------------
@@ -973,7 +849,7 @@ Removes itself from `after-make-frame-functions' after the first call."
   (remove-hook 'after-make-frame-functions #'my/restore-session-on-first-frame)
   (select-frame-set-input-focus frame)
   (unless (cl-some #'buffer-file-name (buffer-list))
-    (my/quickload-session)))
+    (projects-restore)))
 
 (defun my/setup-terminal-frame (frame)
   "Configure terminal frame for proper Unicode/icon display and key decoding."

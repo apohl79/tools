@@ -10,8 +10,6 @@
 ;(package! some-package)
 (package! protobuf-mode)
 (package! platformio-mode)
-;(package! gptel)
-;(package! elysium)
 (package! org-modern)
 (package! ob-typescript)
 
@@ -47,10 +45,8 @@
 (package! kubernetes)
 
 ;; db support
-(package! ejc-sql)
 (package! auto-complete)
 (package! pg :recipe (:host github :repo "emarsden/pg-el"))
-(package! pgmacs :recipe (:host github :repo "emarsden/pgmacs"))
 
 (package! eat :recipe (:host codeberg
                         :repo "akib/emacs-eat"
@@ -68,6 +64,9 @@
                                 :branch "main"
                                 :depth 1
                                 :files ("*.el" (:exclude "images/*"))))
+
+;; Replace Doom's workspace system with our custom projects system
+(package! persp-mode :disable t)
 
 ;; Highlight active buffer by dimming inactive ones
 (package! dimmer)

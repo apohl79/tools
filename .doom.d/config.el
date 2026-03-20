@@ -6,6 +6,9 @@
 (setq user-full-name "Andreas Pohl"
       user-mail-address "pohl@e47.org")
 
+;; Load custom projects system (replaces persp-mode/workspaces)
+(load! "projects")
+
 ;; Restore frame geometry and font size from last session
 (add-hook 'doom-init-ui-hook #'my/restore-frame-geometry)
 
@@ -22,7 +25,9 @@
   (add-hook 'doom-after-init-hook
             (lambda ()
               (unless (cl-some #'buffer-file-name (buffer-list))
-                (my/quickload-session)))))
+                ;; Use a 0-second timer so Emacs returns to the event loop first
+                ;; (frame must be painted before the loading screen can appear)
+                (run-with-timer 0 nil #'projects-restore)))))
 
 ;; Ensure proper terminal setup for emacsclient frames (defined in +functions.el).
 (add-hook 'after-make-frame-functions #'my/setup-terminal-frame)
@@ -79,8 +84,6 @@
         my/doom-dashboard-widget-projects
         doom-dashboard-widget-loaded))
 
-;; Track last workspace switch time for sorting (function defined in +functions.el)
-(add-hook 'persp-activated-functions #'my/update-workspace-switch-time)
 
 ;; Disable line numbers in dashboard - multiple approaches for reliability
 (add-hook '+doom-dashboard-mode-hook
@@ -93,31 +96,6 @@
             (display-line-numbers-mode -1)
             (setq-local display-line-numbers nil)))
 
-;; Don't create a new workspace for emacsclient frames — share the current one
-(after! persp-mode
-  (setq persp-emacsclient-init-frame-behaviour-override -1)
-  ;; Disable persp-mode's built-in auto-save (unreliable in daemon mode)
-  (setq persp-auto-save-opt 0
-        persp-auto-save-num-of-backups 2)
-
-  ;; Our own periodic auto-save timer (every 5 minutes)
-  (run-with-timer 300 300
-    (lambda ()
-      (when (bound-and-true-p persp-mode)
-        (let ((inhibit-message t))
-          (persp-save-state-to-file)))))
-
-  ;; Save workspaces when the last client frame closes
-  (add-hook 'delete-frame-functions
-    (lambda (_frame)
-      (when (and (bound-and-true-p persp-mode)
-                 (daemonp)
-                 (<= (length (filtered-frame-list
-                              (lambda (f) (not (frame-parameter f 'parent-frame)))))
-                     2))
-        (let ((inhibit-message t))
-          (persp-save-state-to-file))))))
-
 ;; Workspace tab bar faces (defined in +functions.el)
 ;; Theme-aware colors (`:height` is ignored in TTY, which is fine)
 (add-hook 'doom-load-theme-hook
@@ -128,35 +106,15 @@
     (set-face-attribute 'my/workspace-tab-inactive nil
                         :background (doom-darken (doom-color 'bg-alt) 0.2) :foreground (doom-color 'fg-alt))))
 
-;; Workspace bar via tab-bar-mode
-(after! persp-mode
-  ;; Return a stub so Doom's tab-bar save/restore sees nothing interesting
-  (setq tab-bar-tabs-function
-        (lambda (&optional _frame)
-          (list (list 'current-tab (cons 'name (+workspace-current-name)) (cons 'explicit-name t)))))
-
-  ;; Disable native tab-bar UI elements and keybindings
-  (setq tab-bar-define-keys nil
-        tab-bar-close-button-show nil
+;; Projects tab-bar integration
+;; Uses my/workspace-tab-active / my/workspace-tab-inactive faces (defined in +functions.el)
+(after! projects
+  (setq tab-bar-close-button-show nil
         tab-bar-new-button-show nil
         tab-bar-show t
-        tab-bar-format '(my/tab-bar-workspaces))
-
-  ;; Enable tab-bar-mode first, so Doom's integration hook fires and adds its hooks
+        tab-bar-format '(projects--tab-bar-format))
   (tab-bar-mode 1)
-
-  ;; Now remove Doom's native tab save/restore per workspace
-  ;; (added by +workspaces-set-up-tab-bar-integration-h when tab-bar-mode starts)
-  (remove-hook 'persp-before-deactivate-functions #'+workspaces-save-tab-bar-data-h)
-  (remove-hook 'persp-activated-functions #'+workspaces-load-tab-bar-data-h)
-
-  ;; Refresh on workspace changes
-  (add-hook 'persp-activated-functions #'my/workspace-bar-refresh)
-  (add-hook 'persp-created-functions #'my/workspace-bar-refresh)
-  (add-hook 'persp-before-kill-functions
-            (lambda (&rest _)
-              (run-at-time 0 nil #'my/workspace-bar-refresh)))
-  (add-hook 'persp-renamed-functions #'my/workspace-bar-refresh))
+  (add-hook 'projects-switch-hook #'projects--tab-bar-refresh))
 
 (message "*** General / Org")
 
@@ -287,7 +245,6 @@
  ;; miscellaneous
  "M-s <up>" #'comint-previous-input
  "M-s <down>" #'comint-next-input
- "C-c w Q" #'my/quickload-session
 
  ;; mode specific
  :map (prog-mode-map)
@@ -310,11 +267,6 @@
  ;"<down>" #'lsp-bridge-peek-list-next-line
  :map python-ts-mode-map
  "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
- :map gptel-mode-map
- "C-c RET" #'gptel-menu
- "C-<return>" #'gptel-send
- "C-<up>" #'gptel-beginning-of-response
- "C-<down>" #'gptel-end-of-response
  :map vterm-mode-map
  "C-c C-c" #'vterm-send-C-c
  "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
@@ -330,11 +282,31 @@
  :map org-msg-edit-mode-map
  "C-c C-c" #'my/org-msg-ctrl-c-ctrl-c
 
- ;; workspace switching (MRU sorted)
+ ;; Projects system keybindings — uses :leader so both SPC w and C-c w work.
  :leader
- (:prefix ("w" . "workspaces")
-  :desc "Switch workspace (MRU)" "w" #'my/workspace-switch-to-mru)
+ (:prefix ("w" . "projects")
+  :desc "Switch project (MRU)"      "w" #'projects-switch
+  :desc "New project"                "n" #'projects-create
+  :desc "Rename project"             "r" #'projects-rename
+  :desc "Delete project"             "k" #'projects-delete
+  :desc "Move buffer to project"     "m" #'projects-move-buffer
+  :desc "Switch buffer in project"   "b" #'projects-switch-buffer
+  :desc "Save projects state"        "s" #'projects-save
+  :desc "Restore projects session"   "R" #'projects-restore
+  :desc "Restore projects session"   "l" #'projects-restore
+  :desc "Restore projects session"   "L" #'projects-restore
+  :desc "Save projects state"        "a" #'projects-save
+  :desc "Project info buffer"        "i" #'projects-show-info)
  )
+
+;; Remove leftover Doom workspace/winner bindings from the w prefix
+(after! winner
+  (undefine-key! :keymaps 'doom-leader-map "w u" "w U"))
+(after! doom-keybinds
+  (undefine-key! :keymaps 'doom-leader-map "w TAB"))
+
+;; Override C-x b to use project-aware buffer switching
+(map! "C-x b" #'projects-switch-buffer)
 
 (after! treemacs
   (treemacs-define-RET-action 'file-node-closed #'treemacs-visit-node-ace)
@@ -576,15 +548,11 @@
 ;  :after org
 ;  :hook (org-mode . mixed-pitch-mode))
 
-(use-package! pgmacs
-  :config
-  (set-face-attribute 'pgmacs-table-data nil :foreground "gray")
-  (set-face-attribute 'pgmacs-column-foreign-key nil :foreground "orange")
-  (setq pgmacs-row-colors '("#1D252C" "#181E24")
-        pgmacs-deleted-color "#B93448")
-  )
-
 (after! ibuffer
+  ;; Group buffers by project directory.
+  ;; :append ensures we run after ibuffer-projectile (which loads lazily and
+  ;; adds its own hook mid-flight on first ibuffer open, overwriting ours).
+  (add-hook 'ibuffer-hook #'projects--ibuffer-setup :append)
   (setq ibuffer-formats
         `((mark modified read-only locked
                 " " (icon 2 2 :left :elide)
@@ -697,58 +665,6 @@
             (setq flycheck-clang-language-standard "c++17")
             (setq-local c-ts-mode-indent-offset 4)
             (setq-local tab-width 4)))
-
-(message "*** Coding / Debugging")
-
-(use-package! dap-mode
-  :after lsp-mode
-  :config
-  (require 'dap-launch)
-  (require 'dap-java)
-  (require 'dap-lldb)
-
-  (setq dap-lldb-debug-program '("/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap"))
-
-  (dap-mode 1)
-  (dap-ui-mode 1)
-  (dap-ui-controls-mode 1)
-  (dap-tooltip-mode 1)
-  (dap-auto-configure-mode 1)
-
-  ;(require 'dap-codelldb)
-  ;(dap-codelldb-setup)
-
-  ;; Register a default debug template for C++ projects
-  ;;(dap-register-debug-template
-  ;;  "C++ LLDB::Run"
-  ;;  (list :type "lldb"
-  ;;        :request "launch"
-  ;;        :name "C++ LLDB::Run"
-  ;;        :program "${workspaceFolder}/"
-  ;;        :cwd nil))
-  (dap-register-debug-template
-  "lldb-dap ms"
-  (list :type "lldb"
-        :request "launch"
-        :name "lldb-dap ms"
-        :program "${workspaceFolder}/build-dev/bin/sdna-mediaserver"
-        :args nil
-        :cwd nil
-        :stopOnEntry t
-        :preLaunchTask "lldb-dap"
-        :environment nil
-        :debugger-args nil))
-  (dap-register-debug-template
-   "C++ LLDB Debug MS"
-   (list :type "lldb-vscode"
-         :request "launch"
-         :name "C++ LLDB Debug MS"
-         :program "${workspaceFolder}/build-dev/bin/sdna-mediaserver"
-         :args '()
-         :cwd "${workspaceFolder}"
-         :stopAtEntry nil
-         :externalConsole nil))
-  )
 
 (message "*** Coding / Mode Mapping")
 
@@ -935,57 +851,6 @@
 
 (use-package! kubernetes)
 
-;; my/postgres-trunk-dev defined in +functions.el
-(use-package! pgmacs)
-
-(use-package! ejc-sql
-  :config
-  (setq clomacs-httpd-default-port 8595
-        ejc-complete-on-dot t
-        ejc-result-table-impl 'ejc-result-mode)
-  (require 'ejc-autocomplete)
-  (add-hook 'ejc-sql-minor-mode-hook
-            (lambda ()
-              (auto-complete-mode t)
-              (ejc-ac-setup)))
-  (require 'ejc-company)
-  (push 'ejc-company-backend company-backends)
-  (add-hook 'ejc-sql-minor-mode-hook
-            (lambda ()
-              (company-mode t)))
-  (add-hook 'ejc-sql-minor-mode-hook
-          (lambda ()
-            (ejc-eldoc-setup))))
-
-(ejc-create-connection
- "trunk-local-dev"
- :classpath (concat "~/.m2/repository/org.postgresql/postgresql/42.6.0/"
-                    "postgresql-42.6.0.jar")
- :subprotocol "postgresql"
- :subname "//localhost:5432/trunk"
- :user "postgres"
- :password "password"
- :sslmode nil)
-
-(ejc-create-connection
- "trunk-staging"
- :classpath (concat "~/.m2/repository/org.postgresql/postgresql/42.6.0/"
-                    "postgresql-42.6.0.jar")
- :subprotocol "postgresql"
- :subname "//syncdna-staging-rds.cvoa2ia260p9.us-east-2.rds.amazonaws.com:5432/trunk"
- :user "app"
- :password "QR0_{HN4A@Ieu5Yb<Xb8"
- :sslmode nil)
-
-(ejc-create-connection
- "authn-staging"
- :classpath (concat "~/.m2/repository/org.postgresql/postgresql/42.6.0/"
-                    "postgresql-42.6.0.jar")
- :subprotocol "postgresql"
- :subname "//syncdna-staging-rds.cvoa2ia260p9.us-east-2.rds.amazonaws.com:5432/authn"
- :user "app"
- :password "QR0_{HN4A@Ieu5Yb<Xb8"
- :sslmode nil)
 
 (use-package! claude-code-ide
   :config
@@ -1046,36 +911,3 @@
 
 (use-package! terraform
   :hook (terraform-mode . terraform-format-on-save-mode))
-
-(message "*** LLM")
-
-(use-package! elysium
-  :defer t
-  :custom
-  (elysium-window-size 0.45)
-  (elysium-window-style 'vertical)
-  ; enable smerge-mode explicitely
-  :hook (elysium-apply-changes . smerge-start-session))
-
-(use-package! gptel
-  :defer t
-  :custom
-  (gptel-model 'claude-3-7-sonnet-20250219)
-  :config
-  (setq gptel-default-mode 'org-mode)
-
-  ;; OpenAI
-  (setq! gptel-api-key (my/read-file "~/.gptel/chatgpt.key"))
-
-  ;; Google
-  (defun gptel-gemini-api-key ()
-    (my/read-file "~/.gptel/gemini.key"))
-  (gptel-make-gemini "Gemini" :stream t
-                     :key #'gptel-gemini-api-key)
-
-  ;; Anthropic (default)
-  (defun gptel-claude-api-key ()
-    (my/read-file "~/.gptel/claude.key"))
-  (setq gptel-backend
-        (gptel-make-anthropic "Claude" :stream t
-                              :key #'gptel-claude-api-key)))
