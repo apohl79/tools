@@ -581,35 +581,57 @@ to the end of the buffer."
 (defun my/compilation-started (proc)
   (setq compilation-start-time (current-time)))
 
-;; vterm window resize optimization
+;; vterm window resize: explicit per-window control that handles multi-vterm
+;; correctly and respects copy-mode.
 (defvar my/vterm-window-widths (make-hash-table :test 'eq)
   "Hash table storing the last known width of each window.")
 
-(defun my/vterm-window-adjust-advice (orig-fun &rest args)
-  "Advice to only signal vterm window size change on width change.
-This prevents unnecessary terminal reflows when only height changes."
-  (let ((result (apply orig-fun args)))
-    (let ((width-changed nil))
-      ;; Check all windows for vterm buffers
-      (dolist (window (window-list))
-        (let ((buffer (window-buffer window)))
-          (when (and buffer
-                     (with-current-buffer buffer
-                       (eq major-mode 'vterm-mode)))
-            (let ((current-width (window-width window))
-                  (stored-width (gethash window my/vterm-window-widths)))
-              (when (or (not stored-width) (/= current-width stored-width))
-                (setq width-changed t)
-                (puthash window current-width my/vterm-window-widths))))))
-      ;; Only return result if width actually changed
-      (if width-changed
-          result
-        nil))))
+(defun my/vterm-resize-window (window)
+  "Resize the vterm terminal in WINDOW.
+Always sends SIGWINCH (pty update).  Skips vterm buffer rerender when
+the window is in copy-mode (user is scrolling) or only height changed."
+  (with-current-buffer (window-buffer window)
+    (let ((process (get-buffer-process (current-buffer))))
+      (when (and process (process-live-p process))
+        (let* ((margin   (if (fboundp 'vterm--get-margin-width)
+                             (vterm--get-margin-width) 0))
+               (width    (max (- (window-max-chars-per-line window) margin)
+                               (if (boundp 'vterm-min-window-width)
+                                   vterm-min-window-width 10)))
+               (height   (window-body-height window))
+               (stored   (gethash window my/vterm-window-widths))
+               (w-changed (or (not stored) (/= width stored))))
+          (puthash window width my/vterm-window-widths)
+          (when (and (> width 0) (> height 0))
+            ;; Always update pty dimensions → sends SIGWINCH to the process.
+            (set-process-window-size process height width)
+            ;; Only rerender vterm buffer when width changed and not scrolling.
+            (when (and w-changed
+                       (boundp 'vterm--term) vterm--term
+                       (not (bound-and-true-p vterm-copy-mode)))
+              (vterm--set-size vterm--term height width))))))))
+
+(defun my/vterm-resize-all-on-size-change (frame)
+  "Resize every vterm window in FRAME after a window size change."
+  (dolist (window (window-list frame))
+    (when (with-current-buffer (window-buffer window)
+            (eq major-mode 'vterm-mode))
+      (my/vterm-resize-window window))))
 
 (defun my/vterm-configure-resize-optimization ()
-  "Configure vterm to only rerender on width changes, not height changes."
+  "Take over vterm resize handling for correct multi-vterm + copy-mode behaviour.
+Suppresses the built-in window--adjust-process-windows path for vterm (which
+processes windows sequentially and loses the second one), replacing it with an
+explicit hook that resizes every visible vterm window independently."
+  ;; Suppress the built-in path so we don't double-resize.
+  (advice-remove 'vterm--window-adjust-process-window-size
+                 #'my/vterm-window-adjust-advice)
   (advice-add 'vterm--window-adjust-process-window-size
-              :around #'my/vterm-window-adjust-advice))
+              :override (lambda (&rest _) nil)
+              '((name . my/vterm-noop-override)))
+  ;; Our explicit hook handles all vterm windows in the resized frame.
+  (remove-hook 'window-size-change-functions #'my/vterm-resize-all-on-size-change)
+  (add-hook    'window-size-change-functions #'my/vterm-resize-all-on-size-change))
 
 ;; Dashboard workspace widget with sorting by last usage
 (defun my/doom-dashboard-widget-projects ()
@@ -903,7 +925,7 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
           (when (and (boundp 'vterm--term) vterm--term)
             (let ((process (get-buffer-process (current-buffer))))
               (when (and process (fboundp 'vterm--window-adjust-process-window-size))
-                (vterm--window-adjust-process-window-size process window)))
+                (vterm--window-adjust-process-window-size process (list window))))
             (vterm-reset-cursor-point))))))))
 
 (defun my/switch-to-workspace-for-directory (dir)
@@ -940,3 +962,230 @@ Returns the workspace name if found and switched, nil otherwise."
               (+workspace-switch ws-name t)
               (select-frame-set-input-focus (selected-frame))
               (throw 'found ws-name))))))))
+
+;;; ---------------------------------------------------------------------------
+;;; Frame / session
+;;; ---------------------------------------------------------------------------
+
+(defun my/restore-session-on-first-frame (frame)
+  "Restore last session on the first client frame (daemon mode).
+Removes itself from `after-make-frame-functions' after the first call."
+  (remove-hook 'after-make-frame-functions #'my/restore-session-on-first-frame)
+  (select-frame-set-input-focus frame)
+  (unless (cl-some #'buffer-file-name (buffer-list))
+    (my/quickload-session)))
+
+(defun my/setup-terminal-frame (frame)
+  "Configure terminal frame for proper Unicode/icon display and key decoding."
+  (with-selected-frame frame
+    (unless (display-graphic-p frame)
+      (menu-bar-mode -1)
+      (set-terminal-coding-system 'utf-8)
+      (set-keyboard-coding-system 'utf-8)
+      ;; M-arrows (modifier 3)
+      (define-key input-decode-map "\e[1;3A" [M-up])
+      (define-key input-decode-map "\e[1;3B" [M-down])
+      (define-key input-decode-map "\e[1;3C" [M-right])
+      (define-key input-decode-map "\e[1;3D" [M-left])
+      ;; Shift+arrow (modifier 2)
+      (define-key input-decode-map "\e[1;2A" [S-up])
+      (define-key input-decode-map "\e[1;2B" [S-down])
+      (define-key input-decode-map "\e[1;2C" [S-right])
+      (define-key input-decode-map "\e[1;2D" [S-left])
+      ;; Ctrl+arrow (modifier 5)
+      (define-key input-decode-map "\e[1;5A" [C-up])
+      (define-key input-decode-map "\e[1;5B" [C-down])
+      (define-key input-decode-map "\e[1;5C" [C-right])
+      (define-key input-decode-map "\e[1;5D" [C-left])
+      ;; Ctrl+Shift+arrow (modifier 6)
+      (define-key input-decode-map "\e[1;6A" [C-S-up])
+      (define-key input-decode-map "\e[1;6B" [C-S-down])
+      (define-key input-decode-map "\e[1;6C" [C-S-right])
+      (define-key input-decode-map "\e[1;6D" [C-S-left])
+      ;; Cmd+Shift+arrow (custom modifier 10 via WezTerm)
+      (define-key input-decode-map "\e[1;10D" [s-S-left])
+      (define-key input-decode-map "\e[1;10C" [s-S-right])
+      (redraw-frame frame))))
+
+(defun my/close-frame-or-kill-emacs ()
+  "Close the current frame.  If it's the last visible frame, kill Emacs."
+  (interactive)
+  (if (<= (length (visible-frame-list)) 1)
+      (save-buffers-kill-emacs)
+    (delete-frame)))
+
+;;; ---------------------------------------------------------------------------
+;;; Fonts
+;;; ---------------------------------------------------------------------------
+
+(defun my/configure-fontsets ()
+  "Configure fontsets for unicode and symbol characters."
+  (set-fontset-font t 'symbol nil)
+  (set-fontset-font t 'unicode (font-spec :family my/unicode-font :size 10.5) nil 'prepend)
+  (set-fontset-font t 'symbol  (font-spec :family my/unicode-font :size 10.5) nil 'prepend)
+  ;; Box-drawing and geometric shapes to align vterm buffer width properly
+  (set-fontset-font t '(#x2500 . #x257F) (font-spec :family my/fixed-font) nil 'prepend)
+  (set-fontset-font t '(#x2580 . #x259F) (font-spec :family my/fixed-font) nil 'prepend)
+  (set-fontset-font t '(#x25A0 . #x25FF) (font-spec :family my/fixed-font) nil 'prepend)
+  ;; Misc symbols for terminal alignment
+  (set-fontset-font t #x1D32D (font-spec :family my/fixed-font) nil 'prepend)  ; 𝌭
+  (set-fontset-font t #x2387  (font-spec :family my/fixed-font) nil 'prepend)  ; ⎇
+  (set-fontset-font t #x26A1  (font-spec :family my/fixed-font) nil 'prepend)  ; ⚡
+  (set-face-attribute 'nobreak-space nil :underline nil))
+
+(defun my/replace-unicode-spinners ()
+  "Set buffer-local display table to replace Unicode spinners with ASCII in vterm."
+  (let ((table (or buffer-display-table (make-display-table))))
+    (aset table #x00B7 (vector ?⠉))  ; · Middle Dot
+    (aset table #x2722 (vector ?⠉))  ; ✢ Four Teardrop-Spoked Asterisk
+    (aset table #x2733 (vector ?⠒))  ; ✳ Eight Spoked Asterisk
+    (aset table #x2736 (vector ?⠒))  ; ✶ Six Pointed Black Star
+    (aset table #x273B (vector ?⠤))  ; ✻ Teardrop-Spoked Asterisk
+    (aset table #x273D (vector ?⠤))  ; ✽ Heavy Teardrop-Spoked Asterisk
+    (setq buffer-display-table table)))
+
+;;; ---------------------------------------------------------------------------
+;;; Workspace tab-bar faces
+;;; ---------------------------------------------------------------------------
+
+(defface my/workspace-tab-active
+  '((t :inherit tab-bar-tab :weight bold :box nil))
+  "Face for the active workspace in the tab bar.")
+
+(defface my/workspace-tab-inactive
+  '((t :inherit tab-bar-tab-inactive :weight normal :box nil))
+  "Face for inactive workspaces in the tab bar.")
+
+;;; ---------------------------------------------------------------------------
+;;; Tree-sitter
+;;; ---------------------------------------------------------------------------
+
+(defun my/treesit-install-all-grammars ()
+  "Install all tree-sitter grammars defined in `treesit-language-source-alist'."
+  (interactive)
+  (dolist (grammar treesit-language-source-alist)
+    (let ((lang (car grammar)))
+      (message "Installing tree-sitter grammar for %s..." lang)
+      (treesit-install-language-grammar lang)))
+  (message "All tree-sitter grammars installed!"))
+
+;;; ---------------------------------------------------------------------------
+;;; C++ / clang-format
+;;; ---------------------------------------------------------------------------
+
+(defun my/c-ts-indent-style-no-namespace ()
+  "Custom indent style based on Google style with 4-space indentation."
+  (let ((base-style (alist-get 'k&r (c-ts-mode--indent-styles 'cpp))))
+    `(;; Namespace members should not be indented
+      ((n-p-gp nil nil "namespace_definition") grand-parent 0)
+      ;; Override k&r to use 4 spaces
+      ((parent-is "compound_statement") standalone-parent 4)
+      ((parent-is "if_statement")       standalone-parent 4)
+      ((parent-is "else_clause")        standalone-parent 4)
+      ((parent-is "do_statement")       standalone-parent 4)
+      ((parent-is "for_statement")      standalone-parent 4)
+      ((parent-is "while_statement")    standalone-parent 4)
+      ((parent-is "switch_statement")   standalone-parent 4)
+      ((parent-is "case_statement")     standalone-parent 4)
+      ((parent-is "argument_list")      parent-bol 4)
+      ((parent-is "parameter_list")     parent-bol 4)
+      ;; Class/struct members use 2-space indent (Google style)
+      ((parent-is "field_declaration_list") parent-bol 2)
+      ((node-is "field_declaration")        parent-bol 2)
+      ((node-is "access_specifier")         parent-bol 0)
+      ((node-is "comment")    no-indent)
+      ((node-is "preproc")    column-0 0)
+      ,@base-style)))
+
+;;; ---------------------------------------------------------------------------
+;;; vterm extras
+;;; ---------------------------------------------------------------------------
+
+(defun my/vterm--update-ensure-unicode (orig-fn term &rest args)
+  "Handle Emacs 31 unicode-string-p check in vterm--update.
+Emacs 31's copy_string_contents rejects strings with eight-bit chars;
+re-decode them as mac-roman (macOS clipboard encoding)."
+  (condition-case err
+      (apply orig-fn term args)
+    (wrong-type-argument
+     (if (and (eq (cadr err) 'unicode-string-p)
+              args (stringp (car args)))
+         (apply orig-fn term
+                (decode-coding-string
+                 (encode-coding-string (car args) 'raw-text-unix)
+                 'mac-roman)
+                (cdr args))
+       (signal (car err) (cdr err))))))
+
+(defun my/copy-to-clipboard (text)
+  "Copy TEXT to system clipboard (works in terminal via pbcopy)."
+  (let ((process-connection-type nil))
+    (let ((proc (start-process "pbcopy" nil "pbcopy")))
+      (process-send-string proc text)
+      (process-send-eof proc))))
+
+(defun my/vterm-mouse-select-to-clipboard (event)
+  "Select text in vterm and copy to clipboard."
+  (interactive "e")
+  (when (eq major-mode 'vterm-mode)
+    (let ((was-in-copy-mode vterm-copy-mode))
+      (unless was-in-copy-mode (vterm-copy-mode 1))
+      (mouse-set-region event)
+      (when (use-region-p)
+        (my/copy-to-clipboard
+         (buffer-substring-no-properties (region-beginning) (region-end)))
+        (message "Copied to clipboard"))
+      (unless was-in-copy-mode
+        (vterm-copy-mode -1)))))
+
+(defun my/vterm-double-click-to-clipboard (event)
+  "Select word at point in vterm and copy to clipboard."
+  (interactive "e")
+  (when (eq major-mode 'vterm-mode)
+    (let ((was-in-copy-mode vterm-copy-mode))
+      (unless was-in-copy-mode (vterm-copy-mode 1))
+      (mouse-set-point event)
+      (let ((bounds (bounds-of-thing-at-point 'word)))
+        (when bounds
+          (set-mark (car bounds))
+          (goto-char (cdr bounds))
+          (my/copy-to-clipboard
+           (buffer-substring-no-properties (car bounds) (cdr bounds)))
+          (message "Copied to clipboard")))
+      (unless was-in-copy-mode
+        (vterm-copy-mode -1)))))
+
+;;; ---------------------------------------------------------------------------
+;;; Databases
+;;; ---------------------------------------------------------------------------
+
+(defun my/postgres-trunk-dev ()
+  "Open local dev postgres connection in pgmacs."
+  (interactive)
+  (pgmacs-open-string "dbname=trunk user=postgres password=password"))
+
+;;; ---------------------------------------------------------------------------
+;;; Claude Code
+;;; ---------------------------------------------------------------------------
+
+(defun my/claude-code-toggle-advice (orig-fn)
+  "Use custom display function for claude-code-toggle."
+  (let ((claude-code-buffer (claude-code--get-or-prompt-for-buffer)))
+    (if claude-code-buffer
+        (if (get-buffer-window claude-code-buffer)
+            (delete-window (get-buffer-window claude-code-buffer))
+          (let ((window (funcall claude-code-display-window-fn claude-code-buffer)))
+            (when window
+              (set-window-parameter window 'no-delete-other-windows claude-code-no-delete-other-windows)
+              (when claude-code-toggle-auto-select
+                (select-window window)))))
+      (claude-code--show-not-running-message))))
+
+(defun my/claude-code-vterm-make-advice (orig-fn backend buffer-name program &optional switches)
+  "Preserve window configuration during vterm buffer creation.
+Prevents the pop-to-buffer/delete-window dance from disrupting window layout."
+  (if (eq backend 'vterm)
+      (let ((window-config (current-window-configuration)))
+        (prog1 (funcall orig-fn backend buffer-name program switches)
+          (set-window-configuration window-config)))
+    (funcall orig-fn backend buffer-name program switches)))

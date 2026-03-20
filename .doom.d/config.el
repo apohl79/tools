@@ -16,56 +16,15 @@
 ;; Non-daemon: restore after init (frame exists for loading UI).
 ;; Daemon: defer to first client frame via after-make-frame-functions,
 ;; since restoring during daemon init breaks the daemon (no frame for UI).
+;; my/restore-session-on-first-frame is defined in +functions.el
 (if (daemonp)
-    (add-hook 'after-make-frame-functions
-              (defun my/restore-session-on-first-frame (frame)
-                (remove-hook 'after-make-frame-functions #'my/restore-session-on-first-frame)
-                (select-frame-set-input-focus frame)
-                (unless (cl-some #'buffer-file-name (buffer-list))
-                  (my/quickload-session))))
+    (add-hook 'after-make-frame-functions #'my/restore-session-on-first-frame)
   (add-hook 'doom-after-init-hook
             (lambda ()
               (unless (cl-some #'buffer-file-name (buffer-list))
                 (my/quickload-session)))))
 
-;; Ensure proper terminal setup for emacsclient frames.
-;; input-decode-map is terminal-local, so escape sequences must be set up
-;; per frame in daemon mode (each client terminal gets a fresh map).
-(defun my/setup-terminal-frame (frame)
-  "Configure terminal frame for proper Unicode/icon display and key decoding."
-  (with-selected-frame frame
-    (unless (display-graphic-p frame)
-      ;; Disable menu bar in terminal
-      (menu-bar-mode -1)
-      ;; Ensure UTF-8 encoding for terminal
-      (set-terminal-coding-system 'utf-8)
-      (set-keyboard-coding-system 'utf-8)
-      ;; Decode xterm-style escape sequences (terminal-local)
-      ;; M-arrows (modifier 3)
-      (define-key input-decode-map "\e[1;3A" [M-up])
-      (define-key input-decode-map "\e[1;3B" [M-down])
-      (define-key input-decode-map "\e[1;3C" [M-right])
-      (define-key input-decode-map "\e[1;3D" [M-left])
-      ;; Shift+arrow (modifier 2)
-      (define-key input-decode-map "\e[1;2A" [S-up])
-      (define-key input-decode-map "\e[1;2B" [S-down])
-      (define-key input-decode-map "\e[1;2C" [S-right])
-      (define-key input-decode-map "\e[1;2D" [S-left])
-      ;; Ctrl+arrow (modifier 5)
-      (define-key input-decode-map "\e[1;5A" [C-up])
-      (define-key input-decode-map "\e[1;5B" [C-down])
-      (define-key input-decode-map "\e[1;5C" [C-right])
-      (define-key input-decode-map "\e[1;5D" [C-left])
-      ;; Ctrl+Shift+arrow (modifier 6)
-      (define-key input-decode-map "\e[1;6A" [C-S-up])
-      (define-key input-decode-map "\e[1;6B" [C-S-down])
-      (define-key input-decode-map "\e[1;6C" [C-S-right])
-      (define-key input-decode-map "\e[1;6D" [C-S-left])
-      ;; Cmd+Shift+arrow (custom modifier 10 via WezTerm)
-      (define-key input-decode-map "\e[1;10D" [s-S-left])
-      (define-key input-decode-map "\e[1;10C" [s-S-right])
-      ;; Force redisplay to pick up terminal capabilities
-      (redraw-frame frame))))
+;; Ensure proper terminal setup for emacsclient frames (defined in +functions.el).
 (add-hook 'after-make-frame-functions #'my/setup-terminal-frame)
 
 (message "*** General / General behavior")
@@ -108,16 +67,7 @@
 ;; File name in the mode line
 (setq doom-modeline-buffer-file-name-style 'truncate-with-project)
 
-;; C-x C-c: close current frame, or kill Emacs if it's the last one.
-;; In daemon mode all frames are client frames, so the default
-;; save-buffers-kill-terminal would never actually quit Emacs.
-(defun my/close-frame-or-kill-emacs ()
-  "Close the current frame. If it's the last visible frame, kill Emacs."
-  (interactive)
-  (if (<= (length (visible-frame-list)) 1)
-      (save-buffers-kill-emacs)
-    (delete-frame)))
-
+;; C-x C-c: close current frame, or kill Emacs if it's the last one (defined in +functions.el).
 (global-set-key (kbd "C-x C-c") #'my/close-frame-or-kill-emacs)
 
 (message "*** General / Dashboard")
@@ -168,15 +118,7 @@
         (let ((inhibit-message t))
           (persp-save-state-to-file))))))
 
-;; Workspace tab bar faces
-(defface my/workspace-tab-active
-  '((t :inherit tab-bar-tab :weight bold :box nil))
-  "Face for the active workspace in the tab bar.")
-
-(defface my/workspace-tab-inactive
-  '((t :inherit tab-bar-tab-inactive :weight normal :box nil))
-  "Face for inactive workspaces in the tab bar.")
-
+;; Workspace tab bar faces (defined in +functions.el)
 ;; Theme-aware colors (`:height` is ignored in TTY, which is fine)
 (add-hook 'doom-load-theme-hook
   (lambda ()
@@ -489,10 +431,8 @@
 
 ;(defvar my/fixed-font "Iosevka Comfy")
 (defvar my/fixed-font "IosevkaTerm NFM Medium")
-
 (defvar my/unicode-font "JuliaMono")
 ;(defvar my/unicode-font "IosevkaTerm NFM Medium")
-
 (defvar my/variable-font "Roboto")
 
 (setq doom-font
@@ -509,30 +449,7 @@
 ;; IMPORTANT: Set this to nil so custom fontset is used
 (setq use-default-font-for-symbols nil)
 
-;; Define function to configure fontsets
-(defun my/configure-fontsets ()
-  "Configure fontsets for unicode and symbol characters."
-
-  (set-fontset-font t 'symbol nil)
-
-  ;; General unicode/symbol setup - use unicode font with smaller size for icons
-  (set-fontset-font t 'unicode (font-spec :family my/unicode-font :size 10.5) nil 'prepend)
-  (set-fontset-font t 'symbol (font-spec :family my/unicode-font :size 10.5) nil 'prepend)
-
-  ;; Box-drawing and geometric shapes to align vterm buffer width properly
-  (set-fontset-font t '(#x2500 . #x257F) (font-spec :family my/fixed-font) nil 'prepend)
-  (set-fontset-font t '(#x2580 . #x259F) (font-spec :family my/fixed-font) nil 'prepend)
-  (set-fontset-font t '(#x25A0 . #x25FF) (font-spec :family my/fixed-font) nil 'prepend)
-
-  ;; Misc symbols for terminal alignment
-  (set-fontset-font t #x1D32D (font-spec :family my/fixed-font) nil 'prepend)  ; 𝌭
-  (set-fontset-font t #x2387 (font-spec :family my/fixed-font) nil 'prepend)   ; ⎇
-  (set-fontset-font t #x26A1 (font-spec :family my/fixed-font) nil 'prepend)   ; ⚡
-
-  ;; Fix non-breaking space underlines
-  (set-face-attribute 'nobreak-space nil :underline nil)
-)
-
+;; my/configure-fontsets defined in +functions.el
 ;; Also apply when loading vterm/eat buffers (GUI only - terminal uses its own fonts)
 (when (display-graphic-p)
   (add-hook 'after-setting-font-hook #'my/configure-fontsets)
@@ -540,25 +457,7 @@
   (add-hook 'vterm-mode-hook #'my/configure-fontsets)
   (add-hook 'eat-mode-hook #'my/configure-fontsets))
 
-;; Replace specific Claude Code Unicode symbols with ASCII in vterm/eat buffers
-;; ⠉ ⠒ ⠤
-(defun my/replace-unicode-spinners ()
-  "Set buffer-local display table to replace Unicode spinners with ASCII in vterm."
-  (let ((table (or buffer-display-table (make-display-table))))
-    ;; · - U+00B7 (Middle Dot)
-    (aset table #x00B7 (vector ?⠉))
-    ;; ✢ - U+2722 (Four Teardrop-Spoked Asterisk)
-    (aset table #x2722 (vector ?⠉))
-    ;; ✳ - U+2733 (Eight Spoked Asterisk)
-    (aset table #x2733 (vector ?⠒))
-    ;; ✶ - U+2736 (Six Pointed Black Star)
-    (aset table #x2736 (vector ?⠒))
-    ;; ✻ - U+273B (Teardrop-Spoked Asterisk)
-    (aset table #x273B (vector ?⠤))
-    ;; ✽ - U+273D (Heavy Teardrop-Spoked Asterisk)
-    (aset table #x273D (vector ?⠤))
-    (setq buffer-display-table table)))
-
+;; my/replace-unicode-spinners defined in +functions.el
 ;; Replace spinners only in GUI mode
 (when (display-graphic-p)
   (add-hook 'vterm-mode-hook #'my/replace-unicode-spinners)
@@ -923,15 +822,7 @@
           (cmake "https://github.com/uyha/tree-sitter-cmake")
           (bash "https://github.com/tree-sitter/tree-sitter-bash")))
 
-  (defun my/treesit-install-all-grammars ()
-    "Install all tree-sitter grammars defined in `treesit-language-source-alist'."
-    (interactive)
-    (dolist (grammar treesit-language-source-alist)
-      (let ((lang (car grammar)))
-        (message "Installing tree-sitter grammar for %s..." lang)
-        (treesit-install-language-grammar lang)))
-    (message "All tree-sitter grammars installed!"))
-
+  ;; my/treesit-install-all-grammars defined in +functions.el
   ;; Map major modes to their tree-sitter equivalents
   (setq major-mode-remap-alist
         '((c-mode . c-ts-mode)
@@ -950,36 +841,7 @@
 
 (use-package! clang-format
   :init
-  ;; update the indent style to disable namespace indention with treesit-indent
-  (defun my/c-ts-indent-style-no-namespace()
-    "Custom indent style based on Google style with 4-space indentation."
-    ;; Start with k&r style which is closer to Google style than gnu
-    (let ((base-style (alist-get 'k&r (c-ts-mode--indent-styles 'cpp))))
-      `(;; Namespace members should not be indented
-        ((n-p-gp nil nil "namespace_definition") grand-parent 0)
-        ;; Override k&r to use 4 spaces instead of default offset
-        ((parent-is "compound_statement") standalone-parent 4)
-        ((parent-is "if_statement") standalone-parent 4)
-        ((parent-is "else_clause") standalone-parent 4)
-        ((parent-is "do_statement") standalone-parent 4)
-        ((parent-is "for_statement") standalone-parent 4)
-        ((parent-is "while_statement") standalone-parent 4)
-        ((parent-is "switch_statement") standalone-parent 4)
-        ((parent-is "case_statement") standalone-parent 4)
-        ;; Function parameters and arguments
-        ((parent-is "argument_list") parent-bol 4)
-        ((parent-is "parameter_list") parent-bol 4)
-        ;; Class/struct members use 2-space indent (Google style)
-        ((parent-is "field_declaration_list") parent-bol 2)
-        ((node-is "field_declaration") parent-bol 2)
-        ;; Access specifiers at same level as class opening brace
-        ((node-is "access_specifier") parent-bol 0)
-        ;; Comments should follow the code indentation
-        ((node-is "comment") no-indent)
-        ;; Preprocessor directives at column 0
-        ((node-is "preproc") column-0 0)
-        ;; Include base k&r rules that we haven't overridden
-        ,@base-style)))
+  ;; my/c-ts-indent-style-no-namespace defined in +functions.el
   :config
   (add-hook 'c-ts-base-mode-hook
             (lambda ()
@@ -1026,23 +888,7 @@
 (after! vterm
   (my/vterm-configure-resize-optimization)
 
-  ;; Fix Emacs 31 unicode-string-p errors when pasting special characters.
-  ;; Emacs 31's copy_string_contents (module API) rejects strings with eight-bit
-  ;; chars (codepoints > U+10FFFF). Catch the error at the C module boundary and
-  ;; re-decode non-unicode bytes as mac-roman (macOS clipboard encoding).
-  (defun my/vterm--update-ensure-unicode (orig-fn term &rest args)
-    "Handle Emacs 31 unicode-string-p check in vterm--update."
-    (condition-case err
-        (apply orig-fn term args)
-      (wrong-type-argument
-       (if (and (eq (cadr err) 'unicode-string-p)
-                args (stringp (car args)))
-           (apply orig-fn term
-                  (decode-coding-string
-                   (encode-coding-string (car args) 'raw-text-unix)
-                   'mac-roman)
-                  (cdr args))
-         (signal (car err) (cdr err))))))
+  ;; my/vterm--update-ensure-unicode defined in +functions.el
   (advice-add 'vterm--update :around #'my/vterm--update-ensure-unicode)
 
   ;; Add small margins to prevent wrapping issues
@@ -1054,45 +900,8 @@
   ;; Enable clickable URLs in vterm buffers
   (add-hook 'vterm-mode-hook #'goto-address-mode)
 
-  ;; Mouse selection to clipboard (works in terminal emacs via pbcopy)
-  (defun my/copy-to-clipboard (text)
-    "Copy TEXT to system clipboard (works in terminal)."
-    (let ((process-connection-type nil))
-      (let ((proc (start-process "pbcopy" nil "pbcopy")))
-        (process-send-string proc text)
-        (process-send-eof proc))))
-
-  (defun my/vterm-mouse-select-to-clipboard (event)
-    "Select text in vterm and copy to clipboard."
-    (interactive "e")
-    (when (eq major-mode 'vterm-mode)
-      (let ((was-in-copy-mode vterm-copy-mode))
-        (unless was-in-copy-mode (vterm-copy-mode 1))
-        (mouse-set-region event)
-        (when (use-region-p)
-          (my/copy-to-clipboard
-           (buffer-substring-no-properties (region-beginning) (region-end)))
-          (message "Copied to clipboard"))
-        (unless was-in-copy-mode
-          (vterm-copy-mode -1)))))
-
-  (defun my/vterm-double-click-to-clipboard (event)
-    "Select word at point in vterm and copy to clipboard."
-    (interactive "e")
-    (when (eq major-mode 'vterm-mode)
-      (let ((was-in-copy-mode vterm-copy-mode))
-        (unless was-in-copy-mode (vterm-copy-mode 1))
-        (mouse-set-point event)
-        (let ((bounds (bounds-of-thing-at-point 'word)))
-          (when bounds
-            (set-mark (car bounds))
-            (goto-char (cdr bounds))
-            (my/copy-to-clipboard
-             (buffer-substring-no-properties (car bounds) (cdr bounds)))
-            (message "Copied to clipboard")))
-        (unless was-in-copy-mode
-          (vterm-copy-mode -1)))))
-
+  ;; my/copy-to-clipboard, my/vterm-mouse-select-to-clipboard,
+  ;; my/vterm-double-click-to-clipboard defined in +functions.el
   (define-key vterm-mode-map [down-mouse-1] nil)
   (define-key vterm-mode-map [drag-mouse-1] #'my/vterm-mouse-select-to-clipboard)
   (define-key vterm-mode-map [double-mouse-1] #'my/vterm-double-click-to-clipboard))
@@ -1126,13 +935,8 @@
 
 (use-package! kubernetes)
 
-(use-package! pgmacs
-  :init
-  ;; local dev
-  (defun my/postgres-trunk-dev ()
-    (interactive)
-    (pgmacs-open-string "dbname=trunk user=postgres password=password"))
-)
+;; my/postgres-trunk-dev defined in +functions.el
+(use-package! pgmacs)
 
 (use-package! ejc-sql
   :config
@@ -1187,7 +991,6 @@
   :config
   (setq claude-code-ide-window-width 105  ; Reduced to account for fringe/margins
         claude-code-ide-use-side-window 'nil
-        claude-code-ide-vterm-render-delay 0.05
         claude-code-ide-terminal-backend 'vterm
         claude-code-ide-cli-extra-flags "--dangerously-skip-permissions")
   (claude-code-ide-emacs-tools-setup)
@@ -1214,31 +1017,8 @@
   (setq claude-code-display-window-fn
         (lambda (buffer) (my/claude-display-buffer buffer nil)))
 
-  ;; Patch claude-code-toggle to use claude-code-display-window-fn
-  ;; (the original function bypasses it with a hardcoded display-buffer call)
-  (defun my/claude-code-toggle-advice (orig-fn)
-    "Use custom display function for claude-code-toggle."
-    (let ((claude-code-buffer (claude-code--get-or-prompt-for-buffer)))
-      (if claude-code-buffer
-          (if (get-buffer-window claude-code-buffer)
-              (delete-window (get-buffer-window claude-code-buffer))
-            (let ((window (funcall claude-code-display-window-fn claude-code-buffer)))
-              (when window
-                (set-window-parameter window 'no-delete-other-windows claude-code-no-delete-other-windows)
-                (when claude-code-toggle-auto-select
-                  (select-window window)))))
-        (claude-code--show-not-running-message))))
-  (advice-add 'claude-code-toggle :around #'my/claude-code-toggle-advice)
-
-  ;; Patch vterm buffer creation to preserve window configuration
-  ;; (the original pop-to-buffer/delete-window dance disrupts window layout)
-  (defun my/claude-code-vterm-make-advice (orig-fn backend buffer-name program &optional switches)
-    "Preserve window configuration during vterm buffer creation."
-    (if (eq backend 'vterm)
-        (let ((window-config (current-window-configuration)))
-          (prog1 (funcall orig-fn backend buffer-name program switches)
-            (set-window-configuration window-config)))
-      (funcall orig-fn backend buffer-name program switches)))
+  ;; my/claude-code-toggle-advice, my/claude-code-vterm-make-advice defined in +functions.el
+  (advice-add 'claude-code-toggle    :around #'my/claude-code-toggle-advice)
   (advice-add 'claude-code--term-make :around #'my/claude-code-vterm-make-advice)
 
   ;; Disable vterm bell detector - it triggers on OSC sequences causing spam
