@@ -71,12 +71,11 @@ nil means the buffer is global (special buffer).")
 
 (defun projects-names-mru ()
   "Return project names sorted by last switch time (most recent first)."
-  (let ((names (projects-names)))
-    (sort names
-          (lambda (a b)
-            (let ((ta (or (plist-get (gethash a projects--table) :switch-time) 0))
-                  (tb (or (plist-get (gethash b projects--table) :switch-time) 0)))
-              (> ta tb))))))
+  (cl-sort (copy-sequence (projects-names))
+           (lambda (a b)
+             (let ((ta (or (plist-get (gethash a projects--table) :switch-time) 0))
+                   (tb (or (plist-get (gethash b projects--table) :switch-time) 0)))
+               (> ta tb)))))
 
 (defun projects-special-buffer-p (buf)
   "Return t if BUF is a global/special buffer that should appear in all projects."
@@ -374,7 +373,7 @@ Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functio
          `(,(intern (concat "proj-" name))
            menu-item
            ,(propertize (format " %s " name) 'face face)
-           (lambda () (interactive) (projects-switch ,captured-name t))
+           (lambda () (interactive) (projects-switch ,captured-name))
            :help ,(format "Switch to project: %s → %s"
                           name
                           (abbreviate-file-name (or (projects-dir name) ""))))))
@@ -515,8 +514,6 @@ Modeled after the existing my/quickload-session pattern."
                               (kill-buffer "*session-loading*"))
                             (when (fboundp 'projects--tab-bar-refresh)
                               (projects--tab-bar-refresh))
-                            (when (fboundp 'projects--ensure-visible-buffer)
-                              (projects--ensure-visible-buffer))
                             (when (fboundp '+doom-dashboard-reload)
                               (+doom-dashboard-reload t)))))))))
 
@@ -571,12 +568,29 @@ alongside the info buffer collapses to fullscreen.
 Deferred via idle timer so window-size-change-functions fire naturally,
 allowing vterm/eat to resize correctly."
   (when (> (projects--ordinary-window-count) 1)
-    (let ((info-win (cl-find-if
-                     (lambda (w)
-                       (string-match-p "^\\*project: "
-                                       (buffer-name (window-buffer w))))
-                     (window-list nil 0))))
+    (let* ((frame (selected-frame))
+           (info-win
+            (or
+             ;; Normal case: a window is showing a project info buffer
+             (cl-find-if
+              (lambda (w)
+                (string-match-p "^\\*project: "
+                                (buffer-name (window-buffer w))))
+              (window-list nil 0))
+             ;; Fresh client frame: a terminal buffer (vterm/eat/claude) was
+             ;; opened alongside the project file/info buffer. The new buffer's
+             ;; window is always selected — treat the NON-selected window as the
+             ;; one to replace. Guard against transient/menu windows firing this.
+             (when (frame-parameter frame 'projects-fresh-client)
+               (let* ((sel (selected-window))
+                      (sel-name (buffer-name (window-buffer sel))))
+                 (when (or (with-current-buffer (window-buffer sel)
+                             (derived-mode-p 'vterm-mode 'eat-mode))
+                           (string-match-p "^\\*claude" sel-name))
+                   (cl-find-if (lambda (w) (not (eq w sel)))
+                               (window-list nil 0))))))))
       (when info-win
+        (set-frame-parameter frame 'projects-fresh-client nil)
         (run-with-idle-timer
          0 nil
          (lambda (info-win)
@@ -586,7 +600,10 @@ allowing vterm/eat to resize correctly."
              (let ((other-win (cl-find-if
                                (lambda (w) (not (eq w info-win)))
                                (window-list nil 0))))
-               (when other-win
+               (when (and other-win
+                          ;; Skip side/popup windows (transient menus, which-key, etc.)
+                          (not (window-parameter other-win 'window-side))
+                          (not (window-dedicated-p other-win)))
                  (let ((buf (window-buffer other-win)))
                    ;; Show the other buffer in info-win, then delete other-win
                    (set-window-buffer info-win buf)

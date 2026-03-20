@@ -589,7 +589,9 @@ to the end of the buffer."
 (defun my/vterm-resize-window (window)
   "Resize the vterm terminal in WINDOW.
 Always sends SIGWINCH (pty update).  Skips vterm buffer rerender when
-the window is in copy-mode (user is scrolling) or only height changed."
+the window is in copy-mode (user is scrolling) or only height changed.
+When called interactively, resizes the window displaying the current buffer."
+  (interactive (list (selected-window)))
   (with-current-buffer (window-buffer window)
     (let ((process (get-buffer-process (current-buffer))))
       (when (and process (process-live-p process))

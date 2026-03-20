@@ -29,6 +29,31 @@
                 ;; (frame must be painted before the loading screen can appear)
                 (run-with-timer 0 nil #'projects-restore)))))
 
+
+(defun my/projects-setup-client-frame ()
+  "Show project info buffer for current project when emacsclient creates a frame.
+Sets default-directory to the project root and marks the frame as fresh so
+that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
+  (when (and projects--current
+             (not (frame-parameter (selected-frame) 'parent-frame)))
+    (let* ((frame     (selected-frame))
+           (frame-win (frame-selected-window frame))
+           (info-buf  (projects--create-info-buffer projects--current))
+           (dir       (projects-dir projects--current)))
+      ;; with-selected-window ensures current-buffer changes inside the hook
+      ;; (server hooks run in save-current-buffer context)
+      (with-selected-window frame-win
+        (switch-to-buffer info-buf))
+      (when dir
+        (with-current-buffer info-buf
+          (setq-local default-directory dir))
+        (setq-default default-directory dir))
+      (set-frame-parameter frame 'projects-fresh-client t))))
+
+(remove-hook 'server-after-make-frame-hook #'my/projects-setup-client-frame)
+(add-hook    'server-after-make-frame-hook #'my/projects-setup-client-frame)
+
+
 ;; Ensure proper terminal setup for emacsclient frames (defined in +functions.el).
 (add-hook 'after-make-frame-functions #'my/setup-terminal-frame)
 
@@ -266,6 +291,8 @@
  ;"<up>" #'lsp-bridge-peek-list-prev-line
  ;"<down>" #'lsp-bridge-peek-list-next-line
  :map python-ts-mode-map
+ "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
+ :map emacs-lisp-mode-map
  "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
  :map vterm-mode-map
  "C-c C-c" #'vterm-send-C-c
