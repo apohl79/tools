@@ -1,6 +1,5 @@
 ---
 description: Clean up a local repository (remove git-worktrees and local feature brances)
-allowed-tools: Write, Bash(git:*), AskUserQuestion
 ---
 
 Find git-worktrees and local feature branches and remove them.

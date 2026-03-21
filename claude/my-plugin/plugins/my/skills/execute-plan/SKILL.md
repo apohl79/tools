@@ -1,7 +1,6 @@
 ---
 description: Execute a development plan by orchestrating focused sub-agents for each task
 argument-hint: [plan-document] [jira-ticket] [--no-worktree] [--no-pr] [--draft-pr]
-allowed-tools: AskUserQuestion, Read, Write, Edit, Glob, Grep, Bash(code:*), Bash(cursor:*), Bash(git *), Bash(gh *), Bash(npm *), Bash(npx *), Bash(pnpm *), Bash(yarn *), Bash(bun *), Bash(pip *), Bash(poetry *), Bash(python *), Bash(node *), Bash(rm *), Bash(mkdir *), Bash(ls *), Bash(cat *), Bash(open:*), Task, Skill, mcp__atlassian__*
 ---
 
 **PLANNING MODE CHECK (execute FIRST, before anything else):**
@@ -31,7 +30,16 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
      e. If none are found, ask the user to provide a plan path.
    - Read the chosen plan document fully and understand all tasks, their dependencies, and their order.
    - **Detect the plan type** from the `**Type:**` header field. If the type is `Deployment / Infra change` or `Research`, set `SKIP_CODE_REVIEW=true` and `SKIP_PR=true` for the rest of execution.
-2. Update the repo (`git pull`) before starting.
+2. **CRITICAL — sync before starting:**
+   - Run `git pull` on the main repo to fetch the latest changes.
+   - **If the plan's worktree already exists**: immediately rebase its branch onto the latest default branch:
+     ```bash
+     cd <worktree-path>
+     git fetch origin
+     git rebase origin/main   # or origin/master
+     git push --force-with-lease
+     ```
+     **This is ESSENTIAL.** Starting work on a stale branch that is behind main guarantees merge conflicts on the PR. Do NOT skip this step even if the worktree looks up-to-date — always verify with `git status` and `git log origin/main..HEAD`.
 3. **UNLESS --no-worktree**: Create a git worktree for this work using the `workflows:worktree-recipe` skill. Use jira ticket $2 for the branch name. If no jira ticket was provided, use the AskUserQuestion tool to ask the user for one. Create the worktree in the repo directory under `.claude/worktrees/[repo_name]-[short_title_without_spaces]-[jira_ticket_if_available]`.
 4. If the codebase is in Python, TypeScript or Rust: note which recipe skills (production-code, test-code, true-myth) sub-agents should load — you will instruct them to do so.
 
@@ -166,9 +174,9 @@ After all implementation and integration testing is complete, run a code-review 
 
   - **Launch the review sub-agent** using the Task tool with `subagent_type: "general-purpose"`.
 
-  - **Launch a Codex review agent (if available):** Check your available tools for `mcp__codex__codex`. If it exists, you MUST launch a parallel Codex review by calling `mcp__codex__codex` with a prompt asking it to review the diff on the current branch for bugs, logic errors, and code quality issues. Run this IN PARALLEL with the sub-agent from step 3 — do NOT skip it just because you already have a recipe-based reviewer. The two reviewers serve different purposes (recipe compliance vs general code quality). If `mcp__codex__codex` is not in your tool list, skip this step. **IMPORTANT: Do NOT pass a `model` parameter to `mcp__codex__codex` — always use the default model. Passing unsupported model names (e.g. `o4-mini`) will cause the call to fail.**
+  - **Launch a Codex review agent (if available):** Scan your available tools for any tool whose name contains `codex` (e.g., `mcp__codex__codex`, `mcp__codex__review`, or similar). If any such tool exists, you MUST launch a parallel Codex review — call it with a prompt asking it to review the diff on the current branch for bugs, logic errors, and code quality issues. Run this IN PARALLEL with the sub-agent from step 3 — do NOT skip it just because you already have a recipe-based reviewer. The two reviewers serve different purposes (recipe compliance vs general code quality). If no codex tool exists in your tool list, skip this step. **IMPORTANT: Do NOT pass a `model` parameter to the codex tool — always use the default model. Passing unsupported model names will cause the call to fail.**
 
-  - **Launch a Gemini review agent (if available):** Check your available tools for `mcp__gemini-cli__ask-gemini`. If it exists, you MUST call it IN PARALLEL with the other reviewers — do NOT skip it just because you already have other reviewers. Pass the git diff and ask it to review for bugs, logic errors, and code quality issues. Use the `prompt` parameter with the full diff content. If `mcp__gemini-cli__ask-gemini` is not in your tool list, skip this step.
+  - **Launch a Gemini review agent (if available):** Scan your available tools for any tool whose name contains `gemini` (e.g., `mcp__gemini-cli__ask-gemini` or similar). If any such tool exists, you MUST call it IN PARALLEL with the other reviewers — do NOT skip it just because you already have other reviewers. Pass the git diff and ask it to review for bugs, logic errors, and code quality issues. Use the `prompt` parameter with the full diff content. If no gemini tool exists in your tool list, skip this step.
 
 4. **Delete `.tmp-subtask-code-review.md`.**
 

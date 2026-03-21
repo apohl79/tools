@@ -1,6 +1,5 @@
 ---
 description: Find and review new RFCs from the architecture office Slack channel
-allowed-tools: AskUserQuestion, Write, Skill, Glob
 ---
 
 Find and review new RFC submissions for the architecture office.

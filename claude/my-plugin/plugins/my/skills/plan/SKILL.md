@@ -1,7 +1,6 @@
 ---
 description: Create a development plan through guided requirements gathering and codebase analysis
 argument-hint: [idea or feature description]
-allowed-tools: AskUserQuestion, Read, Write, Edit, Glob, Grep, Bash(code:*), Bash(cursor:*), Bash(git *), Bash(gh *), Bash(npm *), Bash(npx *), Bash(pnpm *), Bash(yarn *), Bash(bun *), Bash(pip *), Bash(poetry *), Bash(python *), Bash(node *), Bash(rm *), Bash(mkdir *), Bash(ls *), Bash(cat *), Bash(open:*), Task, Skill, mcp__atlassian__*
 ---
 
 # Plan Creator

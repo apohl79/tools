@@ -1,7 +1,6 @@
 ---
 description: Code review a given PR with parloa rules
 argument-hint: [pr-link]
-allowed-tools: AskUserQuestion, Skill
 ---
 
 Load the reviewer recipies and agents as well as production-code, test-code and true-myth recipies (skills) and review the PR that is currently being worked on or the given PR $1.

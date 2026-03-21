@@ -243,13 +243,20 @@ collect_issues() {
     pending_checks=$(get_pending_checks) || pending_checks="[]"
     bugbot_status=$(get_bugbot_status) || bugbot_status="unknown"
 
-    # Check for merge conflicts
+    # Check for merge conflicts.
+    # GitHub computes mergeability asynchronously — it may return "null" while still computing.
+    # Treat "null" / empty / unknown as PENDING so we don't declare clean prematurely.
     local mergeable base_branch
     mergeable=$(gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}" --jq '.mergeable' 2>/dev/null || echo "unknown")
     if [[ "$mergeable" == "CONFLICTING" ]]; then
         base_branch=$(gh api "repos/${OWNER}/${REPO}/pulls/${PR_NUMBER}" --jq '.base.ref' 2>/dev/null || echo "main")
         merge_conflicts="{\"conflicting\": true, \"base_branch\": \"${base_branch}\"}"
         echo "[$(date +%H:%M:%S)] ⚠ PR has merge conflicts with ${base_branch}"
+    elif [[ "$mergeable" == "null" || "$mergeable" == "unknown" || -z "$mergeable" ]]; then
+        # GitHub hasn't finished computing mergeability yet — treat as PENDING.
+        echo "[$(date +%H:%M:%S)] Mergeability not yet computed (got: '${mergeable}'), waiting..."
+        echo "PENDING"
+        return
     else
         merge_conflicts="{\"conflicting\": false}"
     fi

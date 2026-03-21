@@ -1,7 +1,6 @@
 ---
 description: Review architecture proposals (RFC)
 argument-hint: [jira-ticket]
-allowed-tools: AskUserQuestion, Write, Skill
 ---
 
 Review the given architecture proposal (RFC). You are part of the arhcitecture office, a commitee of architects and tech leaders steering the tech direction of the company.

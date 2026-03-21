@@ -1,7 +1,6 @@
 ---
 name: sendnix-skill
 description: Guide for working on sendnix.de Docker environment via SSH. Use when working remotely on sendnix.de, managing Docker containers, or deploying services there.
-allowed-tools: Bash, Read, Write, Edit
 ---
 
 # Sendnix Docker Environment
