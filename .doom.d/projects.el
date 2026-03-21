@@ -295,10 +295,35 @@ like any normal frame."
           (message "[projects] buffer-killed: %s from project %s" (buffer-name buf) proj)
           (plist-put entry :buffers (delq buf bufs))
           (puthash proj entry projects--table)
-          ;; If this was the last buffer in the active project, show the info buffer
-          (when (and (equal proj (projects-current))
-                     (null (projects-buffers proj)))
-            (run-with-timer 0 nil #'projects--ensure-visible-buffer)))))))
+          ;; After the kill, ensure all windows stay within the current project
+          (when (equal proj (projects-current))
+            (run-with-timer 0 nil #'projects--fix-windows-after-kill)))))))
+
+(defun projects--fix-windows-after-kill ()
+  "Ensure no window shows a non-project buffer after a project buffer is killed.
+Any window showing a buffer that does not belong to the current project
+(including *scratch*, *Messages*, etc.) is redirected to another project
+buffer or the project info buffer. Never shows scratch after a kill."
+  (let* ((proj (projects-current))
+         (info-buf-name (when proj (projects--info-buffer-name proj))))
+    (when proj
+      (dolist (win (window-list nil 0))
+        (let* ((buf (window-buffer win))
+               (bname (buffer-name buf))
+               (buf-proj (buffer-local-value 'projects--buffer-project buf)))
+          ;; Replace if window shows a buffer not belonging to this project
+          ;; (includes *scratch*, global special buffers, and other project's buffers)
+          (unless (or (string= bname info-buf-name)
+                      (equal buf-proj proj))
+            (let ((next (cl-find-if
+                         (lambda (b)
+                           (and (buffer-live-p b)
+                                (not (eq b buf))
+                                (equal (buffer-local-value 'projects--buffer-project b)
+                                       proj)))
+                         (buffer-list))))
+              (with-selected-window win
+                (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
 
 (defun projects-switch-buffer ()
   "Switch to a buffer belonging to the current project."
