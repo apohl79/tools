@@ -194,6 +194,12 @@ NAME must be unique. DIR is created if it does not exist."
                             nil t))))
   (unless (gethash name projects--table)
     (user-error "Project '%s' does not exist" name))
+  ;; Block interactive switching to/from hidden projects
+  (when (called-interactively-p 'any)
+    (when (projects-hidden-p (projects-current))
+      (user-error "Cannot switch projects from a temporary project"))
+    (when (projects-hidden-p name)
+      (user-error "Cannot switch to a hidden project")))
   (message "[projects] switch: %s -> %s%s" (projects-current) name (if norecord " (norecord)" ""))
   (projects--set-current name)
   (unless norecord
@@ -203,6 +209,8 @@ NAME must be unique. DIR is created if it does not exist."
   ;; Set default directory to the project root so find-file etc. start there
   (when-let ((dir (projects-dir name)))
     (setq-default default-directory dir))
+  ;; Show/hide tab-bar depending on whether the new project is hidden
+  (projects--update-frame-tab-bar)
   ;; Show the project's buffers or the info buffer
   (projects--ensure-visible-buffer)
   (projects--tab-bar-refresh)
@@ -468,6 +476,13 @@ Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functio
   (when (bound-and-true-p tab-bar-mode)
     (force-mode-line-update t)))
 
+(defun projects--update-frame-tab-bar (&optional frame)
+  "Show or hide the tab-bar for FRAME based on whether its project is hidden."
+  (let* ((f (or frame (selected-frame)))
+         (proj (projects-current f))
+         (hide (and proj (projects-hidden-p proj))))
+    (set-frame-parameter f 'tab-bar-lines (if hide 0 1))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Persistence
 ;;; ---------------------------------------------------------------------------
@@ -628,6 +643,8 @@ Updates only the per-frame project; does not affect other frames."
         (setq projects--current buf-proj))
       (when-let ((dir (projects-dir buf-proj)))
         (setq-default default-directory dir))
+      ;; Show/hide tab-bar for this frame based on the new project
+      (projects--update-frame-tab-bar frame)
       ;; Defer refresh — force-mode-line-update inside window-buffer-change-functions
       ;; is deferred until next event loop; a timer fires after current cycle completes.
       (run-with-timer 0 nil #'projects--tab-bar-refresh))))
