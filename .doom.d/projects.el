@@ -251,19 +251,24 @@ Does nothing if BUF is a special/global buffer or if BUF is dead."
 
 (defun projects--find-file-hook ()
   "Register newly opened files with the current project.
-Files opened via emacsclient (CLI) or before any project is active
-go to the hidden 'tmp' project instead."
+Only truly fresh client frames (client flag set, no project yet) route
+to tmp. Interactive daemon sessions that already have a project behave
+like any normal frame."
   (cond
-   ;; emacsclient frame: the selected frame has a 'client' parameter
-   ((frame-parameter nil 'client)
+   ;; Fresh client frame opened with a file via emacsclient (no project yet).
+   ;; Mark the frame as a tmp frame so all subsequent opens in it go there too.
+   ((and (frame-parameter nil 'client)
+         (null (frame-parameter nil 'projects-current)))
     (projects--ensure-tmp-project)
-    (projects-register-buffer (current-buffer) "tmp"))
-   ;; No active project yet (e.g. emacs [file] before session restore)
+    (projects-register-buffer (current-buffer) "tmp")
+    (projects--set-current "tmp" t)    ; frame-only — don't change global
+    (projects--update-frame-tab-bar))
+   ;; No active project at all (e.g. emacs [file] at startup before session restore)
    ((null (projects-current))
     (projects--ensure-tmp-project)
     (projects-register-buffer (current-buffer) "tmp")
     (projects-switch "tmp"))
-   ;; Normal case: opened within Emacs, register with current project
+   ;; Normal case: register with the frame's current project
    (t
     (projects-register-buffer (current-buffer)))))
 
@@ -639,14 +644,14 @@ Updates only the per-frame project; does not affect other frames."
     (when (and buf-proj
                (not (equal buf-proj frame-proj))
                (gethash buf-proj projects--table)
-               ;; Never auto-switch a non-client frame into a hidden project
-               (or (frame-parameter frame 'client)
-                   (not (projects-hidden-p buf-proj))))
+               ;; Never auto-switch into or out of a hidden project
+               (not (projects-hidden-p buf-proj))
+               (not (projects-hidden-p frame-proj)))
       (message "[projects] auto-switch %s -> %s (frame, triggered by buffer: %s)"
                frame-proj buf-proj (buffer-name buf))
       ;; Update only this frame — other frames keep their own current project
       (set-frame-parameter frame 'projects-current buf-proj)
-      ;; Update global only when this is not a client (emacsclient) frame
+      ;; Update global for non-client frames (regular project auto-switches)
       (unless (frame-parameter frame 'client)
         (setq projects--current buf-proj))
       ;; Only update global default-directory for non-client, non-hidden project switches
