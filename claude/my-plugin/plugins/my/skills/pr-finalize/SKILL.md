@@ -1,6 +1,6 @@
 ---
 description: Fix bug comments on a PR
-argument-hint: [pr-link] [--fix]
+argument-hint: [pr-link] [--fix] [--merge] [--merge-admin]
 ---
 
 # PR Finalizer
@@ -15,6 +15,11 @@ This skill operates in two modes based on arguments:
 - **No `--fix`** → **Launcher mode**: starts a background monitor script that polls
   the PR and dispatches non-interactive Claude sessions for fixes. Token-efficient.
 - **`--fix`** → **Fixer mode**: called by the monitor script to fix specific issues.
+
+Optional merge flags (Launcher mode only):
+- **`--merge`** → merge the PR automatically after finalization via `gh pr merge --merge`
+- **`--merge-admin`** → merge with admin override via `gh pr merge --merge --admin`
+- **NEVER merge unless one of these flags was explicitly passed.**
 
 ---
 
@@ -94,6 +99,11 @@ When you receive a `<task-notification>` for the background job:
 3. If exit code is non-zero, inform the user that the PR still has issues and
    show the summary of what was attempted.
 4. Clean up temp files.
+5. **Merge (only if exit code is 0 and a merge flag was passed):**
+   - `--merge` → `gh pr merge --merge <PR_NUMBER> --repo <OWNER>/<REPO>`
+   - `--merge-admin` → `gh pr merge --merge --admin <PR_NUMBER> --repo <OWNER>/<REPO>`
+   - If neither flag was passed: do NOT merge, even if checks are green.
+   - If merge fails, report the error but do not retry automatically.
 
 ---
 
