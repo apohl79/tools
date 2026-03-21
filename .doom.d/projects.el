@@ -48,9 +48,18 @@ nil means the buffer is global (special buffer).")
 ;;; Accessors
 ;;; ---------------------------------------------------------------------------
 
-(defun projects-current ()
-  "Return the name of the active project, or nil."
-  projects--current)
+(defun projects-current (&optional frame)
+  "Return the active project for FRAME (default: selected frame).
+Falls back to the global `projects--current' if no frame-local project is set."
+  (or (frame-parameter (or frame (selected-frame)) 'projects-current)
+      projects--current))
+
+(defun projects--set-current (name &optional frame-only)
+  "Set the active project to NAME on the selected frame.
+Also updates the global `projects--current' unless FRAME-ONLY is non-nil."
+  (set-frame-parameter nil 'projects-current name)
+  (unless frame-only
+    (setq projects--current name)))
 
 (defun projects-get (name)
   "Return the plist for project NAME, or nil."
@@ -134,7 +143,10 @@ NAME must be unique. DIR is created if it does not exist."
     (with-current-buffer buf
       (when (equal projects--buffer-project old-name)
         (setq-local projects--buffer-project new-name))))
-  ;; Update current if needed
+  ;; Update current project reference across all frames and global
+  (dolist (f (frame-list))
+    (when (equal (frame-parameter f 'projects-current) old-name)
+      (set-frame-parameter f 'projects-current new-name)))
   (when (equal projects--current old-name)
     (setq projects--current new-name))
   (projects--tab-bar-refresh)
@@ -152,12 +164,15 @@ NAME must be unique. DIR is created if it does not exist."
     (dolist (buf (projects-buffers name))
       (kill-buffer buf))
     (remhash name projects--table)
-    ;; Switch to another project if this was active
+    ;; Switch away from the deleted project in any frame that had it active
+    (dolist (f (frame-list))
+      (when (equal (frame-parameter f 'projects-current) name)
+        (let ((others (projects-names-visible)))
+          (if others
+              (with-selected-frame f (projects-switch (car others)))
+            (set-frame-parameter f 'projects-current nil)))))
     (when (equal projects--current name)
-      (let ((others (projects-names-mru)))
-        (if others
-            (projects-switch (car others))
-          (setq projects--current nil))))
+      (setq projects--current nil))
     (message "[projects] delete: %s" name)))
 
 ;;; ---------------------------------------------------------------------------
@@ -170,7 +185,7 @@ NAME must be unique. DIR is created if it does not exist."
 (defun projects-switch (name &optional norecord)
   "Switch to project NAME. Updates tab-bar and active buffers."
   (interactive
-   (let ((candidates (cl-remove projects--current (projects-names-visible) :test #'equal)))
+   (let ((candidates (cl-remove (projects-current) (projects-names-visible) :test #'equal)))
      (list (completing-read "Switch to project: "
                             (lambda (str pred action)
                               (if (eq action 'metadata)
@@ -179,8 +194,8 @@ NAME must be unique. DIR is created if it does not exist."
                             nil t))))
   (unless (gethash name projects--table)
     (user-error "Project '%s' does not exist" name))
-  (message "[projects] switch: %s -> %s%s" projects--current name (if norecord " (norecord)" ""))
-  (setq projects--current name)
+  (message "[projects] switch: %s -> %s%s" (projects-current) name (if norecord " (norecord)" ""))
+  (projects--set-current name)
   (unless norecord
     (let ((proj (gethash name projects--table)))
       (plist-put proj :switch-time (float-time))
@@ -201,7 +216,7 @@ NAME must be unique. DIR is created if it does not exist."
   "Register BUF as belonging to PROJECT-NAME (defaults to current project).
 Does nothing if BUF is a special/global buffer or if BUF is dead."
   (when (buffer-live-p buf)
-    (let ((proj (or project-name projects--current)))
+    (let ((proj (or project-name (projects-current))))
       (when (and proj (not (projects-special-buffer-p buf)))
         (with-current-buffer buf
           (setq-local projects--buffer-project proj))
@@ -231,7 +246,7 @@ go to the hidden 'tmp' project instead."
     (projects--ensure-tmp-project)
     (projects-register-buffer (current-buffer) "tmp"))
    ;; No active project yet (e.g. emacs [file] before session restore)
-   ((null projects--current)
+   ((null (projects-current))
     (projects--ensure-tmp-project)
     (projects-register-buffer (current-buffer) "tmp")
     (projects-switch "tmp"))
@@ -251,14 +266,14 @@ go to the hidden 'tmp' project instead."
           (plist-put entry :buffers (delq buf bufs))
           (puthash proj entry projects--table)
           ;; If this was the last buffer in the active project, show the info buffer
-          (when (and (equal proj projects--current)
+          (when (and (equal proj (projects-current))
                      (null (projects-buffers proj)))
             (run-with-timer 0 nil #'projects--ensure-visible-buffer)))))))
 
 (defun projects-switch-buffer ()
   "Switch to a buffer belonging to the current project."
   (interactive)
-  (let* ((proj projects--current)
+  (let* ((proj (projects-current))
          (bufs (if proj
                    (cl-remove-if-not
                     (lambda (b)
@@ -364,7 +379,7 @@ Returns the buffer."
 (defun projects--ensure-visible-buffer ()
   "Ensure visible windows show buffers appropriate for the current project.
 Replaces any windows showing a foreign project's info buffer."
-  (let* ((proj projects--current)
+  (let* ((proj (projects-current))
          (bufs (when proj (projects-buffers proj)))
          ;; Filter to non-info, non-special file buffers
          (file-bufs (when bufs
@@ -425,7 +440,7 @@ Buffers not under any project directory fall into 'Other'."
 (defun projects--tab-bar-format ()
   "Tab-bar format function: renders all projects MRU-sorted with active one highlighted.
 Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functions.el."
-  (let* ((current projects--current)
+  (let* ((current (projects-current))
          (visible (projects-names-visible))
          ;; Always show active project first, even if hidden (so user knows where they are)
          (names (if (and current (not (member current visible)))
@@ -572,10 +587,12 @@ Modeled after the existing my/quickload-session pattern."
                               (set-marker progress-end-marker (point))))))
                       (sit-for 0))))))) ; end let find-file-hook / dolist project-list
 
-          ;; Restore active project
-          (if (and saved-current (gethash saved-current projects--table))
-              (setq projects--current saved-current)
-            (setq projects--current (car (projects-names-mru))))
+          ;; Restore active project (global + current frame)
+          (let ((restored (if (and saved-current (gethash saved-current projects--table))
+                              saved-current
+                            (car (projects-names-mru)))))
+            (setq projects--current restored)
+            (set-frame-parameter nil 'projects-current restored))
 
           ;; Clean up and show dashboard (deferred so progress renders)
           (run-with-timer 0.2 nil
@@ -594,15 +611,21 @@ Modeled after the existing my/quickload-session pattern."
 (defun projects--auto-switch-on-display (frame)
   "Auto-switch project when the selected window shows a buffer from a different project.
 Fires on `window-buffer-change-functions' — handles the case where killing
-a buffer causes Emacs to show a buffer from another project."
-  (let* ((buf      (window-buffer (frame-selected-window frame)))
-         (buf-proj (buffer-local-value 'projects--buffer-project buf)))
+a buffer causes Emacs to show a buffer from another project.
+Updates only the per-frame project; does not affect other frames."
+  (let* ((buf          (window-buffer (frame-selected-window frame)))
+         (buf-proj     (buffer-local-value 'projects--buffer-project buf))
+         (frame-proj   (projects-current frame)))
     (when (and buf-proj
-               (not (equal buf-proj projects--current))
+               (not (equal buf-proj frame-proj))
                (gethash buf-proj projects--table))
-      (message "[projects] auto-switch %s -> %s (triggered by buffer: %s)"
-               projects--current buf-proj (buffer-name buf))
-      (setq projects--current buf-proj)
+      (message "[projects] auto-switch %s -> %s (frame, triggered by buffer: %s)"
+               frame-proj buf-proj (buffer-name buf))
+      ;; Update only this frame — other frames keep their own current project
+      (set-frame-parameter frame 'projects-current buf-proj)
+      ;; Update global only when this is not a client (emacsclient) frame
+      (unless (frame-parameter frame 'client)
+        (setq projects--current buf-proj))
       (when-let ((dir (projects-dir buf-proj)))
         (setq-default default-directory dir))
       ;; Defer refresh — force-mode-line-update inside window-buffer-change-functions
