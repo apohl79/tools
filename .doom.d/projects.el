@@ -254,6 +254,26 @@ Does nothing if BUF is a special/global buffer or if BUF is dead."
     (message "Buffer '%s' moved to project '%s'" (buffer-name buffer) target-project)))
 
 ;;; ---------------------------------------------------------------------------
+;;; Info Buffer Mode
+;;; ---------------------------------------------------------------------------
+
+(defvar projects-info-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "n") #'claude-code)
+    (define-key map (kbd "c") #'claude-code-continue)
+    (define-key map (kbd "r") #'claude-code-resume)
+    map)
+  "Keymap for `projects-info-mode'.")
+
+(define-derived-mode projects-info-mode special-mode "Project Info"
+  "Major mode for the project info buffer.
+Provides single-key shortcuts to launch Claude Code sessions."
+  :interactive nil)
+
+;; Put this buffer in Evil emacs state so n/c/r are not shadowed by Vim bindings
+(evil-set-initial-state 'projects-info-mode 'emacs)
+
+;;; ---------------------------------------------------------------------------
 ;;; Info Buffer (empty project placeholder)
 ;;; ---------------------------------------------------------------------------
 
@@ -284,8 +304,17 @@ Returns the buffer."
         (insert "\n")
         (insert (propertize "  This project has no open buffers.\n"
                             'face 'font-lock-doc-face))
-        (insert "  Open a file with C-x C-f to get started.\n"))
-      (setq buffer-read-only t)
+        (insert "  Open a file with C-x C-f to get started.\n")
+        (insert "\n")
+        (insert (propertize "  Claude Code:\n" 'face '(:weight bold)))
+        (insert (propertize "    n" 'face 'font-lock-keyword-face))
+        (insert "  new session  ")
+        (insert (propertize "  c" 'face 'font-lock-keyword-face))
+        (insert "  continue  ")
+        (insert (propertize "  r" 'face 'font-lock-keyword-face))
+        (insert "  resume\n"))
+      (unless (derived-mode-p 'projects-info-mode)
+        (projects-info-mode))
       (goto-char (point-min)))
     buf))
 
