@@ -636,11 +636,12 @@ main() {
                 fi
             done
 
-            # Also check for failed checks or new bugbot comments (those are always actionable)
-            local has_code_issues
+            # Also check for failed checks, new bugbot comments, or merge conflicts (always actionable)
+            local has_code_issues has_conflicts_local
             has_code_issues=$(echo "$issues" | jq '(.failed_checks | length > 0) or (.new_bugbot_comments | length > 0)' 2>/dev/null || echo "false")
+            has_conflicts_local=$(echo "$issues" | jq '.merge_conflicts.conflicting // false' 2>/dev/null || echo "false")
 
-            if [[ "$has_new_threads" == "false" && "$has_code_issues" == "false" && "$has_conflicts" == "false" ]]; then
+            if [[ "$has_new_threads" == "false" && "$has_code_issues" == "false" && "$has_conflicts_local" == "false" ]]; then
                 # All remaining issues are threads we've already attempted — avoid infinite loop
                 echo "[$(date +%H:%M:%S)] All remaining unresolved threads were already attempted. Treating as done."
                 echo "[$(date +%H:%M:%S)] Unresolved thread IDs: ${current_thread_ids:-none}"
