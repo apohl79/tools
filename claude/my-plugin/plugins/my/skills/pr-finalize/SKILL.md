@@ -63,20 +63,32 @@ bash <skill-dir>/pr-monitor.sh \
 
 Run this via `Bash` tool with `run_in_background: true`.
 
-### Step 3: Wait for completion
+### Step 3: Respond immediately — do NOT wait
 
-The background job will automatically notify you when it finishes. Do NOT poll,
-sleep, or call `TaskOutput` while it is running — you will be notified.
+After launching the background Bash job, **stop and respond to the user right now**:
 
-**What "truly done" means:** The monitor will NOT exit until:
-1. All CI checks are passing (no failures or pending checks).
+> "Monitor running for PR #N. Waiting for it to finish."
+
+Then go idle. **Do NOT call `TaskOutput`. Do NOT sleep. Do NOT poll.**
+You will receive a `<task-notification>` when the job completes.
+
+**Red flags — if you find yourself doing any of these, stop immediately:**
+- Calling `TaskOutput` with `block: true`
+- Calling `TaskOutput` at all before receiving a notification
+- Adding a sleep or delay
+- Saying "let me check the status"
+
+The monitor handles all polling internally. Your job ends at launching it.
+
+**What "truly done" means (the monitor handles this, not you):**
+1. All CI checks passing.
 2. No new Bugbot comments since the last push.
 3. No unresolved review threads.
-4. **At least 6 minutes have elapsed since the last fix push** — this ensures Bugbot has had time to analyze the new commit and post any follow-up comments before we declare victory. Without this wait, the monitor could exit while Bugbot is still running.
+4. At least 6 minutes elapsed since the last fix push.
 
-### Step 4: Report results
+### Step 4: Report results — only after receiving task-notification
 
-When the job finishes:
+When you receive a `<task-notification>` for the background job:
 1. Check the exit code. 0 = all checks green, truly done.
 2. Read `$SUMMARY_FILE` and display its contents to the user.
 3. If exit code is non-zero, inform the user that the PR still has issues and
