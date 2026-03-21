@@ -354,76 +354,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (after! undo-fu
   (map! :map undo-fu-mode-map "C-?" #'undo-fu-only-redo))
 
-(message "*** Email")
-
-(use-package! mu4e
-  ;; Fix the setup of org-msg for mu4e
-  :init (add-hook 'org-msg-mode-hook
-                  (lambda ()
-                    (org-msg-mode-mu4e)
-                    (org-msg-edit-mode-mu4e)
-                    ;; this fixes the problem of not closing the edit buffer properly
-                    (add-hook 'message-sent-hook
-                              (lambda ()
-                                (my/message-kill-buffer-no-query)
-                                (mu4e-compose-post-restore-window-configuration)))))
-  :config
-  (setq mail-user-agent 'mu4e-user-agent ; important for org-msg
-        mu4e-view-show-images t
-        mu4e-compose-signature-auto-include nil
-        mu4e-use-fancy-chars t
-        mu4e-split-view 'vertical
-        mu4e-headers-visible-columns 120
-
-        ; send setup, see ~/.msmtprc
-        sendmail-program (executable-find "msmtp")
-        send-mail-function #'smtpmail-send-it
-        message-sendmail-f-is-evil t
-        message-sendmail-extra-arguments '("--read-envelope-from")
-
-        message-send-mail-function #'message-send-mail-with-sendmail
-
-        ; receive setup, see ~/.mbsyncrc
-        mu4e-get-mail-command "mbsync --config ~/.mbsyncrc e47"
-        mu4e-update-interval 300
-        mu4e-headers-auto-update t
-
-        ; bookmarks
-        mu4e-bookmarks '((:name "Unread"
-                          :query "maildir:/INBOX AND flag:unread"
-                          :key ?i
-                          :favorite t))
-
-        ; dirs
-        mu4e-drafts-folder "/Drafts"
-        mu4e-sent-folder "/Sent"
-        mu4e-trash-folder "/Trash"
-        mu4e-refile-folder "/Archive"
-        mu4e-maildir-shortcuts '((:maildir "/INBOX" :key ?i)
-                                 (:maildir "/Sent" :key ?s)
-                                 (:maildir "/Drafts" :key ?d)
-                                 (:maildir "/Trash" :key ?t)
-                                 (:maildir "/Junk" :key ?j)
-                                 (:maildir "/Spam" :key ?g :hide-unread t))
-
-        ; avoid replying to ourselves
-        mu4e-compose-reply-ignore-address '("no-?reply" "pohl@e47.org")))
-
-(use-package! mu4e-views
-  :defer nil
-  :after mu4e
-  :config
-  (setq mu4e-views-default-view-method "html" ;; make xwidgets default
-        ;; when pressing n and p stay in the current window
-        mu4e-views-next-previous-message-behaviour 'stick-to-current-window
-        ;; automatically open messages when moving in the headers view
-        mu4e-views-auto-view-selected-message t)
-  (mu4e-views-mu4e-use-view-msg-method "gnus")) ;; select the default
-
-(setq browse-url-browser-function 'browse-url-generic
-      browse-url-generic-program "arc-cli"
-      browse-url-generic-args '("new-little-arc"))
-
 (message "*** Looks")
 
 (setq doom-theme 'doom-city-lights)
@@ -877,20 +807,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
         "C-<right>" (lambda () (interactive) (eat-term-send-string eat-terminal "\e[1;5C"))))
 
 (use-package! kubernetes)
-
-
-(use-package! claude-code-ide
-  :config
-  (setq claude-code-ide-window-width 105  ; Reduced to account for fringe/margins
-        claude-code-ide-use-side-window 'nil
-        claude-code-ide-terminal-backend 'vterm
-        claude-code-ide-cli-extra-flags "--dangerously-skip-permissions")
-  (claude-code-ide-emacs-tools-setup)
-
-  ;; Disable IDE file suggestions by overriding the handler directly
-  (with-eval-after-load 'claude-code-ide-mcp-handlers
-    (fset 'claude-code-ide-mcp-handle-get-open-editors
-          (lambda (_args) '((editors . []))))))
 
 (use-package! claude-code
   ;:bind-keymap ("C-s-x" . claude-code-command-map)

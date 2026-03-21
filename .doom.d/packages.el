@@ -37,16 +37,16 @@
 ;;(package! flymake-bridge :recipe (:host github :repo "liuyinz/flymake-bridge"))
 
 ;(package! org :pin "071c6e986c424d2e496be7d0815d6e9cd83ae4e6") ;; 9.6.30
-(package! mu4e-views :recipe (:host github :repo "lordpretzel/mu4e-views"))
+;(package! mu4e-views :recipe (:host github :repo "lordpretzel/mu4e-views"))
 
-(package! svg-lib)
-(package! svg-tag-mode :recipe (:host github :repo "rougier/svg-tag-mode"))
+;(package! svg-lib)
+;(package! svg-tag-mode :recipe (:host github :repo "rougier/svg-tag-mode"))
 
 (package! kubernetes)
 
 ;; db support
 (package! auto-complete)
-(package! pg :recipe (:host github :repo "emarsden/pg-el"))
+;(package! pg :recipe (:host github :repo "emarsden/pg-el"))
 
 (package! eat :recipe (:host codeberg
                         :repo "akib/emacs-eat"
@@ -56,7 +56,7 @@
                                  ("integration" "integration/*")
                                  (:exclude ".dir-locals.el" "*-tests.el"))))
 
-(package! claude-code-ide :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
+;(package! claude-code-ide :recipe (:host github :repo "manzaltu/claude-code-ide.el"))
 
 (package! inheritenv :recipe (:host github :repo "purcell/inheritenv"))
 (package! monet :recipe (:host github :repo "stevemolitor/monet"))
