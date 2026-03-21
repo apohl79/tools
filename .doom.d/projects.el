@@ -77,6 +77,14 @@ nil means the buffer is global (special buffer).")
                    (tb (or (plist-get (gethash b projects--table) :switch-time) 0)))
                (> ta tb)))))
 
+(defun projects-hidden-p (name)
+  "Return t if project NAME is hidden (not shown in UI lists or tab-bar)."
+  (plist-get (gethash name projects--table) :hidden))
+
+(defun projects-names-visible ()
+  "Return non-hidden project names, MRU-sorted."
+  (cl-remove-if #'projects-hidden-p (projects-names-mru)))
+
 (defun projects-special-buffer-p (buf)
   "Return t if BUF is a global/special buffer that should appear in all projects."
   (let ((name (buffer-name buf)))
@@ -162,7 +170,7 @@ NAME must be unique. DIR is created if it does not exist."
 (defun projects-switch (name &optional norecord)
   "Switch to project NAME. Updates tab-bar and active buffers."
   (interactive
-   (let ((candidates (cl-remove projects--current (projects-names-mru) :test #'equal)))
+   (let ((candidates (cl-remove projects--current (projects-names-visible) :test #'equal)))
      (list (completing-read "Switch to project: "
                             (lambda (str pred action)
                               (if (eq action 'metadata)
@@ -203,9 +211,25 @@ Does nothing if BUF is a special/global buffer or if BUF is dead."
             (plist-put entry :buffers (cons buf bufs))
             (puthash proj entry projects--table)))))))
 
+(defun projects--ensure-tmp-project ()
+  "Create the hidden 'tmp' project if it doesn't exist yet."
+  (unless (gethash "tmp" projects--table)
+    (puthash "tmp" (list :dir (expand-file-name "~/")
+                         :buffers nil
+                         :files nil
+                         :switch-time 0
+                         :hidden t)
+             projects--table)))
+
 (defun projects--find-file-hook ()
-  "Register newly opened files with the current project."
-  (projects-register-buffer (current-buffer)))
+  "Register newly opened files with the current project.
+If no project is active (e.g. file opened from command line), assign to
+the hidden 'tmp' project and switch to it."
+  (if projects--current
+      (projects-register-buffer (current-buffer))
+    (projects--ensure-tmp-project)
+    (projects-register-buffer (current-buffer) "tmp")
+    (projects-switch "tmp")))
 
 (defun projects--cleanup-dead-buffers ()
   "Remove the current (dying) buffer from its owning project's buffer list."
@@ -394,11 +418,13 @@ Buffers not under any project directory fall into 'Other'."
   "Tab-bar format function: renders all projects MRU-sorted with active one highlighted.
 Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functions.el."
   (let* ((current projects--current)
-         (mru (projects-names-mru))
-         ;; Active project always first, remaining projects MRU-sorted
-         (names (if current
-                    (cons current (cl-remove current mru :test #'equal))
-                  mru)))
+         (visible (projects-names-visible))
+         ;; Always show active project first, even if hidden (so user knows where they are)
+         (names (if (and current (not (member current visible)))
+                    (cons current visible)
+                  (if current
+                      (cons current (cl-remove current visible :test #'equal))
+                    visible))))
     (mapcar
      (lambda (name)
        (let ((face (if (equal name current)
@@ -441,7 +467,8 @@ Saves project names, directories, switch times, and open file paths."
                     :dir (plist-get entry :dir)
                     :files files
                     :switch-time (or (plist-get entry :switch-time) 0))))
-          (projects-names))))
+          ;; Don't persist hidden projects (they're recreated on demand)
+          (cl-remove-if #'projects-hidden-p (projects-names)))))
     (with-temp-file projects--save-file
       (let ((print-level nil)
             (print-length nil))
