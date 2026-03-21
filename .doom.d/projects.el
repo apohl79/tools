@@ -223,13 +223,21 @@ Does nothing if BUF is a special/global buffer or if BUF is dead."
 
 (defun projects--find-file-hook ()
   "Register newly opened files with the current project.
-If no project is active (e.g. file opened from command line), assign to
-the hidden 'tmp' project and switch to it."
-  (if projects--current
-      (projects-register-buffer (current-buffer))
+Files opened via emacsclient (CLI) or before any project is active
+go to the hidden 'tmp' project instead."
+  (cond
+   ;; emacsclient frame: the selected frame has a 'client' parameter
+   ((frame-parameter nil 'client)
+    (projects--ensure-tmp-project)
+    (projects-register-buffer (current-buffer) "tmp"))
+   ;; No active project yet (e.g. emacs [file] before session restore)
+   ((null projects--current)
     (projects--ensure-tmp-project)
     (projects-register-buffer (current-buffer) "tmp")
-    (projects-switch "tmp")))
+    (projects-switch "tmp"))
+   ;; Normal case: opened within Emacs, register with current project
+   (t
+    (projects-register-buffer (current-buffer)))))
 
 (defun projects--cleanup-dead-buffers ()
   "Remove the current (dying) buffer from its owning project's buffer list."
