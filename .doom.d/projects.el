@@ -307,7 +307,8 @@ Returns the buffer."
         (insert (propertize (format "  Buffers: %d\n" buf-count)
                             'face 'font-lock-comment-face))
         (insert "\n")
-        (insert "  Open a file with C-x C-f to get started.\n")
+        (insert (propertize "  Open a file with C-x C-f to get started.\n"
+                            'face 'font-lock-doc-face))
         (insert "\n")
         (insert (propertize "  Claude Code:\n" 'face '(:weight bold)))
         (insert (propertize "    n" 'face 'font-lock-keyword-face))
