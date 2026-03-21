@@ -636,7 +636,10 @@ Updates only the per-frame project; does not affect other frames."
          (frame-proj   (projects-current frame)))
     (when (and buf-proj
                (not (equal buf-proj frame-proj))
-               (gethash buf-proj projects--table))
+               (gethash buf-proj projects--table)
+               ;; Never auto-switch a non-client frame into a hidden project
+               (or (frame-parameter frame 'client)
+                   (not (projects-hidden-p buf-proj))))
       (message "[projects] auto-switch %s -> %s (frame, triggered by buffer: %s)"
                frame-proj buf-proj (buffer-name buf))
       ;; Update only this frame — other frames keep their own current project
