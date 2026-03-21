@@ -105,7 +105,7 @@ NAME must be unique. DIR is created if it does not exist."
                       :files nil
                       :switch-time 0)
            projects--table)
-  (message "Project '%s' created → %s" name dir)
+  (message "[projects] create: %s dir=%s" name dir)
   (projects-switch name)
   name)
 
@@ -150,7 +150,7 @@ NAME must be unique. DIR is created if it does not exist."
         (if others
             (projects-switch (car others))
           (setq projects--current nil))))
-    (message "Project '%s' deleted" name)))
+    (message "[projects] delete: %s" name)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Switching
@@ -171,6 +171,7 @@ NAME must be unique. DIR is created if it does not exist."
                             nil t))))
   (unless (gethash name projects--table)
     (user-error "Project '%s' does not exist" name))
+  (message "[projects] switch: %s -> %s%s" projects--current name (if norecord " (norecord)" ""))
   (setq projects--current name)
   (unless norecord
     (let ((proj (gethash name projects--table)))
@@ -214,6 +215,7 @@ Does nothing if BUF is a special/global buffer or if BUF is dead."
       (let* ((entry (gethash proj projects--table))
              (bufs (plist-get entry :buffers)))
         (when (memq buf bufs)
+          (message "[projects] buffer-killed: %s from project %s" (buffer-name buf) proj)
           (plist-put entry :buffers (delq buf bufs))
           (puthash proj entry projects--table))))))
 
@@ -521,6 +523,24 @@ Modeled after the existing my/quickload-session pattern."
 ;;; Setup Hooks
 ;;; ---------------------------------------------------------------------------
 
+(defun projects--auto-switch-on-display (frame)
+  "Auto-switch project when the selected window shows a buffer from a different project.
+Fires on `window-buffer-change-functions' — handles the case where killing
+a buffer causes Emacs to show a buffer from another project."
+  (let* ((buf      (window-buffer (frame-selected-window frame)))
+         (buf-proj (buffer-local-value 'projects--buffer-project buf)))
+    (when (and buf-proj
+               (not (equal buf-proj projects--current))
+               (gethash buf-proj projects--table))
+      (message "[projects] auto-switch %s -> %s (triggered by buffer: %s)"
+               projects--current buf-proj (buffer-name buf))
+      (setq projects--current buf-proj)
+      (when-let ((dir (projects-dir buf-proj)))
+        (setq-default default-directory dir))
+      ;; Defer refresh — force-mode-line-update inside window-buffer-change-functions
+      ;; is deferred until next event loop; a timer fires after current cycle completes.
+      (run-with-timer 0 nil #'projects--tab-bar-refresh))))
+
 (defvar projects--hooks-installed-p nil
   "Non-nil if projects hooks have already been installed.")
 
@@ -535,6 +555,8 @@ Idempotent: safe to call multiple times."
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'window-configuration-change-hook #'projects--maybe-close-info-window)
+    ;; Auto-switch project when Emacs shows a buffer from a different project
+    (add-hook 'window-buffer-change-functions #'projects--auto-switch-on-display)
     ;; Auto-save every 5 minutes
     (run-with-timer 300 300
       (lambda ()
@@ -587,7 +609,11 @@ allowing vterm/eat to resize correctly."
                  (when (or (with-current-buffer (window-buffer sel)
                              (derived-mode-p 'vterm-mode 'eat-mode))
                            (string-match-p "^\\*claude" sel-name))
-                   (cl-find-if (lambda (w) (not (eq w sel)))
+                   ;; Also exclude side/dedicated windows as the "replacement" target
+                   (cl-find-if (lambda (w)
+                                 (and (not (eq w sel))
+                                      (not (window-parameter w 'window-side))
+                                      (not (window-dedicated-p w))))
                                (window-list nil 0))))))))
       (when info-win
         (set-frame-parameter frame 'projects-fresh-client nil)
