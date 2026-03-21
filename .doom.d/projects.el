@@ -271,7 +271,8 @@ Provides single-key shortcuts to launch Claude Code sessions."
   :interactive nil)
 
 ;; Put this buffer in Evil emacs state so n/c/r are not shadowed by Vim bindings
-(evil-set-initial-state 'projects-info-mode 'emacs)
+(after! evil
+  (evil-set-initial-state 'projects-info-mode 'emacs))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Info Buffer (empty project placeholder)
