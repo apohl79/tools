@@ -210,8 +210,10 @@ NAME must be unique. DIR is created if it does not exist."
       (plist-put proj :switch-time (float-time))
       (puthash name proj projects--table)))
   ;; Set default directory to the project root so find-file etc. start there
-  (when-let ((dir (projects-dir name)))
-    (setq-default default-directory dir))
+  ;; Skip for hidden projects — they are isolated and should not affect global dir
+  (unless (projects-hidden-p name)
+    (when-let ((dir (projects-dir name)))
+      (setq-default default-directory dir)))
   ;; Show/hide tab-bar depending on whether the new project is hidden
   (projects--update-frame-tab-bar)
   ;; Show the project's buffers or the info buffer
@@ -647,8 +649,10 @@ Updates only the per-frame project; does not affect other frames."
       ;; Update global only when this is not a client (emacsclient) frame
       (unless (frame-parameter frame 'client)
         (setq projects--current buf-proj))
-      (when-let ((dir (projects-dir buf-proj)))
-        (setq-default default-directory dir))
+      ;; Only update global default-directory for non-client, non-hidden project switches
+      (unless (or (frame-parameter frame 'client) (projects-hidden-p buf-proj))
+        (when-let ((dir (projects-dir buf-proj)))
+          (setq-default default-directory dir)))
       ;; Show/hide tab-bar for this frame based on the new project
       (projects--update-frame-tab-bar frame)
       ;; Defer refresh — force-mode-line-update inside window-buffer-change-functions
