@@ -217,7 +217,11 @@ Does nothing if BUF is a special/global buffer or if BUF is dead."
         (when (memq buf bufs)
           (message "[projects] buffer-killed: %s from project %s" (buffer-name buf) proj)
           (plist-put entry :buffers (delq buf bufs))
-          (puthash proj entry projects--table))))))
+          (puthash proj entry projects--table)
+          ;; If this was the last buffer in the active project, show the info buffer
+          (when (and (equal proj projects--current)
+                     (null (projects-buffers proj)))
+            (run-with-timer 0 nil #'projects--ensure-visible-buffer)))))))
 
 (defun projects-switch-buffer ()
   "Switch to a buffer belonging to the current project."
