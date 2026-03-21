@@ -340,7 +340,12 @@ Project buffers are listed first; global special buffers appear at the end."
          (ordered (append project-bufs special-bufs))
          (names (mapcar #'buffer-name ordered)))
     (switch-to-buffer
-     (completing-read (format "Buffer [%s]: " (or proj "global")) names nil t))))
+     (completing-read (format "Buffer [%s]: " (or proj "global"))
+                      (lambda (str pred action)
+                        (if (eq action 'metadata)
+                            '(metadata (display-sort-function . identity))
+                          (complete-with-action action names str pred)))
+                      nil t))))
 
 (defun projects-move-buffer (buffer target-project)
   "Move BUFFER to TARGET-PROJECT."
