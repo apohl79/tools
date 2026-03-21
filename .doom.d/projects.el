@@ -690,8 +690,6 @@ Idempotent: safe to call multiple times."
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'window-configuration-change-hook #'projects--maybe-close-info-window)
-    ;; Auto-switch project when Emacs shows a buffer from a different project
-    (add-hook 'window-buffer-change-functions #'projects--auto-switch-on-display)
     ;; Auto-save every 5 minutes
     (run-with-timer 300 300
       (lambda ()
