@@ -104,13 +104,25 @@ Also updates the global `projects--current' unless FRAME-ONLY is non-nil."
 ;;; CRUD
 ;;; ---------------------------------------------------------------------------
 
+(defun projects--unique-project-name (base)
+  "Return BASE if no project with that name exists, else BASE [1], BASE [2], …"
+  (if (not (gethash base projects--table))
+      base
+    (let ((n 1))
+      (while (gethash (format "%s [%d]" base n) projects--table)
+        (setq n (1+ n)))
+      (format "%s [%d]" base n))))
+
 (defun projects-create (name dir)
   "Create a new project named NAME with root directory DIR.
 NAME must be unique. DIR is created if it does not exist."
   (interactive
-   (let* ((name (read-string "Project name: "))
-          (dir (read-directory-name "Project directory: " nil nil nil)))
-     (list name (expand-file-name dir))))
+   (let* ((dir (expand-file-name
+                (read-directory-name "Project directory: " nil nil nil)))
+          (default-name (projects--unique-project-name
+                         (file-name-nondirectory (directory-file-name dir))))
+          (name (read-string "Project name: " default-name)))
+     (list name dir)))
   (when (gethash name projects--table)
     (user-error "Project '%s' already exists" name))
   (unless (file-directory-p dir)
