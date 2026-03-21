@@ -326,18 +326,19 @@ buffer or the project info buffer. Never shows scratch after a kill."
                 (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
 
 (defun projects-switch-buffer ()
-  "Switch to a buffer belonging to the current project."
+  "Switch to a buffer belonging to the current project.
+Project buffers are listed first; global special buffers appear at the end."
   (interactive)
   (let* ((proj (projects-current))
-         (bufs (if proj
-                   (cl-remove-if-not
-                    (lambda (b)
-                      (or (projects-special-buffer-p b)
-                          (with-current-buffer b
-                            (equal projects--buffer-project proj))))
-                    (buffer-list))
-                 (buffer-list)))
-         (names (mapcar #'buffer-name bufs)))
+         (all (buffer-list))
+         (project-bufs (when proj
+                         (cl-remove-if-not
+                          (lambda (b)
+                            (equal (buffer-local-value 'projects--buffer-project b) proj))
+                          all)))
+         (special-bufs (cl-remove-if-not #'projects-special-buffer-p all))
+         (ordered (append project-bufs special-bufs))
+         (names (mapcar #'buffer-name ordered)))
     (switch-to-buffer
      (completing-read (format "Buffer [%s]: " (or proj "global")) names nil t))))
 
