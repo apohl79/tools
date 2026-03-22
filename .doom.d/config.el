@@ -336,6 +336,9 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (map! "C-x b"       #'projects-switch-buffer
       "M-TAB"       #'projects-switch)
 
+(map! :map vertico-map
+      "M-TAB" #'vertico-next)
+
 (after! treemacs
   (treemacs-define-RET-action 'file-node-closed #'treemacs-visit-node-ace)
   (treemacs-define-RET-action 'file-node-open #'treemacs-visit-node-ace)
