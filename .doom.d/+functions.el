@@ -628,9 +628,11 @@ When called interactively, resizes the window displaying the current buffer."
                             (error nil))))))))))))))))
 
 (defun my/vterm-resize-test ()
-  "Force vterm redraw by sending two SIGWINCHs: size-1 col then actual size.
-Uses set-process-window-size only — does NOT call vterm--set-size, so
-vterm's internal buffer state is unchanged and no corruption occurs."
+  "Sync vterm's internal state and the pty to the actual window dimensions.
+Fixes sessions where vterm renders in only part of the window because its
+internal size is stale (e.g. after a split was collapsed).  Calls both
+set-process-window-size (SIGWINCH) and vterm--set-size unconditionally,
+bypassing the width-changed guard in my/vterm-resize-window."
   (interactive)
   (let* ((proc   (get-buffer-process (current-buffer)))
          (window (selected-window))
@@ -639,11 +641,11 @@ vterm's internal buffer state is unchanged and no corruption occurs."
          (height (window-body-height window)))
     (unless (and proc (process-live-p proc))
       (user-error "No live process in this buffer"))
-    (set-process-window-size proc height (max 1 (1- width)))
-    (run-with-timer 0.05 nil
-                    (lambda ()
-                      (when (process-live-p proc)
-                        (set-process-window-size proc height width))))))
+    (set-process-window-size proc height width)
+    (when (and (boundp 'vterm--term) vterm--term)
+      (condition-case nil
+          (vterm--set-size vterm--term height width)
+        (error nil)))))
 
 (defun my/vterm-resize-all-on-size-change (frame)
   "Resize every vterm window in FRAME after a window size change."
