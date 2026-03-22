@@ -628,24 +628,32 @@ When called interactively, resizes the window displaying the current buffer."
                             (error nil))))))))))))))))
 
 (defun my/vterm-resize-test ()
-  "Sync vterm's internal state and the pty to the actual window dimensions.
-Fixes sessions where vterm renders in only part of the window because its
-internal size is stale (e.g. after a split was collapsed).  Calls both
-set-process-window-size (SIGWINCH) and vterm--set-size unconditionally,
-bypassing the width-changed guard in my/vterm-resize-window."
+  "Force vterm to re-render at the correct window size.
+The OS does not re-send SIGWINCH when asked for the same size it already
+has, so we must bounce: shrink by 1 first, then restore.  The timer gives
+the process time to act on the first SIGWINCH before the corrective one.
+Also clears the cached width so my/vterm-resize-window calls vterm--set-size."
   (interactive)
   (let* ((proc   (get-buffer-process (current-buffer)))
+         (buf    (current-buffer))
          (window (selected-window))
          (margin (if (fboundp 'vterm--get-margin-width) (vterm--get-margin-width) 0))
          (width  (max (- (window-max-chars-per-line window) margin) 10))
          (height (window-body-height window)))
     (unless (and proc (process-live-p proc))
       (user-error "No live process in this buffer"))
-    (set-process-window-size proc height width)
-    (when (and (boundp 'vterm--term) vterm--term)
-      (condition-case nil
-          (vterm--set-size vterm--term height width)
-        (error nil)))))
+    ;; Shrink by 1 — forces OS to store a new size and deliver SIGWINCH
+    (set-process-window-size proc (max 1 (1- height)) (max 1 (1- width)))
+    ;; Restore after 300ms: process has had time to handle the first SIGWINCH,
+    ;; so the second one at the correct size is guaranteed to be delivered
+    (run-with-timer
+     0.3 nil
+     (lambda ()
+       (when (and (buffer-live-p buf) (process-live-p proc))
+         (with-current-buffer buf
+           ;; Clear cache so my/vterm-resize-window calls vterm--set-size
+           (remhash window my/vterm-window-widths)
+           (my/vterm-resize-window window)))))))
 
 (defun my/vterm-resize-all-on-size-change (frame)
   "Resize every vterm window in FRAME after a window size change."
