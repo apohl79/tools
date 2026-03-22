@@ -721,6 +721,8 @@ Idempotent: safe to call multiple times."
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'window-configuration-change-hook #'projects--maybe-close-info-window)
+    ;; quit-window buries buffers (no kill-buffer-hook) — fix windows afterwards
+    (advice-add 'quit-window :after (lambda (&rest _) (projects--fix-windows-after-kill)))
     ;; Auto-save every 5 minutes
     (run-with-timer 300 300
       (lambda ()
