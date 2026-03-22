@@ -836,38 +836,38 @@ allowing vterm/eat to resize correctly."
                    ;; Show the other buffer in info-win, then delete other-win
                    (set-window-buffer info-win buf)
                    (delete-window other-win)
-                   ;; Force full redraw via resize-bounce: shrink by 1 col then
-                   ;; restore. Two distinct SIGWINCHs guarantee any TUI redraws.
-                   ;; 2s delay allows Claude's TUI to finish initializing first.
-                   (run-with-timer
-                    2 nil
-                    (lambda ()
-                      (when (buffer-live-p buf)
-                        (with-current-buffer buf
-                          (cond
-                           ((derived-mode-p 'vterm-mode)
-                            (let* ((win  (get-buffer-window buf))
-                                   (proc (get-buffer-process buf)))
-                              (when (and win proc (process-live-p proc))
-                                (let ((h (window-body-height win))
-                                      (w (window-max-chars-per-line win)))
-                                  ;; Update vterm's internal buffer to the correct size.
-                                  ;; Without this, vterm's renderer stays at the old
-                                  ;; (split) height even though SIGWINCH is sent.
-                                  (when (and (boundp 'vterm--term) vterm--term)
-                                    (condition-case nil
-                                        (vterm--set-size vterm--term h w)
-                                      (error nil)))
-                                  ;; Bounce the pty size by 1 to force two SIGWINCHs
+                   ;; Capture dimensions NOW while the window is fullscreen.
+                   ;; Reading them inside the 2s timer risks getting wrong values
+                   ;; if another split appears during the delay.
+                   (let* ((h (window-body-height info-win))
+                          (w (window-max-chars-per-line info-win)))
+                     ;; 2s delay allows Claude's TUI to finish initializing first.
+                     (run-with-timer
+                      2 nil
+                      (lambda ()
+                        (when (buffer-live-p buf)
+                          (with-current-buffer buf
+                            (cond
+                             ((derived-mode-p 'vterm-mode)
+                              (let ((proc (get-buffer-process buf)))
+                                (when (and proc (process-live-p proc))
+                                  ;; Bounce pty size: sends SIGWINCH at h-1 then h.
+                                  ;; vterm--set-size is called AFTER the restore bounce
+                                  ;; because the buffer may be read-only before the
+                                  ;; process responds to the first SIGWINCH.
                                   (set-process-window-size proc h (max 1 (1- w)))
                                   (run-with-timer
                                    0.05 nil
                                    (lambda ()
                                      (when (process-live-p proc)
-                                       (set-process-window-size proc h w))))))))
-                           ((and (eq major-mode 'eat-mode)
-                                 (fboundp 'eat-reset))
-                            (eat-reset))))))))))))
+                                       (set-process-window-size proc h w)
+                                       (when (and (boundp 'vterm--term) vterm--term)
+                                         (condition-case nil
+                                             (vterm--set-size vterm--term h w)
+                                           (error nil)))))))))
+                             ((and (eq major-mode 'eat-mode)
+                                   (fboundp 'eat-reset))
+                              (eat-reset)))))))))))))
          info-win)))))
 
 ;;; ---------------------------------------------------------------------------
