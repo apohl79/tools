@@ -667,10 +667,12 @@ Logs each step to *vterm-resize-debug* for diagnosis."
          (log    (get-buffer-create "*vterm-resize-debug*")))
     (unless (and proc (process-live-p proc))
       (user-error "No live process in this buffer"))
-    (cl-labels ((dbg (fmt &rest args)
-                  (with-current-buffer log
-                    (goto-char (point-max))
-                    (insert (apply #'format (concat "[" (format-time-string "%H:%M:%S") "] " fmt "\n") args)))))
+    (cl-flet ((dbg (fmt &rest args)
+                (with-current-buffer log
+                  (goto-char (point-max))
+                  (insert (apply #'format
+                                 (concat "[" (format-time-string "%H:%M:%S") "] " fmt "\n")
+                                 args)))))
       (dbg "resize-test start: h=%d w=%d" height width)
       ;; Step 1: update vterm's internal buffer to the correct size
       (if (and (boundp 'vterm--term) vterm--term)
@@ -678,10 +680,10 @@ Logs each step to *vterm-resize-debug* for diagnosis."
               (progn (vterm--set-size vterm--term height width)
                      (dbg "vterm--set-size OK: %dx%d" height width))
             (error (dbg "vterm--set-size ERROR: %s" err)))
-        (dbg "vterm--term absent — skipping vterm--set-size"))
+        (dbg "vterm--term ABSENT"))
       ;; Step 2: bounce pty size to force two SIGWINCHs
       (set-process-window-size proc (max 1 (1- height)) (max 1 (1- width)))
-      (dbg "set-process-window-size (shrink): %dx%d" (1- height) (1- width))
+      (dbg "shrink: %dx%d" (1- height) (1- width))
       (run-with-timer
        0.3 nil
        (lambda ()
@@ -689,17 +691,19 @@ Logs each step to *vterm-resize-debug* for diagnosis."
            (with-current-buffer buf
              (remhash window my/vterm-window-widths)
              (set-process-window-size proc height width)
-             (dbg "set-process-window-size (restore): %dx%d" height width)
+             (dbg "restore pty: %dx%d" height width)
              (when (and (boundp 'vterm--term) vterm--term)
                (condition-case err
                    (progn (vterm--set-size vterm--term height width)
-                          (dbg "vterm--set-size (restore) OK: %dx%d" height width))
-                 (error (dbg "vterm--set-size (restore) ERROR: %s" err))))
-             (let* ((pty (process-tty-name proc))
-                    (stty (when pty (string-trim (shell-command-to-string
-                                                  (format "stty size < %s 2>/dev/null" pty))))))
-               (dbg "after restore — stty: %s" (if (string= stty "") "unknown" stty))))))
-       (display-buffer log))))
+                          (dbg "vterm--set-size restore OK: %dx%d" height width))
+                 (error (dbg "vterm--set-size restore ERROR: %s" err))))
+             (let* ((pty  (process-tty-name proc))
+                    (stty (when pty
+                            (string-trim
+                             (shell-command-to-string
+                              (format "stty size < %s 2>/dev/null" pty))))))
+               (dbg "stty after: %s" (if (string= stty "") "unknown" stty)))))))
+      (display-buffer log))))
 
 (defun my/vterm-resize-all-on-size-change (frame)
   "Resize every vterm window in FRAME after a window size change."
