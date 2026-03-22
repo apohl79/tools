@@ -656,31 +656,50 @@ it, and compare the two outputs to see what actually differs."
 
 (defun my/vterm-resize-test ()
   "Force vterm to re-render at the correct window size.
-The OS does not re-send SIGWINCH when asked for the same size it already
-has, so we must bounce: shrink by 1 first, then restore.  The timer gives
-the process time to act on the first SIGWINCH before the corrective one.
-Also clears the cached width so my/vterm-resize-window calls vterm--set-size."
+Logs each step to *vterm-resize-debug* for diagnosis."
   (interactive)
   (let* ((proc   (get-buffer-process (current-buffer)))
          (buf    (current-buffer))
          (window (selected-window))
          (margin (if (fboundp 'vterm--get-margin-width) (vterm--get-margin-width) 0))
          (width  (max (- (window-max-chars-per-line window) margin) 10))
-         (height (window-body-height window)))
+         (height (window-body-height window))
+         (log    (get-buffer-create "*vterm-resize-debug*")))
     (unless (and proc (process-live-p proc))
       (user-error "No live process in this buffer"))
-    ;; Shrink by 1 — forces OS to store a new size and deliver SIGWINCH
-    (set-process-window-size proc (max 1 (1- height)) (max 1 (1- width)))
-    ;; Restore after 300ms: process has had time to handle the first SIGWINCH,
-    ;; so the second one at the correct size is guaranteed to be delivered
-    (run-with-timer
-     0.3 nil
-     (lambda ()
-       (when (and (buffer-live-p buf) (process-live-p proc))
-         (with-current-buffer buf
-           ;; Clear cache so my/vterm-resize-window calls vterm--set-size
-           (remhash window my/vterm-window-widths)
-           (my/vterm-resize-window window)))))))
+    (cl-labels ((dbg (fmt &rest args)
+                  (with-current-buffer log
+                    (goto-char (point-max))
+                    (insert (apply #'format (concat "[" (format-time-string "%H:%M:%S") "] " fmt "\n") args)))))
+      (dbg "resize-test start: h=%d w=%d" height width)
+      ;; Step 1: update vterm's internal buffer to the correct size
+      (if (and (boundp 'vterm--term) vterm--term)
+          (condition-case err
+              (progn (vterm--set-size vterm--term height width)
+                     (dbg "vterm--set-size OK: %dx%d" height width))
+            (error (dbg "vterm--set-size ERROR: %s" err)))
+        (dbg "vterm--term absent — skipping vterm--set-size"))
+      ;; Step 2: bounce pty size to force two SIGWINCHs
+      (set-process-window-size proc (max 1 (1- height)) (max 1 (1- width)))
+      (dbg "set-process-window-size (shrink): %dx%d" (1- height) (1- width))
+      (run-with-timer
+       0.3 nil
+       (lambda ()
+         (when (and (buffer-live-p buf) (process-live-p proc))
+           (with-current-buffer buf
+             (remhash window my/vterm-window-widths)
+             (set-process-window-size proc height width)
+             (dbg "set-process-window-size (restore): %dx%d" height width)
+             (when (and (boundp 'vterm--term) vterm--term)
+               (condition-case err
+                   (progn (vterm--set-size vterm--term height width)
+                          (dbg "vterm--set-size (restore) OK: %dx%d" height width))
+                 (error (dbg "vterm--set-size (restore) ERROR: %s" err))))
+             (let* ((pty (process-tty-name proc))
+                    (stty (when pty (string-trim (shell-command-to-string
+                                                  (format "stty size < %s 2>/dev/null" pty))))))
+               (dbg "after restore — stty: %s" (if (string= stty "") "unknown" stty))))))
+       (display-buffer log))))
 
 (defun my/vterm-resize-all-on-size-change (frame)
   "Resize every vterm window in FRAME after a window size change."

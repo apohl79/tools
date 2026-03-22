@@ -815,6 +815,14 @@ allowing vterm/eat to resize correctly."
                               (when (and win proc (process-live-p proc))
                                 (let ((h (window-body-height win))
                                       (w (window-max-chars-per-line win)))
+                                  ;; Update vterm's internal buffer to the correct size.
+                                  ;; Without this, vterm's renderer stays at the old
+                                  ;; (split) height even though SIGWINCH is sent.
+                                  (when (and (boundp 'vterm--term) vterm--term)
+                                    (condition-case nil
+                                        (vterm--set-size vterm--term h w)
+                                      (error nil)))
+                                  ;; Bounce the pty size by 1 to force two SIGWINCHs
                                   (set-process-window-size proc h (max 1 (1- w)))
                                   (run-with-timer
                                    0.05 nil
