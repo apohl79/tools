@@ -1,6 +1,6 @@
 ---
 description: Execute a development plan by orchestrating focused sub-agents for each task
-argument-hint: [plan-document] [jira-ticket] [--no-worktree] [--no-pr] [--draft-pr]
+argument-hint: [plan-document] [jira-ticket] [--no-worktree] [--no-pr] [--draft-pr] [--merge] [--merge-admin]
 ---
 
 **PLANNING MODE CHECK (execute FIRST, before anything else):**
