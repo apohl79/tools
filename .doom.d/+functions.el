@@ -627,6 +627,33 @@ When called interactively, resizes the window displaying the current buffer."
                               (vterm--set-size vterm--term h w)
                             (error nil))))))))))))))))
 
+(defun my/vterm-resize-debug ()
+  "Dump vterm sizing state to *vterm-resize-debug* for diagnosis.
+Call this in a broken vterm session, then after a wezterm resize that fixes
+it, and compare the two outputs to see what actually differs."
+  (interactive)
+  (let* ((proc   (get-buffer-process (current-buffer)))
+         (window (selected-window))
+         (margin (if (fboundp 'vterm--get-margin-width) (vterm--get-margin-width) 0))
+         (width  (- (window-max-chars-per-line window) margin))
+         (height (window-body-height window))
+         (cached (gethash window my/vterm-window-widths))
+         (pty    (when proc (process-tty-name proc)))
+         (stty   (when pty (string-trim
+                            (shell-command-to-string
+                             (format "stty size < %s 2>/dev/null" pty)))))
+         (term-present (and (boundp 'vterm--term) vterm--term)))
+    (with-current-buffer (get-buffer-create "*vterm-resize-debug*")
+      (goto-char (point-max))
+      (insert (format "\n─── %s ───\n" (format-time-string "%H:%M:%S")))
+      (insert (format "Emacs window :  h=%-4d w=%d  (margin=%d)\n" height width margin))
+      (insert (format "Cached width :  %s\n" (if cached (number-to-string cached) "nil (never set)")))
+      (insert (format "PTY stty size:  %s\n" (if (string= stty "") "unknown" stty)))
+      (insert (format "vterm--term  :  %s\n" (if term-present "present" "ABSENT")))
+      (insert (format "Process      :  %s\n" (if proc "live" "DEAD")))
+      (insert (format "PTY          :  %s\n" (or pty "nil"))))
+    (display-buffer "*vterm-resize-debug*")))
+
 (defun my/vterm-resize-test ()
   "Force vterm to re-render at the correct window size.
 The OS does not re-send SIGWINCH when asked for the same size it already
