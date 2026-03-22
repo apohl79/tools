@@ -333,7 +333,8 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   (undefine-key! :keymaps 'doom-leader-map "w TAB"))
 
 ;; Override C-x b to use project-aware buffer switching
-(map! "C-x b" #'projects-switch-buffer)
+(map! "C-x b"       #'projects-switch-buffer
+      "M-TAB"       #'projects-switch)
 
 (after! treemacs
   (treemacs-define-RET-action 'file-node-closed #'treemacs-visit-node-ace)
