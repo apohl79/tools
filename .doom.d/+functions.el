@@ -627,6 +627,24 @@ When called interactively, resizes the window displaying the current buffer."
                               (vterm--set-size vterm--term h w)
                             (error nil))))))))))))))))
 
+(defun my/vterm-resize-test ()
+  "Force vterm redraw by briefly shrinking then restoring the terminal size.
+Sends vterm--set-size with current dimensions minus 5, then restores.
+Useful for debugging rendering glitches."
+  (interactive)
+  (let* ((window (selected-window))
+         (margin (if (fboundp 'vterm--get-margin-width) (vterm--get-margin-width) 0))
+         (width  (max (- (window-max-chars-per-line window) margin) 10))
+         (height (window-body-height window)))
+    (unless (and (boundp 'vterm--term) vterm--term)
+      (user-error "Not in a vterm buffer"))
+    (vterm--set-size vterm--term (- height 5) (- width 5))
+    (run-with-timer 0.05 nil
+                    (lambda ()
+                      (when (and (buffer-live-p (current-buffer))
+                                 (boundp 'vterm--term) vterm--term)
+                        (vterm--set-size vterm--term height width))))))
+
 (defun my/vterm-resize-all-on-size-change (frame)
   "Resize every vterm window in FRAME after a window size change."
   (dolist (window (window-list frame))
