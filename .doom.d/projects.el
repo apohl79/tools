@@ -15,6 +15,9 @@
   (expand-file-name "projects/session.el" doom-data-dir)
   "File where project state is persisted.")
 
+(defconst projects--backup-count 4
+  "Number of rotating backups to keep alongside `projects--save-file'.")
+
 (defconst projects--special-buffer-patterns
   '("^\\*Messages\\*$"
     "^\\*scratch\\*$"
@@ -540,11 +543,26 @@ Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functio
 ;;; Persistence
 ;;; ---------------------------------------------------------------------------
 
+(defun projects--rotate-backups ()
+  "Rotate session backups before saving: .4 dropped, .3→.4, .2→.3, .1→.2, current→.1."
+  (when (file-exists-p projects--save-file)
+    ;; Drop oldest backup
+    (let ((oldest (format "%s.%d" projects--save-file projects--backup-count)))
+      (when (file-exists-p oldest) (delete-file oldest)))
+    ;; Shift existing backups up by one
+    (cl-loop for n from (1- projects--backup-count) downto 1
+             for src = (if (= n 1) projects--save-file
+                         (format "%s.%d" projects--save-file (1- n)))
+             for dst = (format "%s.%d" projects--save-file n)
+             when (file-exists-p src)
+             do (rename-file src dst t))))
+
 (defun projects-save ()
   "Save project state to `projects--save-file'.
-Saves project names, directories, switch times, and open file paths."
+Rotates up to `projects--backup-count' backups before writing."
   (interactive)
   (make-directory (file-name-directory projects--save-file) t)
+  (projects--rotate-backups)
   (let ((data
          (mapcar
           (lambda (name)
@@ -570,15 +588,33 @@ Saves project names, directories, switch times, and open file paths."
   (let ((inhibit-message t))
     (message "Projects saved")))
 
-(defun projects-restore ()
-  "Restore project state from `projects--save-file'.
-Shows an animated progress buffer while reopening files.
-Modeled after the existing my/quickload-session pattern."
-  (interactive)
-  (if (not (file-exists-p projects--save-file))
+(defun projects--backup-files ()
+  "Return existing backup files as an alist of (label . path), newest first."
+  (let (result)
+    (push (cons "current  (session.el)" projects--save-file) result)
+    (cl-loop for n from 1 to projects--backup-count
+             for path = (format "%s.%d" projects--save-file n)
+             when (file-exists-p path)
+             do (push (cons (format "backup %d (session.el.%d)" n n) path) result))
+    (nreverse result)))
+
+(defun projects-restore (&optional file)
+  "Restore project state from FILE (default `projects--save-file').
+With prefix arg \\[universal-argument], prompt to choose from available backups."
+  (interactive
+   (list (if current-prefix-arg
+             (let* ((choices (projects--backup-files))
+                    (labels  (mapcar #'car choices)))
+               (when (null choices)
+                 (user-error "No session files found"))
+               (cdr (assoc (completing-read "Restore from: " labels nil t)
+                           choices)))
+           projects--save-file)))
+  (let ((file (or file projects--save-file)))
+  (if (not (file-exists-p file))
       (message "No saved projects session found")
     (let* ((data (with-temp-buffer
-                   (insert-file-contents projects--save-file)
+                   (insert-file-contents file)
                    (read (current-buffer))))
            (version (plist-get data :version))
            (saved-current (plist-get data :current))
@@ -670,7 +706,7 @@ Modeled after the existing my/quickload-session pattern."
                             (when (fboundp 'projects--tab-bar-refresh)
                               (projects--tab-bar-refresh))
                             (when (fboundp '+doom-dashboard-reload)
-                              (+doom-dashboard-reload t)))))))))
+                              (+doom-dashboard-reload t))))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Setup Hooks
