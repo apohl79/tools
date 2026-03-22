@@ -297,6 +297,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
  :map vterm-mode-map
  "C-c C-c" #'vterm-send-C-c
  "C-M-x" nil  ;; Let C-M-x pass through to global (claude-code-transient)
+ "M-TAB" #'projects-switch
  :map mu4e-headers-mode-map
  "." #'mu4e-view-raw-message
  "<up>" #'mu4e-headers-prev
