@@ -446,20 +446,25 @@ buffer from the current project, or to the project info buffer."
   (let* ((proj (projects-current))
          (info-buf-name (when proj (projects--info-buffer-name proj))))
     (when proj
+      (message "[projects] ensure-visible: target=%s" proj)
       (dolist (win (window-list nil 0))
-        (let* ((buf     (window-buffer win))
-               (bname   (buffer-name buf))
-               (buf-proj (buffer-local-value 'projects--buffer-project buf)))
-          ;; Skip windows already showing the current project or its info buffer
-          (unless (or (string= bname info-buf-name)
-                      (equal buf-proj proj)
-                      (projects-special-buffer-p buf))
+        (let* ((buf      (window-buffer win))
+               (bname    (buffer-name buf))
+               (buf-proj (buffer-local-value 'projects--buffer-project buf))
+               (skip     (or (string= bname info-buf-name)
+                             (equal buf-proj proj)
+                             (projects-special-buffer-p buf))))
+          (message "[projects] ensure-visible: win=%s buf=%s buf-proj=%s skip=%s"
+                   win bname buf-proj skip)
+          (unless skip
             (let ((next (cl-find-if
                          (lambda (b)
                            (and (buffer-live-p b)
                                 (equal (buffer-local-value 'projects--buffer-project b)
                                        proj)))
                          (buffer-list))))
+              (message "[projects] ensure-visible: replacing %s -> %s"
+                       bname (if next (buffer-name next) (projects--info-buffer-name proj)))
               (with-selected-window win
                 (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
 
