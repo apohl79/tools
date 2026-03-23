@@ -765,7 +765,13 @@ Idempotent: safe to call multiple times."
     (add-hook 'dired-mode-hook #'projects--find-file-hook)
     (add-hook 'window-configuration-change-hook #'projects--maybe-close-info-window)
     ;; quit-window buries buffers (no kill-buffer-hook) — fix windows afterwards
-    (advice-add 'quit-window :after (lambda (&rest _) (projects--fix-windows-after-kill)))
+    (advice-add 'quit-window :after (lambda (&rest _)
+                                      (projects--fix-windows-after-kill)))
+    ;; dirvish-quit kills dired buffers then calls quit-window, leaving windows on
+    ;; scratch. Advise it to fix windows after the whole session is torn down.
+    (with-eval-after-load 'dirvish
+      (advice-add 'dirvish-quit :after (lambda (&rest _)
+                                         (run-with-timer 0 nil #'projects--fix-windows-after-kill))))
     ;; Auto-save every 5 minutes
     (run-with-timer 300 300
       (lambda ()
