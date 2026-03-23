@@ -320,8 +320,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   :desc "Switch buffer in project"   "b" #'projects-switch-buffer
   :desc "Save projects state"        "s" #'projects-save
   :desc "Restore projects session"   "R" #'projects-restore
-  :desc "Restore projects session"   "l" #'projects-restore
-  :desc "Restore projects session"   "L" #'projects-restore
+  :desc "Restore from backup…"       "l" (lambda () (interactive) (let ((current-prefix-arg t)) (call-interactively #'projects-restore)))
   :desc "Save projects state"        "a" #'projects-save
   :desc "Project info buffer"        "i" #'projects-show-info)
  )
