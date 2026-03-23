@@ -309,7 +309,6 @@ Any window showing a buffer that does not belong to the current project
 buffer or the project info buffer. Never shows scratch after a kill."
   (let* ((proj (projects-current))
          (info-buf-name (when proj (projects--info-buffer-name proj))))
-    (message "[projects] fix-windows: proj=%s" proj)
     (when proj
       (dolist (win (window-list nil 0))
         (let* ((buf (window-buffer win))
@@ -325,8 +324,6 @@ buffer or the project info buffer. Never shows scratch after a kill."
                                 (equal (buffer-local-value 'projects--buffer-project b)
                                        proj)))
                          (buffer-list))))
-              (message "[projects] fix-windows: replacing '%s' (proj=%s) with %s"
-                       bname buf-proj (or next "info-buffer"))
               (with-selected-window win
                 (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
 
