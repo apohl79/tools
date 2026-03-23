@@ -441,33 +441,42 @@ Returns the buffer."
 
 (defun projects--ensure-visible-buffer ()
   "Ensure ALL visible windows show buffers belonging to the current project.
-Any window showing a buffer from a different project is redirected to a
-buffer from the current project, or to the project info buffer."
+Windows showing buffers from other projects are replaced.  Multiple windows
+each receive a different project buffer (pool approach) so the same buffer
+is not duplicated across windows."
   (let* ((proj (projects-current))
          (info-buf-name (when proj (projects--info-buffer-name proj))))
     (when proj
-      (message "[projects] ensure-visible: target=%s" proj)
-      (dolist (win (window-list nil 0))
-        (let* ((buf      (window-buffer win))
-               (bname    (buffer-name buf))
-               (buf-proj (buffer-local-value 'projects--buffer-project buf))
-               (skip     (or (string= bname info-buf-name)
-                             (equal buf-proj proj)
-                             (projects-special-buffer-p buf))))
-          (message "[projects] ensure-visible: win=%s buf=%s buf-proj=%s skip=%s"
-                   win bname buf-proj skip)
-          (unless skip
-            (let ((next (cl-find-if
-                         (lambda (b)
-                           (and (buffer-live-p b)
-                                (equal (buffer-local-value 'projects--buffer-project b)
-                                       proj)))
-                         (buffer-list))))
-              (message "[projects] ensure-visible: replacing %s -> %s"
-                       bname (if next (buffer-name next) (projects--info-buffer-name proj)))
-              (with-selected-window win
-                (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
-
+      (let* ((all-wins (window-list nil 0))
+             ;; A window needs fixing if it shows: a foreign project's buffer,
+             ;; OR another project's info buffer (even though it starts with *).
+             (needs-fix
+              (cl-remove-if
+               (lambda (win)
+                 (let* ((buf  (window-buffer win))
+                        (bname (buffer-name buf))
+                        (bproj (buffer-local-value 'projects--buffer-project buf)))
+                   (or (string= bname info-buf-name)   ; already this project's info
+                       (equal bproj proj)              ; already this project's buffer
+                       ;; special buffer that is NOT another project's info
+                       (and (projects-special-buffer-p buf)
+                            (not (string-match-p "^\\*project: " bname))))))
+               all-wins))
+             ;; Buffers already visible in windows we're keeping — exclude from pool
+             (kept-bufs (mapcar #'window-buffer
+                                (cl-set-difference all-wins needs-fix)))
+             ;; Pool: project buffers not already pinned in a kept window, MRU order
+             (pool (cl-remove-if
+                    (lambda (b)
+                      (or (not (buffer-live-p b))
+                          (memq b kept-bufs)
+                          (not (equal (buffer-local-value 'projects--buffer-project b)
+                                      proj))))
+                    (buffer-list))))
+        (dolist (win needs-fix)
+          (let ((replacement (or (pop pool) (projects--create-info-buffer proj))))
+            (with-selected-window win
+              (switch-to-buffer replacement))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; ibuffer Integration
