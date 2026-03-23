@@ -514,13 +514,17 @@ Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functio
                     visible))))
     (mapcar
      (lambda (name)
-       (let ((face (if (equal name current)
-                       'my/workspace-tab-active
-                     'my/workspace-tab-inactive))
-             (captured-name name))
-         `(,(intern (concat "proj-" name))
+       (let* ((face (if (equal name current)
+                        'my/workspace-tab-active
+                      'my/workspace-tab-inactive))
+              (key-sym (intern (concat "proj-" name)))
+              (captured-name name)
+              (label (propertize (format " %s " name)
+                                 'face face
+                                 'tab-bar-key key-sym)))
+         `(,key-sym
            menu-item
-           ,(propertize (format " %s " name) 'face face)
+           ,label
            (lambda () (interactive) (projects-switch ,captured-name))
            :help ,(format "Switch to project: %s → %s"
                           name
