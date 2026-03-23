@@ -613,19 +613,7 @@ When called interactively, resizes the window displaying the current buffer."
                        (not (bound-and-true-p vterm-copy-mode)))
               (condition-case nil
                   (vterm--set-size vterm--term height width)
-                (buffer-read-only
-                 ;; Buffer read-only at resize time (vterm still initializing);
-                 ;; retry after 5s when it should be writable.
-                 (let ((buf (current-buffer))
-                       (h height) (w width))
-                   (run-with-timer
-                    5 nil
-                    (lambda ()
-                      (when (buffer-live-p buf)
-                        (with-current-buffer buf
-                          (condition-case nil
-                              (vterm--set-size vterm--term h w)
-                            (error nil))))))))))))))))
+                (error nil)))))))))
 
 (defun my/vterm-resize-debug ()
   "Dump vterm sizing state to *vterm-resize-debug* for diagnosis.
