@@ -440,35 +440,29 @@ Returns the buffer."
     (user-error "No active project")))
 
 (defun projects--ensure-visible-buffer ()
-  "Ensure visible windows show buffers appropriate for the current project.
-Replaces any windows showing a foreign project's info buffer."
+  "Ensure ALL visible windows show buffers belonging to the current project.
+Any window showing a buffer from a different project is redirected to a
+buffer from the current project, or to the project info buffer."
   (let* ((proj (projects-current))
-         (bufs (when proj (projects-buffers proj)))
-         ;; Filter to non-info, non-special file buffers
-         (file-bufs (when bufs
-                      (cl-remove-if
-                       (lambda (b)
-                         (or (projects-special-buffer-p b)
-                             (string-match-p "^\\*project: " (buffer-name b))))
-                       bufs))))
+         (info-buf-name (when proj (projects--info-buffer-name proj))))
     (when proj
-      ;; Replace any windows showing another project's info buffer
-      (dolist (win (window-list))
-        (let ((bname (buffer-name (window-buffer win))))
-          (when (and (string-match-p "^\\*project: " bname)
-                     (not (string= bname (projects--info-buffer-name proj))))
-            (with-selected-window win
-              (switch-to-buffer (projects--create-info-buffer proj))))))
-      ;; Handle the selected window
-      (if (null file-bufs)
-          (switch-to-buffer (projects--create-info-buffer proj))
-        (let ((visible (cl-find-if
-                        (lambda (b)
-                          (with-current-buffer b
-                            (equal projects--buffer-project proj)))
-                        (buffer-list))))
-          (when visible
-            (switch-to-buffer visible)))))))
+      (dolist (win (window-list nil 0))
+        (let* ((buf     (window-buffer win))
+               (bname   (buffer-name buf))
+               (buf-proj (buffer-local-value 'projects--buffer-project buf)))
+          ;; Skip windows already showing the current project or its info buffer
+          (unless (or (string= bname info-buf-name)
+                      (equal buf-proj proj)
+                      (projects-special-buffer-p buf))
+            (let ((next (cl-find-if
+                         (lambda (b)
+                           (and (buffer-live-p b)
+                                (equal (buffer-local-value 'projects--buffer-project b)
+                                       proj)))
+                         (buffer-list))))
+              (with-selected-window win
+                (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
+
 
 ;;; ---------------------------------------------------------------------------
 ;;; ibuffer Integration
