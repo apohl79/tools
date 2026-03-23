@@ -219,6 +219,13 @@ NAME must be unique. DIR is created if it does not exist."
     (when (projects-hidden-p name)
       (user-error "Cannot switch to a hidden project")))
   (message "[projects] switch: %s -> %s%s" (projects-current) name (if norecord " (norecord)" ""))
+  ;; Save current window layout for the outgoing project (before anything changes)
+  (let ((old (projects-current)))
+    (when (and old (not (projects-hidden-p old)))
+      (let ((entry (gethash old projects--table)))
+        (when entry
+          (plist-put entry :window-config (current-window-configuration))
+          (puthash old entry projects--table)))))
   (projects--set-current name)
   (unless norecord
     (let ((proj (gethash name projects--table)))
@@ -231,8 +238,12 @@ NAME must be unique. DIR is created if it does not exist."
       (setq-default default-directory dir)))
   ;; Show/hide tab-bar depending on whether the new project is hidden
   (projects--update-frame-tab-bar)
-  ;; Show the project's buffers or the info buffer
-  (projects--ensure-visible-buffer)
+  ;; Restore saved window layout, or fall back to ensure-visible-buffer
+  (let* ((entry  (gethash name projects--table))
+         (config (and entry (plist-get entry :window-config))))
+    (if config
+        (set-window-configuration config)
+      (projects--ensure-visible-buffer)))
   (projects--tab-bar-refresh)
   (run-hooks 'projects-switch-hook))
 
