@@ -309,13 +309,13 @@ Any window showing a buffer that does not belong to the current project
 buffer or the project info buffer. Never shows scratch after a kill."
   (let* ((proj (projects-current))
          (info-buf-name (when proj (projects--info-buffer-name proj))))
+    (message "[projects] fix-windows: proj=%s" proj)
     (when proj
       (dolist (win (window-list nil 0))
         (let* ((buf (window-buffer win))
                (bname (buffer-name buf))
                (buf-proj (buffer-local-value 'projects--buffer-project buf)))
           ;; Replace if window shows a buffer not belonging to this project
-          ;; (includes *scratch*, global special buffers, and other project's buffers)
           (unless (or (string= bname info-buf-name)
                       (equal buf-proj proj))
             (let ((next (cl-find-if
@@ -325,6 +325,8 @@ buffer or the project info buffer. Never shows scratch after a kill."
                                 (equal (buffer-local-value 'projects--buffer-project b)
                                        proj)))
                          (buffer-list))))
+              (message "[projects] fix-windows: replacing '%s' (proj=%s) with %s"
+                       bname buf-proj (or next "info-buffer"))
               (with-selected-window win
                 (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
 
@@ -757,9 +759,10 @@ Idempotent: safe to call multiple times."
     (setq projects--hooks-installed-p t)
     (add-hook 'find-file-hook #'projects--find-file-hook)
     (add-hook 'kill-buffer-hook #'projects--cleanup-dead-buffers)
-    ;; Register terminal buffers with the current project on creation
+    ;; Register terminal and dired buffers with the current project on creation
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
+    (add-hook 'dired-mode-hook #'projects--find-file-hook)
     (add-hook 'window-configuration-change-hook #'projects--maybe-close-info-window)
     ;; quit-window buries buffers (no kill-buffer-hook) — fix windows afterwards
     (advice-add 'quit-window :after (lambda (&rest _) (projects--fix-windows-after-kill)))
