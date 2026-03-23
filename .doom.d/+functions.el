@@ -586,6 +586,25 @@ to the end of the buffer."
 (defvar my/vterm-window-widths (make-hash-table :test 'eq)
   "Hash table storing the last known width of each window.")
 
+(defvar my/vterm-resize-log-enabled nil
+  "When non-nil, log all vterm resize events to *vterm-resize-log*.")
+
+(defun my/vterm-resize-log (fmt &rest args)
+  "Log FMT+ARGS to *vterm-resize-log* when logging is enabled."
+  (when my/vterm-resize-log-enabled
+    (with-current-buffer (get-buffer-create "*vterm-resize-log*")
+      (goto-char (point-max))
+      (insert (apply #'format (concat "[" (format-time-string "%H:%M:%S.%3N") "] " fmt "\n") args)))))
+
+(defun my/vterm-resize-log-toggle ()
+  "Toggle vterm resize logging and show/hide the log buffer."
+  (interactive)
+  (setq my/vterm-resize-log-enabled (not my/vterm-resize-log-enabled))
+  (if my/vterm-resize-log-enabled
+      (progn (message "vterm resize logging ON")
+             (display-buffer (get-buffer-create "*vterm-resize-log*")))
+    (message "vterm resize logging OFF")))
+
 (defun my/vterm-resize-window (window)
   "Resize the vterm terminal in WINDOW.
 Always sends SIGWINCH (pty update).  Skips vterm buffer rerender when
@@ -605,15 +624,19 @@ When called interactively, resizes the window displaying the current buffer."
                (w-changed (or (not stored) (/= width stored))))
           (puthash window width my/vterm-window-widths)
           (when (and (> width 0) (> height 0))
+            (my/vterm-resize-log "resize-window: %s h=%d w=%d w-changed=%s copy=%s"
+                                 (buffer-name) height width w-changed
+                                 (bound-and-true-p vterm-copy-mode))
             ;; Always update pty dimensions → sends SIGWINCH to the process.
             (set-process-window-size process height width)
             ;; Only rerender vterm buffer when width changed and not scrolling.
             (when (and w-changed
                        (boundp 'vterm--term) vterm--term
                        (not (bound-and-true-p vterm-copy-mode)))
-              (condition-case nil
+              (my/vterm-resize-log "resize-window: calling vterm--set-size %dx%d" height width)
+              (condition-case err
                   (vterm--set-size vterm--term height width)
-                (error nil)))))))))
+                (error (my/vterm-resize-log "resize-window: vterm--set-size ERROR %s" err))))))))))
 
 (defun my/vterm-resize-debug ()
   "Dump vterm sizing state to *vterm-resize-debug* for diagnosis.
@@ -657,6 +680,7 @@ programmatically with pre-captured dimensions."
          (width  (or width (max (- (window-max-chars-per-line window) margin) 10))))
     (unless (and proc (process-live-p proc))
       (user-error "No live process in this buffer"))
+    (my/vterm-resize-log "size-refresh: %s h=%d w=%d (shrink→restore)" (buffer-name) height width)
     ;; Bounce: shrink by 1 to force the OS to see a size change and deliver SIGWINCH
     (set-process-window-size proc (max 1 (1- height)) (max 1 (1- width)))
     (run-with-timer
@@ -664,13 +688,14 @@ programmatically with pre-captured dimensions."
      (lambda ()
        (when (and (buffer-live-p buf) (process-live-p proc))
          (with-current-buffer buf
+           (my/vterm-resize-log "size-refresh restore: %s h=%d w=%d" (buffer-name) height width)
            ;; Restore correct size — pty and vterm internal state
            (set-process-window-size proc height width)
            (remhash window my/vterm-window-widths)
            (when (and (boundp 'vterm--term) vterm--term)
-             (condition-case nil
+             (condition-case err
                  (vterm--set-size vterm--term height width)
-               (error nil)))))))))
+               (error (my/vterm-resize-log "size-refresh: vterm--set-size ERROR %s" err))))))))))
 
 (defun my/vterm-resize-all-on-size-change (frame)
   "Resize every vterm window in FRAME after a window size change."
@@ -879,6 +904,7 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
                   (set-process-window-size process height width))))))
          ;; vterm terminal — use my/vterm-size-refresh for correct bounce resize
          ((eq major-mode 'vterm-mode)
+          (my/vterm-resize-log "claude-refresh-terminal-size: %s" (buffer-name))
           (my/vterm-size-refresh)))))))
 
 ;;; ---------------------------------------------------------------------------

@@ -840,6 +840,7 @@ allowing vterm/eat to resize correctly."
                    ;; getting wrong values if a split appears during the delay.
                    (let ((h (window-body-height info-win))
                          (w (window-max-chars-per-line info-win)))
+                     (my/vterm-resize-log "close-info-window: split collapsed, captured h=%d w=%d for %s" h w (buffer-name buf))
                      ;; 2s delay allows Claude's TUI to finish initializing.
                      (run-with-timer
                       2 nil
@@ -848,6 +849,7 @@ allowing vterm/eat to resize correctly."
                           (with-current-buffer buf
                             (cond
                              ((derived-mode-p 'vterm-mode)
+                              (my/vterm-resize-log "close-info-window 2s timer: calling size-refresh h=%d w=%d for %s" h w (buffer-name))
                               (when (get-buffer-process buf)
                                 (my/vterm-size-refresh h w)))
                              ((and (eq major-mode 'eat-mode)
