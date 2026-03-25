@@ -141,6 +141,61 @@ NAME must be unique. DIR is created if it does not exist."
   (projects-switch name)
   name)
 
+(defun projects--repo-name-from-url (url)
+  "Extract the repository name from URL or GitHub shorthand ORG/REPO.
+Strips a trailing .git suffix if present."
+  (let ((name (if (string-match "/\\([^/]+\\)/?$" url)
+                  (match-string 1 url)
+                url)))
+    (if (string-suffix-p ".git" name)
+        (substring name 0 -4)
+      name)))
+
+(defun projects-clone-from-git (root-dir repo-url project-name)
+  "Clone a git repository and register it as a new project.
+ROOT-DIR is the parent directory.  REPO-URL is either an ORG/REPO
+GitHub shorthand (cloned via `gh repo clone') or a full URL starting
+with http/https/git (cloned via `git clone').  PROJECT-NAME becomes
+both the target directory name (ROOT-DIR/PROJECT-NAME) and the project
+name registered in `projects--table'."
+  (interactive
+   (let* ((root (read-directory-name "Clone into directory: " nil nil t))
+          (url  (read-string "Repository (org/repo or URL): "))
+          (name (read-string "Project name: "
+                             (projects--repo-name-from-url url))))
+     (list root url name)))
+  (when (or (null repo-url) (string-empty-p repo-url))
+    (user-error "Repository URL must not be empty"))
+  (when (or (null project-name) (string-empty-p project-name))
+    (user-error "Project name must not be empty"))
+  (when (or (file-name-absolute-p project-name)
+            (string-match-p "\\.\\." project-name)
+            (string-match-p "/" project-name))
+    (user-error "Project name must be a simple name (no path separators or '..')"))
+  (when (gethash project-name projects--table)
+    (user-error "Project '%s' already exists" project-name))
+  (let* ((target (expand-file-name project-name root-dir))
+         (github-p (string-match-p "^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$" repo-url))
+         (cmd  (if github-p
+                   (list "gh" "repo" "clone" repo-url target)
+                 (list "git" "clone" repo-url target))))
+    (when (and github-p (not (executable-find "gh")))
+      (user-error "gh CLI not found — install it or use a full URL"))
+    (when (file-exists-p target)
+      (user-error "Directory '%s' already exists" target))
+    (message "[projects] cloning %s into %s..." repo-url target)
+    (let ((buf (get-buffer-create "*projects-clone*")))
+      (with-current-buffer buf (erase-buffer))
+      (let ((exit-code (apply #'call-process (car cmd) nil (list buf t) nil (cdr cmd))))
+        (if (eq exit-code 0)
+            (progn
+              (message "[projects] clone succeeded")
+              (unless (file-directory-p target)
+                (user-error "Clone reported success but target directory '%s' was not created — see *projects-clone* buffer" target))
+              (projects-create project-name target))
+          (user-error "Clone failed (exit %s) — see *projects-clone* buffer"
+                      exit-code))))))
+
 (defun projects-rename (old-name new-name)
   "Rename project OLD-NAME to NEW-NAME."
   (interactive

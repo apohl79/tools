@@ -175,14 +175,17 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   (setq markdown-css-paths
         '("https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"))
   (setq markdown-xhtml-header-content
-        "<style>
+        (concat
+         "<style>
           body { box-sizing: border-box; min-width: 200px; max-width: 980px;
                  margin: 0 auto; padding: 45px; }
           .markdown-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
                            Helvetica, Arial, sans-serif; }
-        </style>")
+        </style>"
+         my/mermaid-head-extra))
   (setq markdown-xhtml-body-preamble "<article class=\"markdown-body\">")
-  (setq markdown-xhtml-body-epilogue "</article>")
+  (setq markdown-xhtml-body-epilogue
+        (concat "</article>" my/mermaid-init-script))
 
   (add-hook! 'markdown-mode-hook
              ;; Org mode tables in markdown
@@ -322,7 +325,8 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   :desc "Restore projects session"   "R" #'projects-restore
   :desc "Restore from backup…"       "l" (lambda () (interactive) (let ((current-prefix-arg t)) (call-interactively #'projects-restore)))
   :desc "Save projects state"        "a" #'projects-save
-  :desc "Project info buffer"        "i" #'projects-show-info)
+  :desc "Project info buffer"        "i" #'projects-show-info
+  :desc "Clone from git"             "g" #'projects-clone-from-git)
  )
 
 ;; Remove leftover Doom workspace/winner bindings from the w prefix
