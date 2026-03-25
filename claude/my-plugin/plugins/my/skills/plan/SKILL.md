@@ -185,7 +185,7 @@ The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 **JIRA:** <TICKET-123 or "none">
 **Tech Stack:** <detected stack>
 **Code Standards:** <list recipe skill names to load, or "n/a" for Deployment/Research>
-**Executed:** [ ]
+**Status:** WIP
 
 ---
 
@@ -350,4 +350,6 @@ After writing the plan document, run an automated review loop to catch gaps befo
 
 3. If changes are requested, update the plan document.
 
-4. Tell the user: "Plan saved to `.my/plans/<filename>`. Run `/my:execute-plan .my/plans/<filename>` to implement it."
+4. Once the user accepts the plan (chooses "Looks good"): update the plan document header by replacing `**Status:** WIP` with `**Status:** READY`.
+
+5. Tell the user: "Plan saved to `.my/plans/<filename>`. Run `/my:execute-plan .my/plans/<filename>` to implement it."

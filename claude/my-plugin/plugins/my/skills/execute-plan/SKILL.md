@@ -19,8 +19,8 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
 
 1. **Resolve the plan document:**
    - If $1 was provided, use that path directly.
-   - If $1 was NOT provided, search for an unexecuted plan:
-     a. Check `.my/plans/` for any `plan-*.md` files where the header contains `**Executed:** [ ]` (unchecked). List them all.
+   - If $1 was NOT provided, search for a ready plan:
+     a. Check `.my/plans/` for any `plan-*.md` files where the header contains `**Status:** READY`. List them all. Do NOT list plans with any other status (WIP, EXECUTING, COMPLETED).
      b. Also check `docs/superpowers/specs/` for any `*-design.md` spec files (these are brainstorming outputs ready for implementation).
      c. If multiple candidates are found, call AskUserQuestion with:
         - question: "Which plan would you like to execute?"
@@ -29,6 +29,7 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
      d. If exactly one unexecuted plan is found, proceed with it automatically (announce which file you chose).
      e. If none are found, ask the user to provide a plan path.
    - Read the chosen plan document fully and understand all tasks, their dependencies, and their order.
+   - **Mark the plan as executing**: update the plan file header by replacing `**Status:** READY` with `**Status:** EXECUTING`.
    - **Detect the plan type** from the `**Type:**` header field. If the type is `Deployment / Infra change` or `Research`, set `SKIP_CODE_REVIEW=true` and `SKIP_PR=true` for the rest of execution.
 2. **CRITICAL — sync before starting:**
    - Run `git pull` on the main repo to fetch the latest changes.
@@ -40,7 +41,11 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
      git push --force-with-lease
      ```
      **This is ESSENTIAL.** Starting work on a stale branch that is behind main guarantees merge conflicts on the PR. Do NOT skip this step even if the worktree looks up-to-date — always verify with `git status` and `git log origin/main..HEAD`.
-3. **UNLESS --no-worktree**: Create a git worktree for this work using the `workflows:worktree-recipe` skill. Use jira ticket $2 for the branch name. If no jira ticket was provided, use the AskUserQuestion tool to ask the user for one. Create the worktree in the repo directory under `.my/worktrees/[repo_name]-[short_title_without_spaces]-[jira_ticket_if_available]`.
+3. **UNLESS --no-worktree**: Create a git worktree for this work using the `workflows:worktree-recipe` skill. Determine the jira ticket to use for the branch name:
+   - If $2 was provided, use that.
+   - Otherwise read the `**JIRA:**` field from the plan header.
+   - If the plan's JIRA field is `none` or absent, use `VC-0` — do NOT ask the user.
+   Create the worktree in the repo directory under `.my/worktrees/[repo_name]-[short_title_without_spaces]-[jira_ticket]`.
 4. If the codebase is in Python, TypeScript or Rust: note which recipe skills (production-code, test-code, true-myth) sub-agents should load — you will instruct them to do so.
 
 # PHASE 2: TASK DECOMPOSITION
@@ -263,7 +268,7 @@ Validate that the ENTIRE plan has been implemented correctly according to its sp
 **Mark the Phase 7 task `in_progress` before starting. Mark it `completed` after PR finalization is done.**
 
 1. Verify ALL temporary `.tmp-subtask-*.md` files are deleted. If any remain, delete them now.
-1a. **Mark the plan as executed**: if the plan file is in `.my/plans/`, update its header by replacing `**Executed:** [ ]` with `**Executed:** [x]`.
+1a. **Mark the plan as completed**: if the plan file is in `.my/plans/`, update its header by replacing `**Status:** EXECUTING` with `**Status:** COMPLETED`.
 2. Run the full build, lint, and test pipeline one final time. Fix any issues.
 3. **UNLESS --no-pr or `SKIP_PR=true`**: Commit all changes with a meaningful commit message referencing jira ticket $2.
 4. **UNLESS --no-pr or `SKIP_PR=true`**: Push the branch and create a DRAFT PR using `gh pr create --draft`. The PR title must include the jira ticket. The PR body should summarize what was implemented, organized by sub-task. If there were unresolved gaps from Phase 6, include them in a "Known Gaps" section of the PR body.
