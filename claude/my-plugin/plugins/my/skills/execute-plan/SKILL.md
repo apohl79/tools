@@ -31,6 +31,12 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
    - Read the chosen plan document fully and understand all tasks, their dependencies, and their order.
    - **Mark the plan as executing**: update the plan file header by replacing `**Status:** READY` with `**Status:** EXECUTING`.
    - **Detect the plan type** from the `**Type:**` header field. If the type is `Deployment / Infra change` or `Research`, set `SKIP_CODE_REVIEW=true` and `SKIP_PR=true` for the rest of execution.
+   - **Read execution flags from plan header**: Check each flag field — a flag is enabled when its value is `[x]`. Command-line arguments always take precedence over plan header flags:
+     - `**no-worktree:** [x]` → treat as `--no-worktree`
+     - `**no-pr:** [x]` → treat as `--no-pr` (sets `SKIP_PR=true`)
+     - `**draft-pr:** [x]` → treat as `--draft-pr`
+     - `**merge:** [x]` → treat as `--merge`
+     - `**merge-admin:** [x]` → treat as `--merge-admin`
 2. **CRITICAL — sync before starting:**
    - Run `git pull` on the main repo to fetch the latest changes.
    - **If the plan's worktree already exists**: immediately rebase its branch onto the latest default branch:

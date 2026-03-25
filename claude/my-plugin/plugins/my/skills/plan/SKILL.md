@@ -186,6 +186,11 @@ The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 **Tech Stack:** <detected stack>
 **Code Standards:** <list recipe skill names to load, or "n/a" for Deployment/Research>
 **Status:** WIP
+**no-worktree:** [ ]
+**no-pr:** [ ]
+**draft-pr:** [ ]
+**merge:** [ ]
+**merge-admin:** [ ]
 
 ---
 
@@ -350,6 +355,17 @@ After writing the plan document, run an automated review loop to catch gaps befo
 
 3. If changes are requested, update the plan document.
 
-4. Once the user accepts the plan (chooses "Looks good"): update the plan document header by replacing `**Status:** WIP` with `**Status:** READY`.
+4. Ask about execution flags in ONE multi-select question using AskUserQuestion:
+   - Question: "Which execution flags should be enabled for this plan?"
+   - Options (multiSelect: true):
+     - label: "no-worktree", description: "Skip creating a git worktree (run directly in the current working directory)"
+     - label: "no-pr", description: "Skip creating a pull request after implementation"
+     - label: "draft-pr", description: "Create a draft PR instead of a ready-for-review PR"
+     - label: "merge", description: "Automatically merge the PR after finalization"
+     - label: "merge-admin", description: "Merge using admin override (bypasses branch protection rules)"
+   - For each selected flag, update the plan header by replacing `**<flag>:** [ ]` with `**<flag>:** [x]`.
+   - Leave unselected flags as `[ ]`.
 
-5. Tell the user: "Plan saved to `.my/plans/<filename>`. Run `/my:execute-plan .my/plans/<filename>` to implement it."
+5. Once the user accepts the plan (chooses "Looks good") or after updating flags: update the plan document header by replacing `**Status:** WIP` with `**Status:** READY`.
+
+6. Tell the user: "Plan saved to `.my/plans/<filename>`. Run `/my:execute-plan .my/plans/<filename>` to implement it."
