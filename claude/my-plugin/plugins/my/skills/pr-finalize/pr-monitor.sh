@@ -287,10 +287,15 @@ collect_issues() {
         bugbot_pending=false
     fi
 
-    # Still waiting for checks or Bugbot to complete
+    # Still waiting for checks or Bugbot to complete.
+    # Be reactive: if there are already actionable code issues, proceed immediately
+    # rather than waiting for remaining checks to finish.
     if [[ "$has_pending" == "true" || "$bugbot_pending" == "true" ]]; then
-        echo "PENDING"
-        return
+        if [[ "$has_code" == "false" && "$has_comments" == "false" && "$has_threads" == "false" && "$has_conflicts" == "false" ]]; then
+            echo "PENDING"
+            return
+        fi
+        # Actionable issues already exist — proceed without waiting for remaining checks
     fi
 
     # Save infra failures to temp file for main loop to read
