@@ -355,15 +355,24 @@ After writing the plan document, run an automated review loop to catch gaps befo
 
 3. If changes are requested, update the plan document.
 
-4. Ask about execution flags in ONE multi-select question using AskUserQuestion:
-   - Question: "Which execution flags should be enabled for this plan?"
-   - Options (multiSelect: true):
+4. Ask about execution flags using **two** AskUserQuestion calls (AskUserQuestion supports max 4 options per question, so flags must be split across two questions):
+
+   **Question 1** (multiSelect: true):
+   - Question: "Which worktree/PR flags should be enabled?"
+   - Options:
      - label: "no-worktree", description: "Skip creating a git worktree (run directly in the current working directory)"
      - label: "no-pr", description: "Skip creating a pull request after implementation"
      - label: "draft-pr", description: "Create a draft PR instead of a ready-for-review PR"
+     - label: "None of these", description: "No worktree/PR flags needed"
+
+   **Question 2** (multiSelect: true):
+   - Question: "Which merge flags should be enabled?"
+   - Options:
      - label: "merge", description: "Automatically merge the PR after finalization"
      - label: "merge-admin", description: "Merge using admin override (bypasses branch protection rules)"
-   - For each selected flag, update the plan header by replacing `**<flag>:** [ ]` with `**<flag>:** [x]`.
+     - label: "None of these", description: "No merge flags needed"
+
+   - For each selected flag (excluding "None of these"), update the plan header by replacing `**<flag>:** [ ]` with `**<flag>:** [x]`.
    - Leave unselected flags as `[ ]`.
 
 5. Once the user accepts the plan (chooses "Looks good") or after updating flags: update the plan document header by replacing `**Status:** WIP` with `**Status:** READY`.
