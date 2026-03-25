@@ -342,10 +342,64 @@ format_claude_stream() {
                 fi
                 ;;
             tool_use)
-                local tool_name
+                local tool_name tool_input tool_detail
                 tool_name=$(echo "$line" | jq -r '.tool_name // empty' 2>/dev/null)
-                echo "  [tool] $tool_name"
-                echo "[tool] $tool_name" >> "$log_file"
+                tool_input=$(echo "$line" | jq -c '.tool_input // {}' 2>/dev/null)
+
+                # Build tool-specific detail string
+                case "$tool_name" in
+                    Agent)
+                        local subagent_type prompt_preview
+                        subagent_type=$(echo "$tool_input" | jq -r '.subagent_type // "general-purpose"' 2>/dev/null)
+                        prompt_preview=$(echo "$tool_input" | jq -r '.prompt // ""' 2>/dev/null | head -1 | cut -c1-80)
+                        tool_detail="[${subagent_type}] ${prompt_preview}…"
+                        ;;
+                    Bash)
+                        local cmd
+                        cmd=$(echo "$tool_input" | jq -r '.command // ""' 2>/dev/null | head -1 | cut -c1-100)
+                        tool_detail="$ ${cmd}"
+                        ;;
+                    Read)
+                        tool_detail=$(echo "$tool_input" | jq -r '.file_path // ""' 2>/dev/null)
+                        ;;
+                    Edit|Write|NotebookEdit)
+                        tool_detail=$(echo "$tool_input" | jq -r '.file_path // ""' 2>/dev/null)
+                        ;;
+                    Grep)
+                        local pattern path_arg
+                        pattern=$(echo "$tool_input" | jq -r '.pattern // ""' 2>/dev/null)
+                        path_arg=$(echo "$tool_input" | jq -r '.path // ""' 2>/dev/null)
+                        tool_detail="\"${pattern}\" in ${path_arg:-.}"
+                        ;;
+                    Glob)
+                        local pattern
+                        pattern=$(echo "$tool_input" | jq -r '.pattern // ""' 2>/dev/null)
+                        tool_detail="\"${pattern}\""
+                        ;;
+                    WebFetch|WebSearch)
+                        tool_detail=$(echo "$tool_input" | jq -r '.url // .query // ""' 2>/dev/null | cut -c1-100)
+                        ;;
+                    TaskCreate|TaskUpdate)
+                        tool_detail=$(echo "$tool_input" | jq -r '.subject // .taskId // ""' 2>/dev/null)
+                        ;;
+                    *)
+                        # Generic: show first key=value
+                        tool_detail=$(echo "$tool_input" | jq -r 'to_entries | first | "\(.key)=\(.value | tostring | .[0:80])"' 2>/dev/null || echo "")
+                        ;;
+                esac
+
+                local msg="  [tool] ${tool_name}: ${tool_detail}"
+                echo "$msg"
+                echo "[tool] ${tool_name}: ${tool_detail}" >> "$log_file"
+                ;;
+            tool_result)
+                local is_error content_preview
+                is_error=$(echo "$line" | jq -r '.is_error // false' 2>/dev/null)
+                if [[ "$is_error" == "true" ]]; then
+                    content_preview=$(echo "$line" | jq -r '.content // ""' 2>/dev/null | head -3 | cut -c1-120)
+                    echo "  [error] ${content_preview}"
+                    echo "[error] ${content_preview}" >> "$log_file"
+                fi
                 ;;
             result)
                 local cost_usd duration_ms
