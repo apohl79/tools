@@ -202,6 +202,8 @@ The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 **no-worktree:** [ ]
 **no-pr:** [ ]
 **draft-pr:** [ ]
+**merge:** [ ]
+**merge-admin:** [ ]
 
 ---
 
