@@ -12,6 +12,7 @@
 (package! platformio-mode)
 (package! org-modern)
 (package! ob-typescript)
+(package! mermaid-mode)
 
 ;; Disable legacy typescript-mode to avoid conflict with tree-sitter
 (package! typescript-mode :disable t)

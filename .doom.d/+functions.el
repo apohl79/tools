@@ -1,5 +1,40 @@
 ;;; +functions.el -*- lexical-binding: t; -*-
 
+(defconst my/mermaid-head-extra
+  "<script src=\"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js\"></script>"
+  "Mermaid.js CDN script tag for HTML preview head.")
+
+(defconst my/mermaid-init-script
+  "<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Handle pandoc output: <pre class=\"mermaid\"><code>...</code></pre>
+  // Pandoc HTML-encodes the content (&gt; &lt; etc), so we must extract
+  // textContent (which decodes entities) and replace the pre BEFORE
+  // mermaid.js sees it (mermaid would parse innerHTML with entities).
+  document.querySelectorAll('pre.mermaid').forEach(function(pre) {
+    if (pre.parentElement) {
+      const div = document.createElement('div');
+      div.className = 'mermaid';
+      div.textContent = pre.textContent;
+      pre.parentElement.replaceChild(div, pre);
+    }
+  });
+  // Handle org-export output: <pre class=\"src src-mermaid\">
+  document.querySelectorAll('pre.src-mermaid').forEach(function(pre) {
+    if (pre.parentElement) {
+      const div = document.createElement('div');
+      div.className = 'mermaid';
+      div.textContent = pre.textContent;
+      pre.parentElement.replaceChild(div, pre);
+    }
+  });
+  mermaid.initialize({ startOnLoad: false, theme: 'default' });
+  mermaid.run();
+});
+</script>"
+  "Mermaid initialization script for HTML preview. Converts mermaid code blocks
+from both pandoc and org-export output formats into mermaid-renderable divs.")
+
 (defun my/read-file (file-path)
   "Read the contents of FILE-PATH and return it as a string."
   (with-temp-buffer
@@ -520,7 +555,9 @@ This is an interactive copy of the original org-msg function."
 (defun my/org-preview ()
   "Export current org buffer to styled HTML and open in browser."
   (interactive)
+  (require 'ox-html)
   (let* ((tmp-file (make-temp-file "org-preview-" nil ".html"))
+         (org-export-use-babel nil)
          (org-html-head
           (concat
            "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css\">"
@@ -529,10 +566,11 @@ This is an interactive copy of the original org-msg function."
            "       margin: 0 auto; padding: 45px; }"
            ".markdown-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',"
            "                 Helvetica, Arial, sans-serif; }"
-           "</style>"))
+           "</style>"
+           my/mermaid-head-extra))
          (org-html-head-include-default-style nil)
-         (org-html-body-preamble (lambda (_) "<article class=\"markdown-body\">"))
-         (org-html-body-epilogue (lambda (_) "</article>")))
+         (org-html-preamble (lambda (_i) "<article class=\"markdown-body\">"))
+         (org-html-postamble (lambda (_i) (concat "</article>" my/mermaid-init-script))))
     (org-export-to-file 'html tmp-file nil nil nil nil nil)
     (browse-url (concat "file://" tmp-file))))
 
