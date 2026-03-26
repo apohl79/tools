@@ -1,9 +1,10 @@
 ---
-description: Create a development plan through guided requirements gathering and codebase analysis
+name: plan
+description: Use when the user wants a new implementation plan created from an idea, feature request, bug report, investigation, refactor, deployment change, or research task.
 argument-hint: [idea or feature description]
 ---
 
-# Plan Creator
+# plan
 
 You create detailed implementation plans by interviewing the user, analyzing the codebase, and producing a plan document that `/my:execute-plan` can pick up directly.
 
@@ -48,7 +49,7 @@ Use AskUserQuestion to ask:
   2. "Create one after planning" — create the ticket in Phase 4 using gathered info
   3. "No ticket needed" — proceed without JIRA
 
-If a ticket exists, read it and extract any additional context, acceptance criteria, or linked documents.
+If a ticket exists, read it and extract any additional context, acceptance criteria, or linked documents. If Atlassian MCP access or any external retrieval fails, ask the user to paste the relevant ticket/context or proceed with the information already available.
 
 ---
 
@@ -75,7 +76,7 @@ After each answer, acknowledge briefly and move to the next question. Skip quest
    - Options: "None", "External API/service", "Another team's work", "Other"
 
 5. **Existing context**: "Is there any prior research, RFC, design doc, or Confluence page I should read?"
-   - If yes, read it via Atlassian MCP or web fetch
+   - If yes, read it via Atlassian MCP or web fetch. If access is unavailable or retrieval fails, ask the user to paste the relevant context or continue with available information.
 
 ## 2.2 Feature-specific Questions
 
@@ -87,9 +88,14 @@ Only ask these if the work type is **Feature**:
 7. **Acceptance criteria**: "What are the acceptance criteria? When is this 'done'?"
    - Suggest criteria based on what you know. Let the user add/modify.
 
-8. **Non-functional requirements**: "Are there any NFRs to consider?"
-   - Options (multi-select): "Performance/latency targets", "Security constraints", "Backwards compatibility", "Observability/logging", "Error handling requirements", "None", "Other"
-   - For each selected NFR, ask a brief follow-up to get specifics.
+8. **Non-functional requirements**: Ask this using **two** AskUserQuestion calls so each stays within the 4-option limit.
+   - Question 1 options (multi-select): "Performance/latency targets", "Security constraints", "Error handling requirements", "Other / free-text"
+   - Question 2 options (multi-select): "Backwards compatibility", "Observability/logging", "None of these", "Other / free-text"
+   - If the user selects "Other / free-text" in either question, capture the custom NFRs in free text before moving on.
+   - Combine the selections across both questions, ignoring any "None of these" choice when other options were selected in Question 2.
+   - Treat selecting only "None of these" in Question 2, with no selections from Question 1 other than optional free-text that adds no NFRs, as an explicit answer that there are no cataloged NFRs beyond any captured free-text.
+   - Keep "Error handling requirements" as an explicit selectable NFR. Do NOT defer it to a hidden follow-up trigger.
+   - For each selected NFR, including error handling when selected, ask a brief follow-up to get specifics.
 
 9. **Edge cases**: "Are there any edge cases or error scenarios to handle?"
 
@@ -116,25 +122,33 @@ Only ask these if the work type is **Investigation**:
 
 Only ask these if the work type is **Deployment / Infra change**:
 
-6. **Target environment(s)**: "Which environments does this affect?"
-   - Options: "Dev only", "Staging", "Production", "All environments", "Other"
-7. **Rollback plan**: "What's the rollback strategy if something goes wrong?"
-   - Options: "Revert the config/commit", "Feature flag / toggle", "Manual rollback steps", "No rollback needed", "Other"
-8. **Downtime**: "Does this change require downtime or cause service disruption?"
-   - Options: "No downtime", "Brief restart", "Rolling update", "Maintenance window required", "Other"
+6. **Target environment(s)**: Ask this using AskUserQuestion with at most 4 options.
+   - Question: "Which environments does this affect?"
+   - Options: "Dev only", "Staging", "Production", "Other"
+   - If the user answers "Other", allow free-text such as "All environments".
+7. **Rollback plan**: Ask this using AskUserQuestion with at most 4 options.
+   - Question: "What's the rollback strategy if something goes wrong?"
+   - Options: "Revert the config/commit", "Feature flag / toggle", "Manual rollback steps", "Other"
+   - If the user answers "Other", allow free-text such as "No rollback needed".
+8. **Downtime**: Ask this using AskUserQuestion with at most 4 options.
+   - Question: "Does this change require downtime or cause service disruption?"
+   - Options: "No downtime", "Brief restart", "Rolling update", "Other"
+   - If the user answers "Other", allow free-text such as "Maintenance window required".
 
 ## 2.6 Research-specific Questions
 
 Only ask these if the work type is **Research**:
 
 6. **Research question**: "What specific question should this research answer?"
-7. **Deliverable**: "What is the expected output?"
-   - Options: "Written analysis / doc", "ADR (Architecture Decision Record)", "Proof of concept", "Recommendation with trade-offs", "Other"
+7. **Deliverable**: Ask this using AskUserQuestion with at most 4 options.
+   - Question: "What is the expected output?"
+   - Options: "Written analysis / doc", "ADR (Architecture Decision Record)", "Proof of concept", "Other"
+   - If the user answers "Other", allow free-text such as "Recommendation with trade-offs".
 8. **Time box**: "How much effort should this research take?"
    - Options: "Quick (1-2 hours)", "Medium (half day)", "Deep dive (1+ day)", "Other"
 9. **Success criteria**: "How will you know the research is done?"
 
-## 2.5 Final check
+## 2.7 Final check
 
 After all questions:
 - Summarize what you understood in 3-5 bullet points
@@ -154,7 +168,7 @@ Now analyze the codebase to inform the plan. Do NOT modify any files.
 3. **Read relevant code** — understand the current implementation, patterns, and conventions
 4. **Check for existing tests** — understand the test structure and patterns used
 5. **Note code standards** — detect which recipe skills apply:
-   - TypeScript → `typescript-services:production-code-recipe`, `typescript-services:test-code-recipe`, `typescript-services:true-myth-recipe`
+   - TypeScript → `typescript-services:production-code-recipe`, `typescript-services:test-code-recipe`, and `typescript-services:true-myth-recipe` only when the codebase already uses true-myth or the planned change will introduce it intentionally
    - Python → `python-services:production-code-recipe`, `python-services:test-code-recipe`
    - Rust → `rust-services:production-code-recipe`, `rust-services:test-code-recipe`
 
@@ -173,7 +187,7 @@ If the user chose "Create one after planning" in Phase 1, create the ticket now 
 
 ## 4.2 Plan Document
 
-Create the directory `.my/plans/` in the project root if it doesn't exist, then create a markdown file named `.my/plans/plan-<short-title>.md`.
+Create the directory `.my/plans/` in the project root if it doesn't exist, then create a markdown file with a deterministic non-colliding name. First try `.my/plans/plan-<short-title>.md`. If that file already exists, reuse it only when the user explicitly chose that existing plan path or filename for this planning run; otherwise create a unique suffixed filename such as `.my/plans/plan-<short-title>-2.md` instead of overwriting silently. When reusing an existing plan file, rewrite the full plan document body for the new planning run before continuing to review or acceptance. Do not keep stale task content, context, acceptance criteria, open questions, or prior summaries in place. Reset `**Status:** WIP` and normalize all execution flags (`**no-worktree:**`, `**no-pr:**`, `**draft-pr:**`) back to `[ ]` as part of that full rewrite so stale state cannot leak into the new plan.
 
 The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 
@@ -189,8 +203,6 @@ The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 **no-worktree:** [ ]
 **no-pr:** [ ]
 **draft-pr:** [ ]
-**merge:** [ ]
-**merge-admin:** [ ]
 
 ---
 
@@ -285,12 +297,14 @@ Task 4 ────────────┘
 
 After writing the plan document, run an automated review loop to catch gaps before presenting it to the user. This loop runs a maximum of **3 iterations**. Track `review_attempt` starting at 1.
 
-1. **Dispatch a plan-document-reviewer sub-agent** using the Task tool with `subagent_type: "general-purpose"` and the following prompt (substitute `[PLAN_FILE_PATH]` with the absolute path to the plan file):
+1. **Dispatch a plan-document-reviewer sub-agent** using the Agent tool with a general-purpose agent and the following prompt (substitute `[PLAN_FILE_PATH]` with the absolute path to the plan file):
 
    ```
    You are a plan document reviewer. Verify this implementation plan is complete and ready for execution.
 
    **Plan to review:** [PLAN_FILE_PATH]
+
+   Do NOT modify any files. You are a reviewer, not an implementer.
 
    ## What to Check
 
@@ -329,9 +343,14 @@ After writing the plan document, run an automated review loop to catch gaps befo
 
    - If **Status is "Approved"**: proceed to Phase 5.
 
+   - Automated review approval only makes the plan eligible for final acceptance. The plan MUST remain `WIP` until Phase 5 ends with the user explicitly accepting the final version that will be saved.
+   - If unresolved review issues remain after the automated loop, the plan still MUST remain `WIP` until the user explicitly acknowledges those remaining issues and explicitly accepts the final version in Phase 5.
+
    - If **Status is "Issues Found"** and `review_attempt < 3`:
      a. Fix each reported issue directly in the plan document.
      b. Increment `review_attempt` and re-dispatch the reviewer (return to step 1).
+
+   - If substantive Phase 5 edits are made later to task structure, dependencies, acceptance criteria, verification steps, or other execution-relevant plan content, re-run this automated review loop before the plan can become `READY` again. Purely clerical edits such as wording polish or execution-flag updates do not require re-running Phase 4.5.
 
    - If **Status is "Issues Found"** and `review_attempt >= 3`:
      a. Do NOT attempt further automated fixes.
@@ -353,28 +372,45 @@ After writing the plan document, run an automated review loop to catch gaps befo
 2. Ask: "Would you like to review or adjust the plan before finalizing?"
    - Options: "Looks good", "I want to review it", "Make changes"
 
-3. If changes are requested, update the plan document.
+3. If the user chooses "I want to review it", walk through their feedback, answer questions, and keep the plan `WIP` until they explicitly accept the final version.
+   - After answering, ask again whether they want to accept the current version, make changes, or keep reviewing.
+   - If they still need review, stay in Phase 5 without changing status.
+   - If they want changes, follow step 4.
 
-4. Ask about execution flags using **two** AskUserQuestion calls (AskUserQuestion supports max 4 options per question, so flags must be split across two questions):
+4. If the user chooses "Make changes", update the plan document, summarize the changes you made, and treat substantive edits as a return to the automated-review gate before final acceptance.
+   - After making changes, ask again whether they want additional changes, need more review, or accept the current version.
+   - If the edits were substantive to task structure, dependencies, acceptance criteria, verification steps, or other execution-relevant content, re-run Phase 4.5 before continuing toward `READY`.
+   - After any required re-run of Phase 4.5, present the updated plan summary again in Phase 5 and continue from the current review/handoff flow on that updated version.
+   - If the user requests more changes or more review, keep iterating in Phase 5.
+   - Do NOT imply the plan is `READY` until the user explicitly accepts the final version.
 
-   **Question 1** (multiSelect: true):
-   - Question: "Which worktree/PR flags should be enabled?"
+5. Ask about execution flags using **one** AskUserQuestion call:
+
+   **Question** (multiSelect: true):
+   - Question: "Which execution flags should be enabled?"
    - Options:
      - label: "no-worktree", description: "Skip creating a git worktree (run directly in the current working directory)"
      - label: "no-pr", description: "Skip creating a pull request after implementation"
      - label: "draft-pr", description: "Create a draft PR instead of a ready-for-review PR"
-     - label: "None of these", description: "No worktree/PR flags needed"
+     - label: "None of these", description: "No execution flags needed"
 
-   **Question 2** (multiSelect: true):
-   - Question: "Which merge flags should be enabled?"
-   - Options:
-     - label: "merge", description: "Automatically merge the PR after finalization"
-     - label: "merge-admin", description: "Merge using admin override (bypasses branch protection rules)"
-     - label: "None of these", description: "No merge flags needed"
-
-   - For each selected flag (excluding "None of these"), update the plan header by replacing `**<flag>:** [ ]` with `**<flag>:** [x]`.
+   - Treat `None of these` deterministically: ignore it whenever any real flag is also selected, and only treat it as meaningful when it is the sole selection.
+   - For each selected real flag, update the plan header by replacing `**<flag>:** [ ]` with `**<flag>:** [x]`.
    - Leave unselected flags as `[ ]`.
 
-5. Once the user accepts the plan (chooses "Looks good") or after updating flags: update the plan document header by replacing `**Status:** WIP` with `**Status:** READY`.
+6. If unresolved automated-review issues remain and the user is moving toward `READY`, ask a separate explicit acknowledgment question before the final explicit acceptance step.
+   - Summarize the remaining issues concretely.
+   - Ask: "These review issues are still open. Do you explicitly accept them for this version of the plan?"
+   - Options: "Accept remaining issues", "Make changes", "I need to review it"
+   - If the user does not explicitly choose "Accept remaining issues", keep the plan `WIP` and do not present it as ready for execution.
 
-6. Tell the user: "Plan saved to `.my/plans/<filename>`. Run `/my:execute-plan .my/plans/<filename>` to implement it."
+7. After the flag selections have been applied to the plan header, present the final version summary that will actually be saved and ask for explicit acceptance of that exact final version.
+   - This confirmation MUST happen after any requested edits, after any required unresolved-review acknowledgment, and after execution flags are reflected in the document.
+   - Options: "Looks good", "Make changes", "I need to review it"
+   - If the user does not explicitly accept this final flagged version, keep the plan `WIP`.
+
+8. Only after the user explicitly accepts the final version of the plan in Phase 5 (for example by choosing "Looks good" in step 7), update the plan document header by replacing `**Status:** WIP` with `**Status:** READY`.
+
+9. Final handoff message must be status-aware:
+   - If the plan was promoted to `READY`, tell the user: "Plan saved to `.my/plans/<filename>`. Run `/my:execute-plan .my/plans/<filename>` to implement it. Add execution flags such as `--non-interactive` when that execution mode is intended."
+   - If the plan remains `WIP` because the user has not explicitly accepted the final version yet or because unresolved automated review issues still need user resolution, tell the user the plan was saved at `.my/plans/<filename>`, summarize why it is still `WIP`, and ask them to review or resolve those issues before running `/my:execute-plan`.
