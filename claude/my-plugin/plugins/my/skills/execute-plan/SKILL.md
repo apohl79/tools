@@ -1,5 +1,4 @@
 ---
-name: execute-plan
 description: Use when a READY implementation plan should be executed in the current repository or worktree.
 argument-hint: [plan-document] [jira-ticket] [--non-interactive] [--no-worktree] [--no-pr] [--draft-pr]
 ---

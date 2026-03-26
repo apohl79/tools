@@ -1,5 +1,4 @@
 ---
-name: plan
 description: Use when the user wants a new implementation plan created from an idea, feature request, bug report, investigation, refactor, deployment change, or research task.
 argument-hint: [idea or feature description]
 ---
