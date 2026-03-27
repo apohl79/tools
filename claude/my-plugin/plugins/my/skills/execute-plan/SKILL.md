@@ -276,7 +276,7 @@ After all implementation and integration testing is complete, run a code-review 
 
 **Preparation (once, before the loop):**
 
-1. **Determine the language and freeze the reviewer set for the entire Phase 5 loop** — if TypeScript, the reviewer loads `typescript-services:production-code-recipe`, `typescript-services:test-code-recipe`, and `typescript-services:true-myth-recipe` only when the plan or the touched codebase already uses true-myth, or when the change intentionally introduces it. If Python, the reviewer loads `python-services:production-code-recipe` and `python-services:test-code-recipe`. If Rust, the reviewer loads `rust-services:production-code-recipe` and `rust-services:test-code-recipe`.
+1. **Determine the language of the repo and freeze the reviewer set for the entire Phase 5 loop** — if TypeScript, the reviewer loads `typescript-services:production-code-recipe`, `typescript-services:test-code-recipe`, and `typescript-services:true-myth-recipe` only when the plan or the touched codebase already uses true-myth, or when the change intentionally introduces it. If Python, the reviewer loads `python-services:production-code-recipe` and `python-services:test-code-recipe`. If Rust, the reviewer loads `rust-services:production-code-recipe` and `rust-services:test-code-recipe`.
    - Reviewer selection MUST be deterministic in both interactive and non-interactive mode:
      - Claude recipe reviewer is ALWAYS required unless `SKIP_CODE_REVIEW=true`.
      - Codex review is included only when `NON_INTERACTIVE=true` or the exact tool `mcp__codex__codex` is available.
