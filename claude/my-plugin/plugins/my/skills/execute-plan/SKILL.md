@@ -3,14 +3,6 @@ description: Use when a READY implementation plan should be executed in the curr
 argument-hint: [plan-document] [jira-ticket] [--non-interactive] [--no-worktree] [--no-pr] [--draft-pr]
 ---
 
-**PLANNING MODE CHECK (execute FIRST, before anything else):**
-If you are currently in planning mode (i.e., you have access to `ExitPlanMode`), STOP IMMEDIATELY. Do NOT proceed with any phase of this command. Inform the user:
-"This command cannot run in planning mode. Please exit planning mode first, then re-run this command with an explicit existing plan path. If no READY plan exists yet, create it first through the planning workflow."
-Do NOT attempt to exit planning mode yourself — let the user handle it.
-**CRITICAL: Do NOT call `ExitPlanMode`. Do NOT call `AskUserQuestion` about exiting plan mode. Simply print the message above and STOP. Take NO further action.**
-
----
-
 Execute the explicitly provided plan path, or in interactive mode resolve a single READY plan during Phase 1 setup.
 
 You are the ORCHESTRATOR. You coordinate the execution of a development plan by delegating individual tasks to focused sub-agents. You NEVER write production code or test code yourself — you only manage the workflow.
