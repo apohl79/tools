@@ -267,7 +267,7 @@ Track `integration_attempt` starting at 1 for integration-test handoff naming an
 
 **Otherwise, THIS PHASE IS MANDATORY. You MUST execute Phase 5 before proceeding to Phase 6 or Phase 7. Skipping this phase is a BLOCKING violation — under NO circumstances may you proceed to Phase 6 or Phase 7 without completing Phase 5 first. There are NO exceptions, regardless of time pressure, context length, or how confident you are in the code quality.**
 
-After all implementation and integration testing is complete, run a code-review loop. The loop repeats until ALL reviewers selected once at Phase 5 start by the interactive reviewer-selection logic return no CRITICAL or IMPORTANT findings in the same iteration. Track `review_attempt` starting at 1. Run a maximum of 15 attempts. If the last attempt has CRITICAL or IMPORTANT findings you HAVE to treat `--merge` or `--merge-admin` as obsolete and you CAN'T merge a PR even if requested. A manuall review IS NEEDED.
+After all implementation and integration testing is complete, run a code-review loop. The loop repeats until ALL reviewers selected once at Phase 5 start by the interactive reviewer-selection logic return no CRITICAL or IMPORTANT findings in the same iteration. Track `review_attempt` starting at 1. Run a maximum of 8 attempts. External reviewer findings are inputs to evaluate, not orders to obey: for every CRITICAL or IMPORTANT finding you MUST first verify whether it is technically correct for THIS codebase and whether it is a correctness issue, a weak/speculative concern, or a duplicate/restatement of an already-handled issue. Focus fixes on VERIFIED CRITICAL/IMPORTANT correctness issues. If a reported issue is rejected or deferred, you MUST spell that out explicitly with technical reasoning and carry that rationale forward in later review iterations instead of silently ignoring the finding. If the last attempt still has unresolved VERIFIED CRITICAL or IMPORTANT correctness findings, you HAVE to treat `--merge` or `--merge-admin` as obsolete and you CAN'T merge a PR even if requested. A manual review IS NEEDED.
 
 **Preparation (once, before the loop):**
 
@@ -284,6 +284,11 @@ After all implementation and integration testing is complete, run a code-review 
    - Always write the Claude recipe reviewer prompt file for the current attempt at `.tmp-subtask-review-attempt-<attempt>-claude.md` containing:
      - A list of ALL files created or modified during Phases 3 and 4 (absolute paths). On re-reviews, also include files touched by fix sub-agents in prior iterations.
      - The exact recipe skill names to load (determined in step 1).
+     - On attempts after the first, a `Prior review context` section containing:
+       - previously REJECTED findings with their technical rationale,
+       - previously DEFERRED findings with their technical rationale,
+       - previously VERIFIED_FIX findings that were already implemented in earlier iterations,
+       - explicit instruction that the reviewer must take this context into account and must not simply restate previously rejected/deferred findings unless new code changes invalidate the prior rationale.
      - The following instructions for the reviewer:
 
      ```
@@ -295,16 +300,21 @@ After all implementation and integration testing is complete, run a code-review 
      - Check for: bugs, logic errors, missing error handling, type safety issues, naming convention violations, recipe non-compliance, test quality issues (missing edge cases, weak assertions, improper mocking), and security concerns.
      - Do NOT modify any files. You are a reviewer, not an implementer.
      - Do NOT look for, read, or reference any plan document.
+     - If `Prior review context` is present, treat it as binding review context for this iteration. Do NOT re-raise a previously REJECTED or DEFERRED finding unless the current code changes make the prior rationale invalid; if you do re-raise it, you MUST explain exactly what changed and why the previous rationale no longer holds.
+     - On attempts after the first, review the full listed files but focus first on: (1) code changed since the previous review attempt, (2) whether previously VERIFIED_FIX items are actually resolved, and (3) whether any prior REJECTED or DEFERRED rationale has been invalidated by new changes. Do NOT generate a fresh unrelated issue list if no new code makes it relevant.
+     - Do NOT report a CRITICAL or IMPORTANT finding unless you can point to a concrete failure mode, protocol violation, regression path, security issue, or otherwise testable behavioral risk in the current code. If a concern is speculative, classify it as MINOR and state that it is speculative.
+     - Before reporting a finding, check `Prior review context`. If substantially the same issue already appears there, mark it as a duplicate unless current code changes make the previous classification invalid.
      - Produce a structured review report with:
-       - **CRITICAL** — bugs, logic errors, security issues that MUST be fixed.
-       - **IMPORTANT** — recipe violations, type safety gaps, missing error handling that SHOULD be fixed.
-       - **MINOR** — style nits, naming suggestions that are NICE TO HAVE.
-     - For each finding, include: the file path, line number or code snippet, what the issue is, and a concrete suggestion for how to fix it.
+       - **CRITICAL** — concrete bugs, logic errors, protocol breaks, or security issues with a clear failing path that MUST be fixed.
+       - **IMPORTANT** — concrete correctness or regression risks with a clear failing path that SHOULD be fixed in this run.
+       - **MINOR** — style nits, naming suggestions, maintainability concerns, refactors, or speculative issues.
+     - For each finding, include: the file path, line number or code snippet, what the issue is, a concrete suggestion for how to fix it, `Category` (correctness, regression, protocol, security, recipe/process, maintainability, speculative), `Confidence` (high/medium/low), and `Repro path` (concrete failing path or `none provided`).
      - If there are no issues, explicitly state "No issues found."
      ```
    - If the frozen reviewer set for this Phase 5 loop includes Codex or Gemeini review, also write `.tmp-subtask-review-attempt-<attempt>-other.md` containing:
      - The absolute execution root path.
      - The absolute paths of every file created or modified during Phases 3 and 4 for this attempt's review scope.
+     - On attempts after the first, the same `Prior review context` section described above.
      - The following review prompt:
 
      ```
@@ -315,11 +325,15 @@ After all implementation and integration testing is complete, run a code-review 
      - Check for: bugs, logic errors, missing error handling, type safety issues, naming convention violations, test quality issues (missing edge cases, weak assertions, improper mocking), and security concerns.
      - Do NOT modify any files.
      - Do NOT read or rely on any plan document.
+     - If `Prior review context` is present, treat it as binding review context for this iteration. Do NOT re-raise a previously REJECTED or DEFERRED finding unless the current code changes make the prior rationale invalid; if you do re-raise it, you MUST explain exactly what changed and why the previous rationale no longer holds.
+     - On attempts after the first, review the full listed files but focus first on: (1) code changed since the previous review attempt, (2) whether previously VERIFIED_FIX items are actually resolved, and (3) whether any prior REJECTED or DEFERRED rationale has been invalidated by new changes. Do NOT generate a fresh unrelated issue list if no new code makes it relevant.
+     - Do NOT report a CRITICAL or IMPORTANT finding unless you can point to a concrete failure mode, protocol violation, regression path, security issue, or otherwise testable behavioral risk in the current code. If a concern is speculative, classify it as MINOR and state that it is speculative.
+     - Before reporting a finding, check `Prior review context`. If substantially the same issue already appears there, mark it as a duplicate unless current code changes make the previous classification invalid.
      - Produce exactly these sections:
-       - **CRITICAL** — must-fix issues that would break behavior, introduce regressions, or create serious operational/security risk.
-       - **IMPORTANT** — should-fix issues that materially weaken correctness, robustness, or maintainability.
-       - **MINOR** — optional quality suggestions.
-     - For every finding, include the file path, line number or snippet, why it matters, and a concrete fix suggestion.
+       - **CRITICAL** — concrete must-fix issues with a clear failing path that would break behavior, introduce regressions, or create serious operational/security risk.
+       - **IMPORTANT** — concrete should-fix issues with a clear failing path that materially weaken correctness or robustness in this run.
+       - **MINOR** — optional quality suggestions, maintainability concerns, refactors, or speculative issues.
+     - For every finding, include the file path, line number or snippet, why it matters, a concrete fix suggestion, `Category` (correctness, regression, protocol, security, recipe/process, maintainability, speculative), `Confidence` (high/medium/low), and `Repro path` (concrete failing path or `none provided`).
      - If there are no issues, explicitly state "No issues found."
      ```
    - In non-interactive mode, you MUST mirror the same reviewer-selection logic used by interactive mode to determine the frozen reviewer set at Phase 5 start. Do NOT invent a different inclusion rule for which reviewers run, and do NOT recompute the reviewer set on later attempts in the same review loop.
@@ -345,12 +359,20 @@ After all implementation and integration testing is complete, run a code-review 
 4. **Delete the temporary review prompt files for that attempt after their outputs have been collected and processed.**
 
 5. **Evaluate the combined review results** from ALL reviewers selected for that attempt:
-   - If **no CRITICAL or IMPORTANT findings** remain across all required reviewers: exit the loop and proceed to Phase 6.
-   - If **CRITICAL or IMPORTANT issues were found**:
+   - First, triage every CRITICAL and IMPORTANT finding from every reviewer into exactly one bucket:
+     - **VERIFIED_FIX** — technically correct for THIS codebase and requires a fix now because it is a correctness, regression, protocol, security, or materially broken-behavior issue.
+     - **REJECTED** — not technically correct, not applicable to THIS codebase, a duplicate/restatement of an already-addressed issue, or based on an incorrect assumption.
+     - **DEFERRED** — technically plausible but weak, speculative, non-blocking, or not required for the plan's acceptance criteria in this run.
+   - For every **REJECTED** or **DEFERRED** finding, you MUST write down the specific technical rationale in the review notes for that attempt. Do NOT silently drop findings.
+   - On every later review iteration, you MUST include those prior REJECTED/DEFERRED rationales in the next review prompts so reviewers have the context for what was intentionally not fixed and why.
+   - Only VERIFIED_FIX findings should drive code changes in the review-fix pass.
+   - If **no VERIFIED_FIX findings** remain across all required reviewers for that iteration: exit the loop and proceed to Phase 6, even if some findings were rejected or deferred.
+   - If **one or more VERIFIED_FIX findings** remain:
      a. Create a fix prompt file for this attempt containing:
-        - Every CRITICAL and IMPORTANT finding from ALL reviewers in this iteration (copy them verbatim — file paths, code snippets, issue descriptions, and fix suggestions).
+        - Every VERIFIED_FIX finding from ALL reviewers in this iteration (copy them verbatim — file paths, code snippets, issue descriptions, and fix suggestions).
+        - A separate section listing every REJECTED or DEFERRED finding with its technical rationale so the fix agent does not re-open or re-implement them.
         - The recipe skill names to load.
-        - Clear instruction: "Fix each issue listed below. Do NOT change anything else. Do NOT look for or read any plan document."
+        - Clear instruction: "Fix only the VERIFIED_FIX issues listed below. Do NOT change anything else. Do NOT look for or read any plan document. Do NOT implement REJECTED or DEFERRED findings."
      b. In normal interactive mode (`NON_INTERACTIVE=false`), preserve the current behavior by launching a fix sub-agent using the Agent tool with a general-purpose agent.
      c. In non-interactive mode (`NON_INTERACTIVE=true`), write an iteration-safe fix prompt file such as `.tmp-subtask-review-fix-attempt-<attempt>-1.md` and emit the handoff required by `HANDOFF_PROTOCOL.md` for the review-fix execution point.
          Then require a resumed `# output sub-agent 1:` block before proceeding.
@@ -486,7 +508,7 @@ Validate that the ENTIRE plan has been implemented correctly according to its sp
 - The validation loop (Phase 6) runs a MAXIMUM of 5 times. After 5 failed attempts, interactive mode may ask the user whether to proceed or abort. If the user aborts, print the required Phase 6 failure summary, leave the Phase 6 task incomplete, and skip Phases 7-8. In non-interactive mode, stop deterministically, leave the Phase 6 task incomplete, skip Phases 7-8, and print the Phase 6 failure summary instead of an execution summary.
 - **MANDATORY PHASE ORDERING: Phases MUST execute in strict order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Phase 5 (Code Review Loop) MAY be skipped only when `SKIP_CODE_REVIEW=true` (plan type is Deployment/Infra or Research). PR creation in Phase 7 MAY be skipped when `SKIP_PR=true`. In all other cases these are NON-NEGOTIABLE prerequisites. No other exceptions — not for time, context length, or confidence.**
 - **NO SELF-VALIDATION: The orchestrator MUST NOT perform validation checks itself. Phase 5 (Code Review Loop) and Phase 6 (Plan Validation) MUST each use dedicated review/validation sub-agents rather than self-review. In normal interactive mode, satisfy this by launching the required reviewers/validators directly. In non-interactive mode, satisfy the same independence requirement by emitting the required external handoffs and waiting for resumed output blocks before evaluating results. "Doing it myself because it's faster/simpler/straightforward" is explicitly forbidden. The whole point of these phases is independent verification by separate agents with fresh context.**
-- **CODE REVIEW LOOP MUST CONVERGE: Phase 5 loops until every reviewer in the set frozen at Phase 5 start (Claude recipe reviewer plus Codex and/or Gemini when available at that point) returns zero CRITICAL or IMPORTANT findings in the same iteration. Finding fixes in iteration N do NOT count as a clean pass — a new review iteration must confirm they are resolved. Do NOT exit the loop after fixing — always re-review.**
+- **CODE REVIEW LOOP MUST CONVERGE: Phase 5 loops until every reviewer in the set frozen at Phase 5 start (Claude recipe reviewer plus Codex and/or Gemini when available at that point) returns zero VERIFIED_FIX findings in the same iteration after explicit triage. Finding fixes in iteration N do NOT count as a clean pass — a new review iteration must confirm they are resolved. Do NOT exit the loop after fixing — always re-review. Maximum review attempts: 8.**
 - **NO SKIPPING PR FINALIZATION: Unless `--no-pr` or `--draft-pr` was explicitly passed, and unless `SKIP_PR=true`, Phase 7 step 5 MUST invoke `my:pr-finalize` via the Skill tool after marking the PR ready. The PR is incomplete without finalization whenever the normal PR path is still enabled. Do NOT stop at "PR created" or "PR marked ready" — you MUST run the finalize skill. Forgetting this step means the PR is unfinished.**
 - **NO EARLY TERMINATION OF PR FINALIZATION: Once `my:pr-finalize` is invoked, you MUST wait for the Bugbot check to reach `status: "completed"` and all bug comments to be fixed and resolved BEFORE moving to Phase 8. You are FORBIDDEN from canceling the polling loop, marking Phase 7 complete, marking the plan `COMPLETED`, printing the execution summary, or declaring the work done while Bugbot is still `in_progress`. "It's taking too long" is NOT a valid reason to stop. "Polling limits" means space out your checks — it does NOT mean give up. You poll until Bugbot completes, fix any bugs it finds, and only THEN proceed to Phase 8.**
 
