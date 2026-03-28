@@ -401,15 +401,24 @@ After writing the plan document, run an automated review loop to catch gaps befo
    - If the user requests more changes or more review, keep iterating in Phase 5.
    - Do NOT imply the plan is `READY` until the user explicitly accepts the final version.
 
-5. Ask about execution flags using **one** AskUserQuestion call:
+5. Ask about execution flags using **two** AskUserQuestion calls:
 
-   **Question** (multiSelect: true):
+   **Question 1** (multiSelect: true):
    - Question: "Which execution flags should be enabled?"
    - Options:
      - label: "no-worktree", description: "Skip creating a git worktree (run directly in the current working directory)"
      - label: "no-pr", description: "Skip creating a pull request after implementation"
      - label: "draft-pr", description: "Create a draft PR instead of a ready-for-review PR"
      - label: "None of these", description: "No execution flags needed"
+
+   -- Skip the second qeustion if "no-pr" or "draft-pr" are enabled. --
+
+   **Question 2** (multiSelect: false):
+   - Question: "Do you want to enable auto-merge?"
+   - Options:
+     - label: "merge", description: "Merge after the PR has been finalized"
+     - label: "merge-admin", description: "Merge with --admin after the PR has been finalized"
+     - label: "None of these", description: "No auto-merge needed"
 
    - Treat `None of these` deterministically: ignore it whenever any real flag is also selected, and only treat it as meaningful when it is the sole selection.
    - For each selected real flag, update the plan header by replacing `**<flag>:** [ ]` with `**<flag>:** [x]`.
