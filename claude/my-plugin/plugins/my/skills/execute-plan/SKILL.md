@@ -39,6 +39,7 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
      - `**no-worktree:** [x]` → treat as `--no-worktree`
      - `**no-pr:** [x]` → skip push/PR/finalization steps only; do NOT suppress the local commit step unless `SKIP_PR=true` was already set by plan type (`Deployment / Infra change` or `Research`)
      - `**draft-pr:** [x]` → treat as `--draft-pr`
+     - If the headers are not selected via `[x]` ignore them and rely on the argument list.
 3. **CRITICAL — sync before starting:**
    - Run `git fetch origin --prune` in the repository root. Do NOT use `git pull` for this preflight sync.
    - Resolve the repository default branch deterministically in this order:
@@ -77,6 +78,8 @@ You are the ORCHESTRATOR. You coordinate the execution of a development plan by 
 6. If the codebase is in Python, TypeScript or Rust: note which recipe skills (production-code, test-code, true-myth) sub-agents should load — you will instruct them to do so. For TypeScript, include `typescript-services:true-myth-recipe` only when the plan or the touched codebase already uses true-myth, or when the change intentionally introduces it.
 7. **Only after Phase 1 setup succeeds, mark the plan as executing**: update the plan file header by replacing `**Status:** READY` with `**Status:** EXECUTING`.
 8. **If execution stops after promoting the plan to `EXECUTING` but before replacing that header with `**Status:** COMPLETED` in Phase 7, return the plan to a recoverable terminal state only for terminal abort/failure stops**: replace `**Status:** EXECUTING` with `**Status:** READY` before stopping, unless Phase 7 already finished successfully. Do NOT do this for normal non-interactive pauses that are waiting for resumed `# output sub-agent <N>:` blocks; those pauses are in-progress waits, so the plan remains `EXECUTING` while `.tmp-execute-plan-state.json` tracks the outstanding batch. This READY recovery path is the only intended terminal state for interrupted runs. A later rerun is deliberate, not unconditional: if the rerun would reuse an existing pushed worktree branch and hits the Phase 1 remote-branch guard, the operator must choose a fresh worktree branch or handle that branch manually before re-running `/my:execute-plan`.
+
+State a setup summary before moving to PHASE 2.
 
 # PHASE 2: TASK DECOMPOSITION
 
