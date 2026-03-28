@@ -39,7 +39,24 @@ Based on the user's input ($ARGUMENTS), determine if this is:
 
 State your classification and proceed accordingly. The interview questions differ by type.
 
-## 1.2 JIRA Ticket
+## 1.2 Initial Code Scan
+
+Before starting the interview, do a short codebase scan to get context. Do NOT modify any files.
+
+The scan should be brief and targeted:
+- detect the tech stack and likely affected area
+- read the most relevant existing files for this request
+- identify whether there are existing tests near that area
+- assess whether this looks like a **simple/localized change** or a **larger/unclear change**
+- note any obvious architecture constraints, NFRs, or security-sensitive areas
+
+Use this scan to make the interview adaptive:
+- **Simple/localized change** — keep the interview brief and ask only for missing information that materially affects the plan
+- **Larger/unclear/risky change** — run the fuller interview for that work type
+
+State your scan findings briefly before continuing.
+
+## 1.3 JIRA Ticket
 
 Use AskUserQuestion to ask:
 - Question: "Do you have a JIRA ticket for this work?"
@@ -58,7 +75,13 @@ If a ticket exists, read it and extract any additional context, acceptance crite
 
 Conduct the interview using AskUserQuestion. Ask questions **one at a time** — do not batch them. Use multiple-choice options where possible to reduce friction. Always include an "Other" or free-text option.
 
-After each answer, acknowledge briefly and move to the next question. Skip questions that are already answered by the initial description or JIRA ticket.
+After each answer, acknowledge briefly and move to the next question. Skip questions that are already answered by the initial description, the initial code scan, or the JIRA ticket.
+
+Keep the interview proportional to the work:
+- For a simple/localized change, ask only the minimum set of questions needed to clarify requirements, constraints, NFRs, security concerns, and unknowns.
+- For a larger or riskier change, ask the fuller set of relevant questions below.
+- Do NOT ask questions whose answers are already clear from the request, ticket, or code scan.
+- If the change is obviously small and low-risk, it is acceptable to skip entire question groups once you have enough context to write a good plan.
 
 ## 2.1 Core Questions (all work types)
 
@@ -160,16 +183,17 @@ After all questions:
 
 **Mark the "Codebase Analysis" task `in_progress` before starting. Mark it `completed` when done.**
 
-Now analyze the codebase to inform the plan. Do NOT modify any files.
+Expand the initial code scan as needed to inform the plan. Do NOT modify any files.
 
-1. **Detect the tech stack** — language, framework, package manager, test runner
-2. **Identify affected files** — based on the interview answers, find the files that will need changes
-3. **Read relevant code** — understand the current implementation, patterns, and conventions
-4. **Check for existing tests** — understand the test structure and patterns used
+1. **Confirm the tech stack** — language, framework, package manager, test runner
+2. **Identify affected areas** — based on the interview answers, find the files, modules, services, or workflows likely to change
+3. **Read relevant code** — understand the current implementation, architecture boundaries, and conventions
+4. **Check for existing tests** — understand the current validation patterns and test coverage in the affected area
 5. **Note code standards** — detect which recipe skills apply:
    - TypeScript → `typescript-services:production-code-recipe`, `typescript-services:test-code-recipe`, and `typescript-services:true-myth-recipe` only when the codebase already uses true-myth or the planned change will introduce it intentionally
    - Python → `python-services:production-code-recipe`, `python-services:test-code-recipe`
    - Rust → `rust-services:production-code-recipe`, `rust-services:test-code-recipe`
+6. **Capture planning inputs** — architecture constraints, integration points, NFRs, security considerations, migration or rollout implications, and remaining unknowns
 
 ---
 
@@ -209,85 +233,75 @@ The plan MUST follow this structure so that `/my:execute-plan` can consume it:
 
 ## Context
 
-<Summarize the interview findings: scope, NFRs, dependencies, edge cases>
+<Summarize the problem, scope, affected area, dependencies, and relevant current-state findings>
+
+## Requirements
+
+### Functional Requirements
+- [ ] <requirement 1>
+- [ ] <requirement 2>
+
+### Out of Scope
+- <explicitly excluded item>
 
 ## Acceptance Criteria
 
 - [ ] <criterion 1>
 - [ ] <criterion 2>
-- ...
 
----
+## Architecture / Approach
 
-### Task 1: <descriptive title>
+<Describe the intended solution at a strategy level. Focus on components, boundaries, integrations, data flow, and rollout approach. Do NOT prescribe detailed code-level implementation unless already required by the request.>
 
-**Files:**
-- Modify: `path/to/file.ts`
-- Create: `path/to/new-file.ts`
+## Affected Areas
 
-**Step 1: <what to do>**
+- `path/or/module` — <why it is relevant>
+- `path/or/module` — <why it is relevant>
 
-<Detailed instructions with code examples where helpful>
+## Non-Functional Requirements
 
-```language
-// code example if needed
-```
+- **Performance:** <requirements or "none identified">
+- **Reliability / Error Handling:** <requirements or "none identified">
+- **Observability:** <requirements or "none identified">
+- **Compatibility / Migration:** <requirements or "none identified">
 
-**Step 2: <verify>**
+## Security Considerations
 
-Run: `<build/test command>`
-Expected: `<expected output>`
+- <auth/authz, secrets, input validation, data sensitivity, tenant isolation, auditability, or "no special concerns identified">
 
-**Step 3: Commit**
+## Testing / Validation Strategy
 
-```
-<conventional commit message>
-```
+- <unit/integration/e2e/manual validation approach>
+- <key regression areas>
 
----
+## Implementation Phases
 
-### Task 2: <descriptive title>
+### Phase 1: <descriptive title>
+- **Goal:** <what this phase achieves>
+- **Scope:** <what it covers>
+- **Dependencies:** <none | prior phases/external dependency>
+- **Notes:** <important constraints, sequencing, or rollout notes>
 
-**Depends on:** Task 1
-
-**Files:**
-- ...
-
-...
-
----
-
-### Task N: Tests
-
-**Files:**
-- Create: `test/path/to/file.test.ts`
-
-...
-
----
-
-## Task Dependency Graph
-
-```
-Task 1 ─┬─> Task 3 ──> Task 5
-Task 2 ─┘         ┌──> Task 6
-Task 4 ────────────┘
-```
+### Phase 2: <descriptive title>
+- **Goal:** <what this phase achieves>
+- **Scope:** <what it covers>
+- **Dependencies:** <Phase 1>
+- **Notes:** <important constraints, sequencing, or rollout notes>
 
 ## Open Questions
 
-- <any unresolved questions from the interview>
+- <any unresolved questions from the interview or analysis>
 ```
 
 ### Plan Quality Rules
 
-- **Task granularity**: Each task should take a sub-agent ~2-5 minutes. If a task is larger, split it.
-- **Self-contained tasks**: Each task must include ALL information needed — file paths, code snippets, type signatures, config values. The executing agent will NOT have access to the full plan.
-- **Dependencies are explicit**: If Task 3 uses something from Task 1, Task 3 must describe what Task 1 produced (interfaces, exports, file paths).
-- **Testing is explicit**: Each task states whether it includes tests or defers them to a later task.
-- **Verification steps**: Each task ends with a build/lint/test command to verify correctness.
-- **Conventional commits**: Each task has a commit message following conventional commits.
-- **Code examples**: Include code snippets for non-trivial changes. Show types, interfaces, function signatures.
+- **Strategic, not task-level**: The plan should describe requirements, architecture, affected areas, NFRs, security concerns, validation strategy, and phased implementation. Do NOT break the work down into sub-agent-sized tasks.
+- **Keep code decisions high level**: Leave detailed code-level decisions for later unless they are already dictated by the request, current architecture, or an explicit constraint.
+- **Phases over micro-tasks**: Use a small number of meaningful implementation phases or workstreams. These should be enough for `/my:execute-plan` to decompose later.
+- **Dependencies are explicit**: Phase/workstream dependencies, sequencing constraints, and rollout implications must be clear.
+- **Testing is strategic**: Describe the validation strategy and regression areas, not per-task commands.
+- **Security and NFRs are explicit**: Always document relevant NFRs and security considerations, even when the answer is that none were identified.
+- **Affected areas are concrete**: Name likely files, modules, services, or workflows when they can be identified from the analysis.
 - **No placeholders**: No TODOs, no "figure this out later", no vague instructions.
 
 ---
@@ -311,12 +325,12 @@ After writing the plan document, run an automated review loop to catch gaps befo
 
    | Category | What to Look For |
    |----------|-----------------|
-   | Completeness | TODOs, placeholders, "TBD", missing steps, incomplete tasks |
-   | Consistency | Internal contradictions, conflicting requirements or file paths |
-   | Clarity | Instructions ambiguous enough to cause a sub-agent to build the wrong thing |
-   | Granularity | Tasks that are too large (>5 min) or too vague to execute atomically |
-   | Dependencies | Missing dependency declarations between tasks; tasks that reference unknown outputs |
-   | Verification | Tasks missing build/test/lint commands to verify correctness |
+   | Completeness | TODOs, placeholders, "TBD", missing phases/sections, incomplete requirements |
+   | Consistency | Internal contradictions, conflicting requirements, architecture, or affected areas |
+   | Clarity | Instructions ambiguous enough to cause the executor to choose the wrong approach |
+   | Granularity | Phases/workstreams that are too vague, too broad, or missing meaningful sequencing |
+   | Dependencies | Missing dependency declarations between phases/workstreams or missing rollout constraints |
+   | Verification | Missing validation strategy or missing key regression areas |
    | Scope | Plan covers more than what was requested (over-engineering / YAGNI) |
 
    ## Calibration
@@ -351,7 +365,7 @@ After writing the plan document, run an automated review loop to catch gaps befo
      a. Fix each reported issue directly in the plan document.
      b. Increment `review_attempt` and re-dispatch the reviewer (return to step 1).
 
-   - If substantive Phase 5 edits are made later to task structure, dependencies, acceptance criteria, verification steps, or other execution-relevant plan content, re-run this automated review loop before the plan can become `READY` again. Purely clerical edits such as wording polish or execution-flag updates do not require re-running Phase 4.5.
+   - If substantive Phase 5 edits are made later to phase structure, dependencies, acceptance criteria, architecture, validation strategy, security considerations, or other execution-relevant plan content, re-run this automated review loop before the plan can become `READY` again. Purely clerical edits such as wording polish or execution-flag updates do not require re-running Phase 4.5.
 
    - If **Status is "Issues Found"** and `review_attempt >= 3`:
      a. Do NOT attempt further automated fixes.
@@ -364,9 +378,11 @@ After writing the plan document, run an automated review loop to catch gaps befo
 **Mark the "Review and Handoff" task `in_progress` before starting. Mark it `completed` after handing off to the user.**
 
 1. Present a summary of the plan to the user:
-   - Number of tasks
+   - Number of implementation phases / workstreams
    - Dependency structure
    - Estimated complexity
+   - Key architecture decisions
+   - Key NFRs and security considerations
    - Any open questions
    - Any issues from Phase 4.5 that could not be auto-resolved (if `review_attempt >= 3`)
 
@@ -380,7 +396,7 @@ After writing the plan document, run an automated review loop to catch gaps befo
 
 4. If the user chooses "Make changes", update the plan document, summarize the changes you made, and treat substantive edits as a return to the automated-review gate before final acceptance.
    - After making changes, ask again whether they want additional changes, need more review, or accept the current version.
-   - If the edits were substantive to task structure, dependencies, acceptance criteria, verification steps, or other execution-relevant content, re-run Phase 4.5 before continuing toward `READY`.
+   - If the edits were substantive to phase structure, dependencies, acceptance criteria, architecture, validation strategy, security considerations, or other execution-relevant content, re-run Phase 4.5 before continuing toward `READY`.
    - After any required re-run of Phase 4.5, present the updated plan summary again in Phase 5 and continue from the current review/handoff flow on that updated version.
    - If the user requests more changes or more review, keep iterating in Phase 5.
    - Do NOT imply the plan is `READY` until the user explicitly accepts the final version.
