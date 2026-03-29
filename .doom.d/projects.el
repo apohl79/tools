@@ -437,11 +437,23 @@ Project buffers are listed first; global special buffers appear at the end."
 ;;; Info Buffer Mode
 ;;; ---------------------------------------------------------------------------
 
+(defun projects-info-open-directory ()
+  "Open Dired in the current project's root directory."
+  (interactive)
+  (dired default-directory))
+
+(defun projects-info-open-magit ()
+  "Open Magit using the existing global project shortcut."
+  (interactive)
+  (call-interactively (key-binding (kbd "C-c p v"))))
+
 (defvar projects-info-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "n") #'claude-code)
     (define-key map (kbd "c") #'claude-code-continue)
     (define-key map (kbd "r") #'claude-code-resume)
+    (define-key map (kbd "d") #'projects-info-open-directory)
+    (define-key map (kbd "g") #'projects-info-open-magit)
     map)
   "Keymap for `projects-info-mode'.")
 
@@ -492,7 +504,12 @@ Returns the buffer."
         (insert (propertize "  c" 'face 'font-lock-keyword-face))
         (insert "  continue  ")
         (insert (propertize "  r" 'face 'font-lock-keyword-face))
-        (insert "  resume\n"))
+        (insert "  resume\n")
+        (insert (propertize "  Project:\n" 'face '(:weight bold)))
+        (insert (propertize "    d" 'face 'font-lock-keyword-face))
+        (insert "  open dir  ")
+        (insert (propertize "  g" 'face 'font-lock-keyword-face))
+        (insert "  magit\n"))
       (unless (derived-mode-p 'projects-info-mode)
         (projects-info-mode))
       (goto-char (point-min)))
