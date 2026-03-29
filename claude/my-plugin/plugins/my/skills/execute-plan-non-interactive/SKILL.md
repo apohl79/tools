@@ -25,6 +25,7 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
 6. Initialize persisted execution state at `<execution-root>/.tmp-execute-plan-state.json` before the first non-interactive handoff.
 7. Persist enough setup metadata to resume safely, including skill version, plan path, execution root, current phase, wave metadata, attempt counters, and the active batch contract.
 8. Mark the plan `EXECUTING` only after setup succeeds.
+9. If setup completes without hitting a deterministic stop condition, continue directly into Phase 2 in the SAME run. Setup completion is not a checkpoint.
 
 # PHASE 2: TASK DECOMPOSITION
 
@@ -32,6 +33,7 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
 2. Record wave metadata in persisted execution state before Phase 3 begins.
 3. Record, per sub-task, the files or dependency context later waves must receive.
 4. Keep decomposition deterministic so a resumed run does not renumber tasks or waves unexpectedly.
+5. If Phase 2 completes without emitting a required handoff batch or hitting another deterministic stop condition, continue directly into Phase 3 in the SAME run. Task decomposition is not a checkpoint.
 
 # PHASE 3: WAVE-BASED EXECUTION
 
@@ -46,6 +48,7 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
 9. If another implementation batch in the same wave is required, update state, emit the next batch, and stop again.
 10. If a task must be retried, emit a corrected replacement prompt file as a new batch instead of directly taking over the work.
 11. Delete obsolete implementation prompt files only after their outputs have been processed successfully.
+12. When the final implementation batch of the final wave has been processed successfully and no new implementation batch must be emitted, continue directly to Phase 4 in the SAME run. Successful wave completion is not a checkpoint.
 
 # PHASE 4: INTEGRATION TESTING
 
@@ -58,6 +61,7 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
 4. If integration verification fails, return `status: fix_required`, emit the required integration-fix handoff batch, persist state, and stop rather than editing code directly.
 5. Do NOT proceed to Phase 5 until integration returns `status: passed` or a deterministic terminal `blocked` or `abort` result stops execution.
 6. Treat persisted integration state as authoritative on resume.
+7. If integration reaches `status: passed`, or integration is deterministically skipped, continue directly to Phase 5 in the SAME run. Successful integration completion is not a checkpoint.
 
 # PHASE 5: CODE REVIEW
 
@@ -85,6 +89,7 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
    - `notes`, containing review outcomes, triage context, and retry rationale,
    - `state_updates`, containing any authoritative review-state changes that must be persisted before the next step.
 6. Continue only from the helper's returned structured result. Persist `state_updates` before emitting another batch or advancing phases. Do NOT inline review-specific prompt policy here.
+7. If the helper returns `status: clean`, continue directly to Phase 6 in the SAME run. A clean review result is not a checkpoint.
 
 # PHASE 6: PLAN VALIDATION
 
@@ -112,6 +117,7 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
    - `state_updates`, containing any authoritative validation-state changes that must be persisted before the next step.
 5. If the helper returns `proceed_decision_required`, stop deterministically. Do not continue this run. A proceed-or-abort decision may be honored only on a fresh intentional rerun that supplies authoritative updated state recording that decision.
 6. Continue only from the helper's returned structured result. Persist `state_updates` before emitting another batch, stopping for a decision, or advancing phases. Do NOT inline validation-specific prompt policy here.
+7. If the helper returns `status: pass`, continue directly to Phase 7 in the SAME run. A passing validation result is not a checkpoint.
 
 # PHASE 7: CLEANUP AND PR
 
@@ -121,6 +127,7 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
 4. Respect `--no-pr` and `--draft-pr` without changing local verification requirements.
 5. If final verification fails, emit cleanup-fix prompt files, update persisted state, print handoff lines, and stop.
 6. Mark the plan `COMPLETED` only after all required Phase 7 work succeeds.
+7. If Phase 7 completes without emitting another required handoff batch or hitting a deterministic stop condition, continue directly to Phase 8 in the SAME run. Cleanup and PR completion is not a checkpoint.
 
 # PHASE 8: EXECUTION SUMMARY
 
@@ -155,3 +162,4 @@ When stopping, print only the next required action or the deterministic error ne
 - `execute-plan-non-interactive/HANDOFF_PROTOCOL.md` defines transport-only rules for prompt-file naming, emitted handoff lines, state lifecycle, continuation parsing, and allowed `agent-type` metadata.
 - Execute phases in strict order.
 - Always stop deterministically when the next step depends on external handoff output or a terminal helper result.
+- No successful phase boundary is a checkpoint. Unless a deterministic stop condition applies, continue automatically until the run reaches its next required handoff stop or the terminal Phase 8 summary.

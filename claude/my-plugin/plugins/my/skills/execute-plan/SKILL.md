@@ -74,7 +74,7 @@ You are the INTERACTIVE ORCHESTRATOR. You coordinate execution of a development 
 9. **Recover plan status on terminal abort/failure:**
    - If execution stops after promoting the plan to `EXECUTING` but before replacing that header with `**Status:** COMPLETED` in Phase 7, return the plan to `READY` before stopping, unless Phase 7 already finished successfully.
 
-State a setup summary before moving to Phase 2.
+State a setup summary, then continue into Phase 2 in the SAME turn. Do not stop after the setup summary. Do not wait for acknowledgment unless setup is blocked by a missing user decision, missing permission, or a risky action that needs confirmation.
 
 # PHASE 2: TASK DECOMPOSITION
 
@@ -103,7 +103,9 @@ Present the numbered sub-task list with wave grouping to the user, then immediat
 5. `Cleanup and PR`
 6. `Execution Summary`
 
-Then proceed directly to Phase 3.
+Then proceed directly to Phase 3 in the SAME turn. Do not stop after printing the wave plan. Do not wait for acknowledgment. Do not hand off a Phase 2 summary as if it were a checkpoint. Unless blocked by a missing user decision, missing permission, or a risky action that needs confirmation, the very next action after creating the task list MUST be to mark Wave 1 `in_progress`, create `.tmp-subtask-1.md`, and launch the Wave 1 implementation sub-agent.
+
+Stopping after Phase 2 is a skill violation.
 
 Define the **execution root** once and use it consistently in all later phases:
 - If a worktree exists, the execution root is the worktree root.
@@ -138,7 +140,8 @@ Execute sub-tasks wave by wave. Within each wave, run independent sub-tasks in p
    - Record what was produced so later waves can receive dependency context.
    - If a sub-agent failed or produced incorrect output, fix the sub-task description and rerun it before moving to the next wave.
 5. **Delete all temporary sub-task files** for the completed wave.
-6. **Proceed to the next wave** with updated dependency context.
+6. **Proceed to the next wave** with updated dependency context in the SAME turn unless there is no next wave.
+7. When the final wave completes, continue directly to Phase 4 in the SAME turn. Do not stop after a wave-completion report. Do not wait for acknowledgment unless blocked by a missing user decision, missing permission, or a risky action that needs confirmation.
 
 # PHASE 4: INTEGRATION TESTING
 
@@ -158,6 +161,7 @@ If any sub-tasks had `tests deferred to integration test task`, create a dedicat
    - After the integration-fix pass completes, rerun integration verification and the full test suite.
    - Do NOT proceed to Phase 5 until integration verification passes or execution stops for another explicit reason.
 4. Delete temporary integration-test files once no longer needed.
+5. Continue directly to Phase 5 in the SAME turn once integration testing is complete or skipped. Do not stop after reporting integration results unless blocked by a missing user decision, missing permission, or a risky action that needs confirmation.
 
 # PHASE 5: CODE REVIEW
 
@@ -188,6 +192,7 @@ If any sub-tasks had `tests deferred to integration test task`, create a dedicat
 - Wait for the helper result before continuing to Phase 6.
 - Continue only if the helper returns `status: clean`.
 - If the helper returns `fix_required`, `blocked`, `user_decision_required`, or any other non-clean outcome, do NOT proceed. Follow `next_step` and re-enter Phase 5 until the helper returns `status: clean`.
+- Once the helper returns `status: clean`, continue directly to Phase 6 in the SAME turn. Do not stop after a clean review result. Do not wait for acknowledgment unless blocked by a missing user decision, missing permission, or a risky action that needs confirmation.
 - Do NOT define review prompt-body policy in this orchestrator. Concern-specific review prompt content belongs to the review helper.
 
 # PHASE 6: PLAN VALIDATION
@@ -221,6 +226,7 @@ If any sub-tasks had `tests deferred to integration test task`, create a dedicat
 - Continue to Phase 7 only if the helper returns `status: pass`, or if the helper is re-entered with `post_cap_decision: proceed` and returns `status: proceed_decision_required` with notes recording that approved proceed decision for final reporting.
 - If the helper returns `status: fix_required`, `blocked`, or any other non-terminal non-pass outcome, do NOT proceed. Follow `next_step` and re-enter Phase 6 until the helper returns `status: pass`, `status: proceed_decision_required`, or `status: abort`.
 - If the helper returns `status: abort`, print the required validation failure summary, leave this task incomplete, and stop without entering Phase 7 or Phase 8.
+- Once validation allows continuation, continue directly to Phase 7 in the SAME turn. Do not stop after a passing validation result or approved proceed decision. Do not wait for acknowledgment unless blocked by a missing user decision, missing permission, or a risky action that needs confirmation.
 - Do NOT define validation prompt-body policy in this orchestrator. Concern-specific validation prompt content belongs to the validation helper.
 
 # PHASE 7: CLEANUP AND PR
@@ -242,6 +248,7 @@ If any sub-tasks had `tests deferred to integration test task`, create a dedicat
    - Do NOT mark Phase 7 complete, mark the plan `COMPLETED`, or print the execution summary until `my:pr-finalize` has fully completed.
 6. Only after all required Phase 7 work is truly finished, if the plan file is in `.my/plans/`, update its header by replacing `**Status:** EXECUTING` with `**Status:** COMPLETED`.
 7. Only after step 6 succeeds, mark the Phase 7 task `completed`.
+8. Continue directly to Phase 8 in the SAME turn. Do not stop after cleanup, commit, push, PR creation, or PR finalization unless blocked by a missing user decision, missing permission, or a risky action that needs confirmation.
 
 # PHASE 8: EXECUTION SUMMARY
 
@@ -271,3 +278,4 @@ If a phase in the summary template was skipped, keep that phase heading and incl
 - The orchestrator MUST NOT self-review or self-validate. Independent review and validation are mandatory through helper skills and delegated sub-agents.
 - If a delegated implementation, review-fix, validation-fix, integration-fix, or cleanup-fix result is unsatisfactory, rerun it with corrected instructions. Do NOT take over and write the code yourself.
 - Always produce the mandatory execution summary when Phase 8 is reached.
+- No phase boundary is a checkpoint. Unless the skill explicitly says to stop, or execution is blocked by a missing user decision, missing permission, or a risky action that needs confirmation, continue automatically until the entire plan reaches its terminal state: Phase 8 summary printed, or an explicit abort/block condition reached.
