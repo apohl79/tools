@@ -40,7 +40,24 @@ OWNER=$(gh repo view --json owner --jq '.owner.login')
 REPO=$(gh repo view --json name --jq '.name')
 ```
 
-### Step 2: Launch the monitor script
+### Step 2: Mark draft PRs ready for review first
+
+Before launching the monitor, inspect whether the PR is still a draft:
+```bash
+gh pr view "$PR_NUMBER" --repo "$OWNER/$REPO" --json isDraft --jq '.isDraft'
+```
+
+If the PR is a draft:
+```bash
+gh pr ready "$PR_NUMBER" --repo "$OWNER/$REPO"
+```
+
+Rules:
+- Launcher mode MUST mark a draft PR ready for review before monitoring begins.
+- If the PR is already ready, do nothing and continue.
+- If `gh pr ready` fails, stop and report the error. Do NOT launch the monitor.
+
+### Step 3: Launch the monitor script
 
 The monitor script is in the same directory as this skill. Locate it:
 ```
@@ -68,7 +85,7 @@ bash <skill-dir>/pr-monitor.sh \
 
 Run this via `Bash` tool with `run_in_background: true`.
 
-### Step 3: Respond immediately — do NOT wait
+### Step 4: Respond immediately — do NOT wait
 
 After launching the background Bash job, **stop and respond to the user right now**:
 
@@ -91,7 +108,7 @@ The monitor handles all polling internally. Your job ends at launching it.
 3. No unresolved review threads.
 4. At least 6 minutes elapsed since the last fix push.
 
-### Step 4: Report results — only after receiving task-notification
+### Step 5: Report results — only after receiving task-notification
 
 When you receive a `<task-notification>` for the background job:
 1. Check the exit code. 0 = all checks green, truly done.
