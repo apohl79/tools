@@ -1,5 +1,4 @@
 ---
-name: review-execution-output-non-interactive
 description: Use when non-interactive execute-plan Phase 5 must resume deterministic code review batches through prompt-file handoffs and persisted review state in the current agent.
 ---
 

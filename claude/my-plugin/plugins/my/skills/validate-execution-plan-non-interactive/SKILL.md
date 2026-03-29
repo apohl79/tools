@@ -1,5 +1,4 @@
 ---
-name: validate-execution-plan-non-interactive
 description: Use when non-interactive execute-plan orchestration needs a deterministic validation loop with persisted validation state.
 argument-hint: [plan-path] [execution-root] [changed-files-json-or-path] [language] [validation-state-json-or-path]
 ---

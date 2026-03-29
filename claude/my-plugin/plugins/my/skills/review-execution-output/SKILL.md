@@ -1,5 +1,4 @@
 ---
-name: review-execution-output
 description: Use when interactive execute-plan Phase 5 must run a deterministic review loop for completed execution output in the current agent.
 ---
 

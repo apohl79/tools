@@ -1,5 +1,4 @@
 ---
-name: validate-execution-plan
 description: Use when interactive execute-plan orchestration needs a dedicated validation loop that compares the full plan against implementation output.
 argument-hint: [plan-path] [execution-root] [changed-files-json-or-path] [language] [validation-state-json-or-path]
 ---

@@ -1,5 +1,4 @@
 ---
-name: execute-plan-non-interactive
 description: Use when a READY implementation plan should be executed through deterministic non-interactive handoffs with an explicit plan path.
 argument-hint: [plan-document] [jira-ticket] [--no-worktree] [--no-pr] [--draft-pr]
 ---
