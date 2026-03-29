@@ -170,6 +170,8 @@ If any sub-tasks had `tests deferred to integration test task`, create a dedicat
 - If `SKIP_CODE_REVIEW=true`, mark the task `completed` immediately and continue to Phase 6.
 - Otherwise, Phase 5 is mandatory. Do NOT proceed to Phase 6 or Phase 7 without completing it.
 - Invoke `my:review-execution-output` in the same agent as the orchestrator.
+- The orchestrator MUST treat the helper as the only authority for review execution. It MUST NOT substitute any other review skill, ad-hoc reviewer, manual triage, or single-reviewer shortcut for any part of Phase 5.
+- The orchestrator MUST NOT call `superpowers:requesting-code-review`, `superpowers:code-reviewer`, or any other direct reviewer outside the helper-owned flow while Phase 5 is active.
 - Pass the review helper explicit structured inputs, at minimum:
   - `plan_path`
   - `execution_root`
@@ -182,7 +184,10 @@ If any sub-tasks had `tests deferred to integration test task`, create a dedicat
   - `review_state` when prior helper-owned review state already exists
 - Execution orchestration state remains orchestrator-owned. Review state remains helper-owned and separate from execution orchestration state and validation state.
 - The review helper owns Phase 5 boundaries, reviewer prompt content, review temp-file naming, frozen reviewer-set selection, review triage persistence, retry accounting, and review-fix isolation.
+- Phase 5 reviewer selection is helper-owned and fixed. The orchestrator must not choose, reduce, expand, or replace the reviewer set.
 - Reviewers and review-fix workers must run as focused sub-agents underneath the helper. The orchestrator must not bypass the helper and must not collapse reviewer isolation into the orchestrator itself.
+- If the helper returns a non-clean result, the orchestrator MUST follow only the helper's `next_step`. It MUST NOT improvise an alternate review path, partial fix loop, or direct re-review outside the helper.
+- Any direct review action taken outside the helper-owned Phase 5 flow is a skill violation and the run must be treated as having failed Phase 5 until the helper re-runs the full required review loop cleanly.
 - Persisted review metadata must include, when relevant, the helper skill version, current phase, current attempt, and frozen reviewer set.
 - The review helper must return a deterministic result contract with:
   - `status`, one of `clean`, `fix_required`, `blocked`, or `user_decision_required`,
@@ -215,7 +220,10 @@ If any sub-tasks had `tests deferred to integration test task`, create a dedicat
   - `post_cap_decision` when the helper is re-entered after a proceed-or-abort decision at the 5-attempt cap
 - Execution orchestration state remains orchestrator-owned. Validation state remains helper-owned and separate from execution orchestration state and review state.
 - The validation helper owns Phase 6 boundaries, validation temp-file naming, validator prompt content, validator isolation, retry accounting, validation cap enforcement, and any required review rerun triggered after validation fixes.
+- The orchestrator MUST treat the validation helper as the only authority for Phase 6. It MUST NOT run ad-hoc validators, self-validation, or alternate validation skills while Phase 6 is active.
 - Validators and validation-fix workers must run as focused sub-agents underneath the helper. The orchestrator must not bypass the helper and must not collapse validator isolation into the orchestrator itself.
+- If the helper returns a non-pass result, the orchestrator MUST follow only the helper's `next_step`. It MUST NOT improvise a shortcut validation path or declare success from targeted checks alone.
+- Any direct validation action taken outside the helper-owned Phase 6 flow is a skill violation and the run must be treated as having failed Phase 6 until the helper re-runs the full required validation loop cleanly.
 - Persisted validation metadata must include, when relevant, the helper skill version, current phase, current attempt, and any frozen reviewer set inherited from a required review rerun.
 - The validation helper must return a deterministic result contract with:
   - `status`, one of `pass`, `fix_required`, `proceed_decision_required`, `abort`, or `blocked`,
@@ -276,6 +284,10 @@ If a phase in the summary template was skipped, keep that phase heading and incl
 - Phase 5 may be skipped only when `SKIP_CODE_REVIEW=true`.
 - PR creation in Phase 7 may be skipped only when `SKIP_PR=true` or the relevant PR flags require it.
 - The orchestrator MUST NOT self-review or self-validate. Independent review and validation are mandatory through helper skills and delegated sub-agents.
+- The orchestrator MUST NOT reinterpret helper instructions as optional guidance. Helper-owned phase contracts are mandatory execution rules.
+- If a helper-owned phase specifies a required reviewer set, validator set, retry loop, or helper-owned sub-agent fan-out, the orchestrator MUST wait for that helper to execute it. No smaller, faster, or apparently equivalent substitute is allowed.
+- Shortcutting a helper-owned phase by using a direct skill call, a single reviewer, manual triage, or a hand-written substitute path is an execution failure, not an acceptable optimization.
+- When in doubt, the orchestrator must stop and re-enter the helper, not invent a fallback.
 - If a delegated implementation, review-fix, validation-fix, integration-fix, or cleanup-fix result is unsatisfactory, rerun it with corrected instructions. Do NOT take over and write the code yourself.
 - Always produce the mandatory execution summary when Phase 8 is reached.
 - No phase boundary is a checkpoint. Unless the skill explicitly says to stop, or execution is blocked by a missing user decision, missing permission, or a risky action that needs confirmation, continue automatically until the entire plan reaches its terminal state: Phase 8 summary printed, or an explicit abort/block condition reached.

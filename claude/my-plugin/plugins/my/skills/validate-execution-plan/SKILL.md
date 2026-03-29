@@ -37,6 +37,8 @@ You are the INTERACTIVE VALIDATION HELPER. You run in the same agent as the orch
 - Generate the validator prompt from the full plan, changed-file list, execution context, and prior validation notes.
 - Enforce the validator prompt contract and keep validator scope limited to plan-vs-implementation comparison.
 - Own Phase 6 boundaries, validator prompt content, validation temp-file naming, and validation cap enforcement.
+- Treat any orchestrator attempt to self-validate, run alternate validators, or substitute targeted checks for the helper-owned validation loop as a phase violation. Unless the helper can still run its full required validation path in the current invocation, return `status: blocked`.
+- Do not count any out-of-band validation work as Phase 6 progress.
 - Evaluate the validator report structure deterministically instead of relying on ad-hoc interpretation.
 - Extract GAPS and DEVIATIONS from failed validation reports.
 - Batch GAP items into focused validation-fix tasks so each delegated fix targets only a narrow, explicit issue.

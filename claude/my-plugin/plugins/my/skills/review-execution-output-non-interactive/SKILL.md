@@ -43,11 +43,15 @@ If any required input is missing, unreadable, or inconsistent with persisted sta
 
 1. Freeze the reviewer set before the first review attempt.
    - Select the reviewer set once for the full Phase 5 run.
+   - The default required reviewer set is exactly three focused reviewers: Claude, Codex, and Gemini.
    - Persist the frozen set in helper-owned review state.
    - Reuse the same reviewer set for every retry attempt in that Phase 5 run.
+   - Reducing the set below these three reviewers, replacing one with a generic fallback reviewer, or letting the orchestrator choose a smaller set is forbidden unless the helper returns `blocked` with a concrete tool-availability reason recorded in `notes`.
+   - If the orchestrator already ran any direct reviewer outside this helper-owned set, treat that as out-of-band noise: do not count it as Phase 5 progress, and require the full frozen reviewer set to run anyway.
 2. Own review prompt-file naming.
-   - Write one prompt file per reviewer using `.tmp-subtask-review-attempt-<attempt>-<reviewer>.md`.
-   - Reviewer examples include `.tmp-subtask-review-attempt-<attempt>-claude.md`, `.tmp-subtask-review-attempt-<attempt>-codex.md`, and `.tmp-subtask-review-attempt-<attempt>-gemini.md`.
+   - Write exactly one prompt file per reviewer in the frozen three-reviewer set using `.tmp-subtask-review-attempt-<attempt>-<reviewer>.md`.
+   - Reviewer files must include `.tmp-subtask-review-attempt-<attempt>-claude.md`, `.tmp-subtask-review-attempt-<attempt>-codex.md`, and `.tmp-subtask-review-attempt-<attempt>-gemini.md`.
+   - A review batch is invalid if any of these required reviewer prompt files is missing without a helper-reported `blocked` reason.
 3. Own review handoff emission.
    - Emit one transport line per prompt file using the handoff protocol.
    - Persist the exact expected handoffs for the current review batch before stopping.
@@ -104,15 +108,19 @@ Triage rules:
 3. Initialize or reread helper-owned review state.
 4. Freeze and persist the reviewer set if this is the first review attempt.
 5. Write reviewer prompt files for the current attempt.
-6. Emit review handoff lines, persist expected handoffs, and return `status: waiting_for_handoffs`.
+6. Emit review handoff lines for the full frozen three-reviewer set, persist expected handoffs, and return `status: waiting_for_handoffs`.
 7. On resume, reread state before parsing reviewer outputs.
 8. Require a complete reviewer batch before evaluation.
+   - A complete batch means exactly one output block for Claude, one for Codex, and one for Gemini, matching the persisted frozen reviewer set.
+   - Do not declare `clean`, `fix_required`, or any other terminal review result from a partial reviewer batch.
 9. Triage findings and persist merged review state.
 10. If no unresolved `FIX_REQUIRED` items remain, return `status: clean`.
-11. If unresolved `FIX_REQUIRED` items remain and the cap is not exhausted, write review-fix prompt files, emit handoffs, persist state, and return `status: fix_required` when the next orchestrator action is the delegated fix pass.
-12. After the delegated fix pass completes, require explicit regression verification before the next review attempt. Regression verification means rerunning the required review-relevant checks for the touched files or workflow and persisting the verification outcome in `state_updates` before re-entering this helper.
-13. If the helper cannot continue deterministically, return `status: blocked`.
-14. If the retry cap is exhausted and unresolved `FIX_REQUIRED` items remain, return `status: abort` with deterministic stop notes.
+   - A clean result is valid only after the full frozen three-reviewer batch completed and was triaged.
+11. If the helper detects orchestrator bypass or missing required reviewer outputs without a helper-owned blocked reason, return `status: blocked`.
+12. If unresolved `FIX_REQUIRED` items remain and the cap is not exhausted, write review-fix prompt files, emit handoffs, persist state, and return `status: fix_required` when the next orchestrator action is the delegated fix pass.
+13. After the delegated fix pass completes, require explicit regression verification before the next review attempt. Regression verification means rerunning the required review-relevant checks for the touched files or workflow and persisting the verification outcome in `state_updates` before re-entering this helper.
+14. If the helper cannot continue deterministically, return `status: blocked`.
+15. If the retry cap is exhausted and unresolved `FIX_REQUIRED` items remain, return `status: abort` with deterministic stop notes.
 
 ## Deterministic Result Contract
 

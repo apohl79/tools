@@ -37,6 +37,8 @@ You are the NON-INTERACTIVE VALIDATION HELPER. You run in the same agent as the 
 - Own validation prompt-file naming by writing `.tmp-subtask-plan-validation-attempt-<attempt>.md` for validator attempts.
 - Own validator handoff emission by printing `call sub-agent 1 (agent-type: claude): <absolute-path>` for the active validator prompt file.
 - Own resumed-output parsing for validator output by rereading persisted state first and requiring exactly one `# output sub-agent 1:` block for the active validator handoff.
+- Treat any orchestrator attempt to self-validate, run alternate validators, or substitute targeted checks for the helper-owned validation loop as a phase violation. Unless the helper can still run its full required validation path in the current invocation, return `status: blocked`.
+- Do not count any out-of-band validation work as Phase 6 progress.
 - Own GAP-to-fix prompt generation by converting each actionable GAP, and each required DEVIATION correction, into a narrow validation-fix prompt.
 - Own validation-fix batching by writing `.tmp-subtask-validation-fix-attempt-<attempt>-<N>.md` prompt files and emitting at most 5 validation-fix handoffs per batch.
 - Own persisted validation attempt state, including skill version, current phase, current attempt number, active validation batch, parsed validator outcome, unresolved items, completed fix batches, any pending re-review requirement, and final cap summary when relevant.
