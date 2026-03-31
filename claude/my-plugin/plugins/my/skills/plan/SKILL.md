@@ -91,26 +91,11 @@ Keep the interview proportional to the work:
 2. **Scope boundaries**: "What is explicitly OUT of scope?"
    - Options: suggest likely exclusions based on context, plus "Nothing specific" and "Other"
 
-3. **Affected area**: "Which part of the codebase does this touch?"
-   - Options: auto-detect from the repo structure if possible, plus "I'm not sure" and "Other"
-
-4. **Dependencies**: "Are there any dependencies, external services, or prerequisites?"
-   - Options: "None", "External API/service", "Another team's work", "Other"
-
-5. **Existing context**: "Is there any prior research, RFC, design doc, or Confluence page I should read?"
-   - If yes, read it via Atlassian MCP or web fetch. If access is unavailable or retrieval fails, ask the user to paste the relevant context or continue with available information.
-
 ## 2.2 Feature-specific Questions
 
 Only ask these if the work type is **Feature**:
 
-6. **User story**: "Who is this for and what do they need?"
-   - Suggest a user story format: "As a [role], I want [capability] so that [benefit]"
-
-7. **Acceptance criteria**: "What are the acceptance criteria? When is this 'done'?"
-   - Suggest criteria based on what you know. Let the user add/modify.
-
-8. **Non-functional requirements**: Ask this using **two** AskUserQuestion calls so each stays within the 4-option limit.
+3. **Non-functional requirements**: Ask this using **two** AskUserQuestion calls so each stays within the 4-option limit.
    - Question 1 options (multi-select): "Performance/latency targets", "Security constraints", "Error handling requirements", "Other / free-text"
    - Question 2 options (multi-select): "Backwards compatibility", "Observability/logging", "None of these", "Other / free-text"
    - If the user selects "Other / free-text" in either question, capture the custom NFRs in free text before moving on.
@@ -119,40 +104,40 @@ Only ask these if the work type is **Feature**:
    - Keep "Error handling requirements" as an explicit selectable NFR. Do NOT defer it to a hidden follow-up trigger.
    - For each selected NFR, including error handling when selected, ask a brief follow-up to get specifics.
 
-9. **Edge cases**: "Are there any edge cases or error scenarios to handle?"
+4. **Edge cases**: "Are there any edge cases or error scenarios to handle?"
 
 ## 2.3 Bug-fix-specific Questions
 
 Only ask these if the work type is **Bug fix**:
 
-6. **Reproduction**: "How do you reproduce this?"
-7. **Expected vs actual**: "What should happen vs what actually happens?"
-8. **Severity**: "How critical is this?"
+3. **Reproduction**: "How do you reproduce this?"
+4. **Expected vs actual**: "What should happen vs what actually happens?"
+5. **Severity**: "How critical is this?"
    - Options: "Blocks users/production", "Degraded experience", "Cosmetic/minor", "Other"
 
 ## 2.4 Investigation-specific Questions
 
 Only ask these if the work type is **Investigation**:
 
-6. **Hypothesis**: "What do you suspect or want to validate?"
-7. **Success criteria**: "What would a useful outcome look like?"
+3. **Hypothesis**: "What do you suspect or want to validate?"
+4. **Success criteria**: "What would a useful outcome look like?"
    - Options: "A recommendation with trade-offs", "A proof of concept", "A written analysis", "Other"
-8. **Time box**: "How much effort should this investigation take?"
+5. **Time box**: "How much effort should this investigation take?"
    - Options: "Quick (1-2 hours)", "Medium (half day)", "Deep dive (1+ day)", "Other"
 
 ## 2.5 Deployment / Infra-specific Questions
 
 Only ask these if the work type is **Deployment / Infra change**:
 
-6. **Target environment(s)**: Ask this using AskUserQuestion with at most 4 options.
+3. **Target environment(s)**: Ask this using AskUserQuestion with at most 4 options.
    - Question: "Which environments does this affect?"
    - Options: "Dev only", "Staging", "Production", "Other"
    - If the user answers "Other", allow free-text such as "All environments".
-7. **Rollback plan**: Ask this using AskUserQuestion with at most 4 options.
+4. **Rollback plan**: Ask this using AskUserQuestion with at most 4 options.
    - Question: "What's the rollback strategy if something goes wrong?"
    - Options: "Revert the config/commit", "Feature flag / toggle", "Manual rollback steps", "Other"
    - If the user answers "Other", allow free-text such as "No rollback needed".
-8. **Downtime**: Ask this using AskUserQuestion with at most 4 options.
+5. **Downtime**: Ask this using AskUserQuestion with at most 4 options.
    - Question: "Does this change require downtime or cause service disruption?"
    - Options: "No downtime", "Brief restart", "Rolling update", "Other"
    - If the user answers "Other", allow free-text such as "Maintenance window required".
@@ -161,14 +146,14 @@ Only ask these if the work type is **Deployment / Infra change**:
 
 Only ask these if the work type is **Research**:
 
-6. **Research question**: "What specific question should this research answer?"
-7. **Deliverable**: Ask this using AskUserQuestion with at most 4 options.
+3. **Research question**: "What specific question should this research answer?"
+4. **Deliverable**: Ask this using AskUserQuestion with at most 4 options.
    - Question: "What is the expected output?"
    - Options: "Written analysis / doc", "ADR (Architecture Decision Record)", "Proof of concept", "Other"
    - If the user answers "Other", allow free-text such as "Recommendation with trade-offs".
-8. **Time box**: "How much effort should this research take?"
+5. **Time box**: "How much effort should this research take?"
    - Options: "Quick (1-2 hours)", "Medium (half day)", "Deep dive (1+ day)", "Other"
-9. **Success criteria**: "How will you know the research is done?"
+6. **Success criteria**: "How will you know the research is done?"
 
 ## 2.7 Final check
 
