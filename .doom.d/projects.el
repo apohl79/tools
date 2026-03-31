@@ -505,10 +505,11 @@ Returns the buffer."
         (insert "  continue  ")
         (insert (propertize "  r" 'face 'font-lock-keyword-face))
         (insert "  resume\n")
+        (insert "\n")
         (insert (propertize "  Project:\n" 'face '(:weight bold)))
         (insert (propertize "    d" 'face 'font-lock-keyword-face))
         (insert "  open dir  ")
-        (insert (propertize "  g" 'face 'font-lock-keyword-face))
+        (insert (propertize "     g" 'face 'font-lock-keyword-face))
         (insert "  magit\n"))
       (unless (derived-mode-p 'projects-info-mode)
         (projects-info-mode))
@@ -682,14 +683,38 @@ Rotates up to `projects--backup-count' backups before writing."
   (let ((inhibit-message t))
     (message "Projects saved")))
 
+(defun projects--format-relative-age (mtime)
+  "Return a short relative age string for MTIME."
+  (let* ((seconds (max 0 (floor (float-time (time-subtract (current-time) mtime))))))
+    (cond
+     ((< seconds 60) (format "%ss ago" seconds))
+     ((< seconds 3600) (format "%sm ago" (/ seconds 60)))
+     ((< seconds 86400) (format "%sh ago" (/ seconds 3600)))
+     (t (format "%sd ago" (/ seconds 86400))))))
+
+(defun projects--backup-label (base-label path)
+  "Return chooser label for BASE-LABEL and PATH with timestamp details."
+  (let* ((attrs (file-attributes path))
+         (mtime (file-attribute-modification-time attrs))
+         (absolute (format-time-string "%Y-%m-%d %H:%M" mtime))
+         (relative (projects--format-relative-age mtime)))
+    (format "%s — %s — %s" base-label absolute relative)))
+
 (defun projects--backup-files ()
   "Return existing backup files as an alist of (label . path), newest first."
   (let (result)
-    (push (cons "current  (session.el)" projects--save-file) result)
+    (when (file-exists-p projects--save-file)
+      (push (cons (projects--backup-label "current  (session.el)" projects--save-file)
+                  projects--save-file)
+            result))
     (cl-loop for n from 1 to projects--backup-count
              for path = (format "%s.%d" projects--save-file n)
              when (file-exists-p path)
-             do (push (cons (format "backup %d (session.el.%d)" n n) path) result))
+             do (push (cons (projects--backup-label
+                             (format "backup %d (session.el.%d)" n n)
+                             path)
+                            path)
+                      result))
     (nreverse result)))
 
 (defun projects-restore (&optional file)
