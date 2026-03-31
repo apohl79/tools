@@ -1106,6 +1106,14 @@ re-decode them as mac-roman (macOS clipboard encoding)."
       (process-send-string proc text)
       (process-send-eof proc))))
 
+(defun my/vterm-reset-cursor-point-maybe ()
+  "Reset vterm cursor point unless copy mode is active.
+Ignore transient cursor reset errors triggered during window changes."
+  (when (and (eq major-mode 'vterm-mode)
+             (not (bound-and-true-p vterm-copy-mode)))
+    (ignore-errors
+      (vterm-reset-cursor-point))))
+
 (defun my/vterm-mouse-select-to-clipboard (event)
   "Select text in vterm and copy to clipboard."
   (interactive "e")

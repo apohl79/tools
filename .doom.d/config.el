@@ -790,10 +790,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   (define-key vterm-mode-map [double-mouse-1] #'my/vterm-double-click-to-clipboard))
 
 ;; Refresh vterm on window configuration changes
-(add-hook 'window-configuration-change-hook
-          (lambda ()
-            (when (eq major-mode 'vterm-mode)
-              (vterm-reset-cursor-point))))
+(add-hook 'window-configuration-change-hook #'my/vterm-reset-cursor-point-maybe)
 
 ;(advice-add 'mwheel-scroll :after #'my/scroll-mouse-handler)
 
