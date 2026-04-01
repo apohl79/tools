@@ -805,17 +805,18 @@ Used by header-line rendering where selected-window is temporarily rebound.")
   (let* ((project  (projects-current-window-project))
          (selected (eq (selected-window) projects--focused-window))
          ;; Use inactive bg everywhere; only the fg/weight differs for active window.
-         (bg       (face-background 'my/workspace-tab-inactive nil t))
-         (divider  (or (face-foreground 'vertical-border nil t) "gray50"))
-         (uline    `(:color ,divider :position descent))
-         ;; Text face: active window keeps full active face (blue bg, dark text);
-         ;; inactive uses inactive face. Both get the underline divider.
+         (bg      (face-background 'my/workspace-tab-inactive nil t))
+         ;; Use vertical-border fg, then bg, then fallback — same color as window dividers.
+         (divider (or (face-foreground 'vertical-border nil t)
+                      (face-background 'vertical-border nil t)
+                      "gray30"))
+         ;; Plain color string: most compatible underline form; renders reliably in header-line.
          (text-face (if selected
-                        `(:inherit my/workspace-tab-active :underline ,uline)
-                      `(:inherit my/workspace-tab-inactive :underline ,uline)))
+                        `(:inherit my/workspace-tab-active :underline ,divider)
+                      `(:inherit my/workspace-tab-inactive :underline ,divider)))
          (text   (propertize (format " %s " (or project "no project")) 'face text-face))
-         ;; Filler extends the bg + underline (horizontal divider) across the full header width.
-         (filler (propertize " " 'face `(:background ,bg :underline ,uline)
+         ;; Filler: inactive bg + same underline, stretches to right edge.
+         (filler (propertize " " 'face `(:background ,bg :underline ,divider)
                              'display '(space :align-to right))))
     (concat text filler)))
 
