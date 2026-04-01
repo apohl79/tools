@@ -337,7 +337,10 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 
 ;; Override C-x b to use project-aware buffer switching
 (map! "C-x b"       #'projects-switch-buffer
-      "M-TAB"       #'projects-switch)
+      "M-TAB"       #'projects-switch-dispatch
+      "C-c w 1"     #'projects-enter-single-project-view
+      "C-c w m"     #'projects-enter-multi-project-view
+      "C-c w l"     #'projects-change-multi-project-layout)
 
 (map! :map vertico-map
       "M-TAB" #'vertico-next)
@@ -778,8 +781,8 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   ;; S-return arrives as M-RET - send CSI u encoding for newline in Claude
   (define-key vterm-mode-map (kbd "M-RET") (lambda () (interactive) (vterm-send-string "\e[13;2u")))
   ;; M-TAB = C-M-i: override vterm--self-insert-meta so OPT+TAB switches projects
-  (define-key vterm-mode-map (kbd "M-TAB") #'projects-switch)
-  (define-key vterm-mode-map (kbd "C-M-i") #'projects-switch)
+  (define-key vterm-mode-map (kbd "M-TAB") #'projects-switch-dispatch)
+  (define-key vterm-mode-map (kbd "C-M-i") #'projects-switch-dispatch)
   ;; Enable clickable URLs in vterm buffers
   (add-hook 'vterm-mode-hook #'goto-address-mode)
 

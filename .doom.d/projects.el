@@ -6,6 +6,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'subr-x)
 
 ;;; ---------------------------------------------------------------------------
 ;;; Constants
@@ -63,6 +64,42 @@ Also updates the global `projects--current' unless FRAME-ONLY is non-nil."
   (set-frame-parameter nil 'projects-current name)
   (unless frame-only
     (setq projects--current name)))
+
+(defun projects-view-mode (&optional frame)
+  (or (frame-parameter (or frame (selected-frame)) 'projects-view-mode)
+      'single-project))
+
+(defun projects-multi-project-view-p (&optional frame)
+  (eq (projects-view-mode frame) 'multi-project))
+
+(defun projects-current-window-project (&optional window)
+  (let ((win (or window (selected-window))))
+    (or (window-parameter win 'projects-project)
+        (projects-current (window-frame win)))))
+
+(defun projects--set-window-project (window project)
+  (set-window-parameter window 'projects-project project))
+
+(defun projects--set-view-mode (mode &optional frame)
+  (set-frame-parameter (or frame (selected-frame)) 'projects-view-mode mode))
+
+(defun projects--set-multi-layout (layout &optional frame)
+  (set-frame-parameter (or frame (selected-frame)) 'projects-multi-layout layout))
+
+(defun projects-enter-single-project-view ()
+  (interactive)
+  (let ((project (projects-current-window-project)))
+    (projects--set-view-mode 'single-project)
+    (set-frame-parameter nil 'projects-multi-layout nil)
+    ;; Clear per-buffer header-line-format set during multi-project mode
+    (dolist (buf (buffer-list))
+      (with-current-buffer buf
+        (when (equal header-line-format '(:eval (projects--window-header-line)))
+          (kill-local-variable 'header-line-format))))
+    (force-mode-line-update t)
+    (projects--update-frame-tab-bar)
+    (when project
+      (projects-switch project))))
 
 (defun projects-get (name)
   "Return the plist for project NAME, or nil."
@@ -302,15 +339,127 @@ name registered in `projects--table'."
   (projects--tab-bar-refresh)
   (run-hooks 'projects-switch-hook))
 
+(defun projects--valid-multi-layout-p (layout)
+  (memq layout '(2 4 6)))
+
+(defun projects--read-multi-layout (&optional prompt)
+  (let* ((choice (completing-read (or prompt "Multi-project layout: ") '("2" "4" "6") nil t nil nil "2")))
+    (string-to-number choice)))
+
+(defun projects--refresh-window-project-headers ()
+  (dolist (win (window-list nil 0))
+    (with-current-buffer (window-buffer win)
+      (setq header-line-format
+            (when (projects-multi-project-view-p (window-frame win))
+              '(:eval (projects--window-header-line))))))
+  (force-mode-line-update t))
+
+(defun projects--window-project-seed-list ()
+  (let* ((current (projects-current))
+         (visible (projects-names-visible))
+         (ordered (if (and current (member current visible))
+                      (cons current (cl-remove current visible :test #'equal))
+                    visible)))
+    (or ordered (and current (list current)))))
+
+(defun projects--fill-project-list (projects count)
+  (when (and projects (> (length projects) 0))
+    (let ((seed (copy-sequence projects))
+          (result nil)
+          (index 0))
+      (dotimes (_ count)
+        (let ((project (nth (mod index (length seed)) seed)))
+          (push project result)
+          (setq index (1+ index))))
+      (nreverse result))))
+
+(defun projects--split-for-layout (layout)
+  (delete-other-windows)
+  (pcase layout
+    (2 (split-window-right))
+    (4 (split-window-right)
+       (other-window 1)
+       (split-window-below)
+       (other-window -1)
+       (split-window-below))
+    (6 (split-window-right)
+       (other-window 1)
+       (split-window-below)
+       (split-window-below)
+       (other-window -1)
+       (split-window-below)
+       (split-window-below))))
+
+(defun projects--window-buffer-for-project (project)
+  (or (cl-find-if (lambda (buffer)
+                    (equal (buffer-local-value 'projects--buffer-project buffer) project))
+                  (buffer-list))
+      (projects--create-info-buffer project)))
+
+(defun projects--apply-multi-project-layout (layout &optional projects)
+  "Split the frame into LAYOUT windows and assign projects to each.
+PROJECTS is an optional list of project names to assign; defaults to visible projects."
+  (let* ((wins nil)
+         (seed (or projects (projects--window-project-seed-list)))
+         (assignments (projects--fill-project-list seed layout)))
+    (when assignments
+      (projects--split-for-layout layout)
+      (setq wins (window-list nil 0))
+      (cl-mapc (lambda (win project)
+                 (projects--set-window-project win project)
+                 (with-selected-window win
+                   (switch-to-buffer (projects--window-buffer-for-project project))))
+               wins assignments)
+      (select-window (car wins)))))
+
+(defun projects-enter-multi-project-view (layout)
+  (interactive (list (projects--read-multi-layout)))
+  (unless (projects--valid-multi-layout-p layout)
+    (user-error "Unsupported layout: %s" layout))
+  (projects--set-view-mode 'multi-project)
+  (projects--set-multi-layout layout)
+  (projects--apply-multi-project-layout layout)
+  (projects--refresh-window-project-headers)
+  (projects--update-frame-tab-bar)
+  (projects--tab-bar-refresh))
+
+(defun projects-switch-window-project (name)
+  (interactive
+   (list (completing-read "Switch window project: " (projects-names-visible) nil t)))
+  (unless (gethash name projects--table)
+    (user-error "Project '%s' does not exist" name))
+  (projects--set-window-project (selected-window) name)
+  (switch-to-buffer (projects--window-buffer-for-project name))
+  (projects--refresh-window-project-headers))
+
+(defun projects-switch-dispatch ()
+  (interactive)
+  (if (projects-multi-project-view-p)
+      (call-interactively #'projects-switch-window-project)
+    (call-interactively #'projects-switch)))
+
+(defun projects-change-multi-project-layout (layout)
+  (interactive (list (projects--read-multi-layout "Change multi-project layout: ")))
+  (unless (projects-multi-project-view-p)
+    (user-error "Not in multi-project view"))
+  (projects--set-multi-layout layout)
+  (projects--apply-multi-project-layout
+   layout
+   (mapcar (lambda (win) (window-parameter win 'projects-project))
+           (window-list nil 0)))
+  (projects--refresh-window-project-headers))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Buffer Management
 ;;; ---------------------------------------------------------------------------
 
 (defun projects-register-buffer (buf &optional project-name)
-  "Register BUF as belonging to PROJECT-NAME (defaults to current project).
-Does nothing if BUF is a special/global buffer or if BUF is dead."
+  "Register BUF as belonging to PROJECT-NAME or the active project scope."
   (when (buffer-live-p buf)
-    (let ((proj (or project-name (projects-current))))
+    (let ((proj (or project-name
+                    (if (projects-multi-project-view-p)
+                        (projects-current-window-project)
+                      (projects-current)))))
       (when (and proj (not (projects-special-buffer-p buf)))
         (with-current-buffer buf
           (setq-local projects--buffer-project proj))
@@ -364,56 +513,58 @@ like any normal frame."
           (message "[projects] buffer-killed: %s from project %s" (buffer-name buf) proj)
           (plist-put entry :buffers (delq buf bufs))
           (puthash proj entry projects--table)
-          ;; After the kill, ensure all windows stay within the current project
-          (when (equal proj (projects-current))
+          ;; After the kill, ensure all windows stay within their project
+          (when (or (equal proj (projects-current))
+                    (projects-multi-project-view-p))
             (run-with-timer 0 nil #'projects--fix-windows-after-kill)))))))
+
+(defun projects--window-target-project (window)
+  (if (projects-multi-project-view-p (window-frame window))
+      (projects-current-window-project window)
+    (projects-current (window-frame window))))
 
 (defun projects--fix-windows-after-kill ()
   "Ensure no window shows a non-project buffer after a project buffer is killed.
-Any window showing a buffer that does not belong to the current project
-(including *scratch*, *Messages*, etc.) is redirected to another project
-buffer or the project info buffer. Never shows scratch after a kill."
-  (let* ((proj (projects-current))
-         (info-buf-name (when proj (projects--info-buffer-name proj))))
-    (when proj
-      (dolist (win (window-list nil 0))
-        (let* ((buf (window-buffer win))
-               (bname (buffer-name buf))
-               (buf-proj (buffer-local-value 'projects--buffer-project buf)))
-          ;; Replace if window shows a buffer not belonging to this project
-          (unless (or (string= bname info-buf-name)
-                      (equal buf-proj proj))
-            (let ((next (cl-find-if
-                         (lambda (b)
-                           (and (buffer-live-p b)
-                                (not (eq b buf))
-                                (equal (buffer-local-value 'projects--buffer-project b)
-                                       proj)))
-                         (buffer-list))))
-              (with-selected-window win
-                (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
+In multi-project mode each window's assigned project is used; in single-project
+mode the frame-wide current project is used."
+  (dolist (win (window-list nil 0))
+    (let* ((proj (projects--window-target-project win))
+           (buf (window-buffer win))
+           (bname (buffer-name buf))
+           (info-buf-name (when proj (projects--info-buffer-name proj)))
+           (proj-bufs (when proj (plist-get (gethash proj projects--table) :buffers))))
+      (unless (or (null proj)
+                  (string= bname info-buf-name)
+                  (projects-special-buffer-p buf)
+                  (memq buf proj-bufs))
+        (let ((next (cl-find-if
+                     (lambda (b)
+                       (and (buffer-live-p b)
+                            (not (eq b buf))
+                            (memq b proj-bufs)))
+                     (buffer-list))))
+          (with-selected-window win
+            (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))
 
 (defun projects-switch-buffer ()
-  "Switch to a buffer belonging to the current project.
-Project buffers are listed first; global special buffers appear at the end."
+  "Switch to a buffer belonging to the active project scope."
   (interactive)
-  (let* ((proj (projects-current))
+  (let* ((multi (projects-multi-project-view-p))
+         (proj (if multi
+                   (projects-current-window-project)
+                 (projects-current)))
          (all (buffer-list))
          (project-bufs (when proj
                          (cl-remove-if-not
-                          (lambda (b)
-                            (equal (buffer-local-value 'projects--buffer-project b) proj))
-                          all)))
-         (special-bufs (cl-remove-if-not #'projects-special-buffer-p all))
+                          #'buffer-live-p
+                          (plist-get (gethash proj projects--table) :buffers))))
+         (special-bufs (unless multi
+                         (cl-remove-if-not #'projects-special-buffer-p all)))
          (ordered (append project-bufs special-bufs))
          (names (mapcar #'buffer-name ordered)))
     (switch-to-buffer
      (completing-read (format "Buffer [%s]: " (or proj "global"))
-                      (lambda (str pred action)
-                        (if (eq action 'metadata)
-                            '(metadata (display-sort-function . identity))
-                          (complete-with-action action names str pred)))
-                      nil t))))
+                      names nil t))))
 
 (defun projects-move-buffer (buffer target-project)
   "Move BUFFER to TARGET-PROJECT."
@@ -592,6 +743,12 @@ Buffers not under any project directory fall into 'Other'."
 ;;; Tab-bar Integration
 ;;; ---------------------------------------------------------------------------
 
+(defun projects--window-header-line ()
+  (let* ((project (projects-current-window-project))
+         (selected (eq (selected-window) (get-buffer-window (current-buffer) t)))
+         (face (if selected 'my/workspace-tab-active 'my/workspace-tab-inactive)))
+    (propertize (format " %s " (or project "no project")) 'face face)))
+
 (defun projects--tab-bar-format ()
   "Tab-bar format function: renders all projects MRU-sorted with active one highlighted.
 Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functions.el."
@@ -628,10 +785,11 @@ Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functio
     (force-mode-line-update t)))
 
 (defun projects--update-frame-tab-bar (&optional frame)
-  "Show or hide the tab-bar for FRAME based on whether its project is hidden."
+  "Show or hide the tab-bar for FRAME based on whether its project is hidden or in multi-project view."
   (let* ((f (or frame (selected-frame)))
          (proj (projects-current f))
-         (hide (and proj (projects-hidden-p proj))))
+         (hide (or (projects-multi-project-view-p f)
+                   (and proj (projects-hidden-p proj)))))
     (set-frame-parameter f 'tab-bar-lines (if hide 0 1))))
 
 ;;; ---------------------------------------------------------------------------
@@ -678,7 +836,12 @@ Rotates up to `projects--backup-count' backups before writing."
             (print-length nil))
         (pp (list :version 1
                   :current projects--current
-                  :projects data)
+                  :projects data
+                  :view-mode (projects-view-mode)
+                  :multi-layout (frame-parameter nil 'projects-multi-layout)
+                  :window-projects (mapcar (lambda (win)
+                                             (window-parameter win 'projects-project))
+                                           (window-list nil 0)))
             (current-buffer)))))
   (let ((inhibit-message t))
     (message "Projects saved")))
@@ -817,6 +980,20 @@ With prefix arg \\[universal-argument], prompt to choose from available backups.
             (setq projects--current restored)
             (set-frame-parameter nil 'projects-current restored))
 
+          ;; Restore view mode
+          (let* ((saved-view-mode (plist-get data :view-mode))
+                 (saved-multi-layout (plist-get data :multi-layout))
+                 (saved-window-projects (plist-get data :window-projects)))
+            (if (eq saved-view-mode 'multi-project)
+                (progn
+                  (projects--set-view-mode 'multi-project)
+                  (projects--set-multi-layout saved-multi-layout)
+                  (when saved-window-projects
+                    (projects--apply-multi-project-layout saved-multi-layout saved-window-projects)))
+              (projects--set-view-mode 'single-project))
+            (projects--refresh-window-project-headers)
+            (projects--update-frame-tab-bar))
+
           ;; Clean up and show dashboard (deferred so progress renders)
           (run-with-timer 0.2 nil
                           (lambda ()
@@ -917,6 +1094,7 @@ Runs on `window-configuration-change-hook' so opening a special buffer
 alongside the info buffer collapses to fullscreen.
 Deferred via idle timer so window-size-change-functions fire naturally,
 allowing vterm/eat to resize correctly."
+  (unless (projects-multi-project-view-p)
   (when (> (projects--ordinary-window-count) 1)
     (let* ((frame (selected-frame))
            (info-win
@@ -981,7 +1159,7 @@ allowing vterm/eat to resize correctly."
                              ((and (eq major-mode 'eat-mode)
                                    (fboundp 'eat-reset))
                               (eat-reset)))))))))))))
-         info-win)))))
+         info-win))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Provide
