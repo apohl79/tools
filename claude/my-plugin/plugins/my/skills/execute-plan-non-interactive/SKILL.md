@@ -29,16 +29,66 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
 
 # PHASE 2: TASK DECOMPOSITION
 
-1. Produce numbered sub-tasks and wave groupings using the same dependency rules as the interactive orchestrator.
-2. Record wave metadata in persisted execution state before Phase 3 begins.
-3. Record, per sub-task, the files or dependency context later waves must receive.
-4. Keep decomposition deterministic so a resumed run does not renumber tasks or waves unexpectedly.
-5. If Phase 2 completes without emitting a required handoff batch or hitting another deterministic stop condition, continue directly into Phase 3 in the SAME run. Task decomposition is not a checkpoint.
+1. Read the chosen plan file and use its visible structure.
+2. If the plan contains explicit implementation task sections like `## Task 1: ...`, `## Task 2: ...`, treat those task sections as the authoritative decomposition source.
+3. If the plan body is mostly organized as numbered task sections with nested steps, preserve that structure during decomposition.
+4. If the plan does not contain explicit task sections, derive the decomposition from the remaining ordered instructions in the file.
+5. For plans with explicit task sections, do NOT invent a replacement top-level decomposition. Instead, preserve the existing task order and break each plan task into executable sub-tasks and waves using only the steps, files, dependencies, and acceptance criteria already present in that task section.
+6. For plans without explicit task sections, derive the discrete ordered sub-tasks from the plan content as usual.
+7. When the plan already includes sequential test/implement/verify/commit steps, keep those steps grouped under the same parent task and only split further when needed to satisfy the 3-5 minute granularity rule.
+8. When assigning waves for plans with numbered task sections, assume later numbered plan tasks depend on earlier numbered plan tasks unless the file paths and task text make independence explicit.
+9. Produce numbered sub-tasks and wave groupings using the same dependency rules as the interactive orchestrator.
+10. Record wave metadata in persisted execution state before Phase 3 begins.
+11. Record, per sub-task, the files or dependency context later waves must receive.
+12. Keep decomposition deterministic so a resumed run does not renumber tasks or waves unexpectedly.
+13. If Phase 2 completes without emitting a required handoff batch or hitting another deterministic stop condition, continue directly into Phase 3 in the SAME run. Task decomposition is not a checkpoint.
+
+For plans with explicit numbered task sections:
+
+- default to one execution wave per numbered plan task unless you can verify that two plan tasks are independent by both dependency text and touched-file sets;
+- keep all sub-tasks derived from the same numbered plan task in the same wave when that plan task is written as a TDD sequence or otherwise assumes a shared intermediate state;
+- do NOT parallelize two numbered plan tasks that modify the same file, even if they appear adjacent and small;
+- when a later plan task says "append", "replace", "update", "expand", "then", or otherwise references outputs from an earlier task, treat it as dependent on that earlier task.
+
+For each sub-task, the emitted prompt file must include:
+
+- **Granularity** — a sub-task should not take more than 3-5 minutes to execute.
+- **All implementation details for this task only** — copy every relevant detail, code snippet, file path, interface definition, type, constant, config value, and acceptance criterion from the plan that pertains to this task. Do NOT summarize or abbreviate.
+- **Dependency context** — for tasks that depend on earlier tasks, include a summary of what earlier tasks produced, including relevant type signatures, file paths, export names, and interfaces.
+- **What is out of scope** — explicitly state that the sub-agent must NOT work on any other task and must NOT explore the full plan document.
+- **Testing expectations** — state whether the sub-agent should write tests for this task. If the task is tightly coupled and only testable in integration, mark it as `tests deferred to integration test task`.
+- **Code standard recipes to load** — list the exact skill names the sub-agent must load before writing code.
+
+Within each wave, tasks that touch completely different files and have no shared dependencies can run in parallel, up to 5 concurrent handoffs. Tasks within the same wave that modify the same files or share dependencies MUST run sequentially within that wave.
+
+Persist the resulting wave plan and sub-task metadata exactly so resumed runs do not reinterpret the decomposition.
+
+If a non-interactive prompt file was derived from a plan task section, treat that prompt file as the sole source of truth for that task's copied code snippets, commands, and acceptance criteria.
+
+# PROMPT FILE CONTENT RULES
+
+Every emitted implementation prompt file MUST begin with a standard agent preamble before any task content. The preamble must:
+
+1. State the agent's role explicitly:
+   > You are a focused implementation agent. Implement exactly what this prompt describes. Nothing more, nothing less. Do NOT read or reference any other plan document, roadmap, or task files.
+
+2. Instruct the agent to load code standard recipes using the Skill tool before writing any code. Name each skill explicitly using its exact skill name. Example:
+   > Load and apply these skills using the Skill tool before writing any code: `rust-services:production-code-recipe`, `rust-services:test-code-recipe`
+
+3. State the working directory the agent must use.
+
+4. At the end of the prompt file, instruct the agent to report back:
+   > After completing the task, report: all files you created or modified, any exported types or function signatures later tasks may depend on, and the result of any verification commands you ran.
+
+The preamble MUST be present even when the task body already mentions which skills to load. The preamble makes intent unambiguous for an agent that has no prior context.
+
+For non-implementation prompt files (review, validation, integration), include the role and working directory lines but omit the code-standards recipe loading instruction unless the helper skill that generates those files specifies it.
 
 # PHASE 3: WAVE-BASED EXECUTION
 
 1. For each implementation batch, write iteration-safe prompt files using the transport naming contract from `execute-plan-non-interactive/HANDOFF_PROTOCOL.md`.
 2. For implementation batches, use `.tmp-subtask-wave-<wave>-batch-<batch>-<N>.md` in the execution root.
+2a. Each emitted implementation prompt file MUST include the standard agent preamble defined above before any task content.
 3. Before stopping, persist the exact expected handoffs for the current batch in `.tmp-execute-plan-state.json`.
 4. Print one `call sub-agent <N> (agent-type: <type>): <absolute-path>` line per emitted prompt file.
 5. Stop immediately after batch emission. Do NOT evaluate a batch until resumed outputs for that batch are provided.

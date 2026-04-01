@@ -44,7 +44,7 @@ You are the INTERACTIVE ORCHESTRATOR. You coordinate execution of a development 
      - Otherwise read the `**JIRA:**` field from the plan header.
      - If the plan's JIRA field is `none` or absent, use `VC-0`.
 5. **Handle worktree setup unless `--no-worktree` is in effect:**
-   - Unless `--no-worktree` is in effect, the expected worktree path is `.my/worktrees/[repo_name]-[short_title_without_spaces]-[jira_ticket]` under the repository root.
+   - Unless `--no-worktree` is in effect, the expected worktree path is `../.my/worktrees/[repo_name]-[short_title_without_spaces]-[jira_ticket]` under the repository root.
    - If the expected worktree already exists, reuse it. Do NOT recreate it.
    - Before any fetch or rebase in a reused worktree, run `git status --short` in that worktree. If it shows tracked or untracked changes, stop immediately and print: `Existing worktree is dirty. Clean or stash the worktree at <worktree-path> before re-running /my:execute-plan.`
    - If later phases require a normal push/PR path and the reused worktree branch already exists on origin before sync, AND the planned sync would leave the local branch needing a rewritten-history push after rebase, stop before execution and print: `Existing worktree branch already exists on origin and rebasing it onto the latest default branch would require a rewritten-history push, which /my:execute-plan will not do automatically. Choose a fresh worktree branch or handle the branch manually, then re-run /my:execute-plan.`
@@ -78,6 +78,16 @@ State a setup summary, then continue into Phase 2 in the SAME turn. Do not stop 
 
 # PHASE 2: TASK DECOMPOSITION
 
+Read the chosen plan file and use its visible structure.
+
+- If the plan contains explicit implementation task sections like `## Task 1: ...`, `## Task 2: ...`, treat those task sections as the authoritative decomposition source.
+- If the plan body is mostly organized as numbered task sections with nested steps, preserve that structure during decomposition.
+- If the plan does not contain explicit task sections, derive the decomposition from the remaining ordered instructions in the file.
+- For plans with explicit task sections, do NOT invent a replacement top-level decomposition. Instead, preserve the existing task order and break each plan task into executable sub-tasks and waves using only the steps, files, dependencies, and acceptance criteria already present in that task section.
+- For plans without explicit task sections, derive the discrete ordered sub-tasks from the plan content as usual.
+- When the plan already includes sequential test/implement/verify/commit steps, keep those steps grouped under the same parent task and only split further when needed to satisfy the 3-5 minute granularity rule.
+- When assigning waves for plans with numbered task sections, assume later numbered plan tasks depend on earlier numbered plan tasks unless the file paths and task text make independence explicit.
+
 Break the plan into discrete, ordered sub-tasks. For each sub-task, produce a detailed sub-task description that includes:
 
 - **Granularity** — a sub-task should not take more than 3-5 minutes to execute.
@@ -92,6 +102,13 @@ After producing the sub-task list, organize tasks into execution waves based on 
 - **Wave 1:** all sub-tasks with no dependencies.
 - **Wave 2:** sub-tasks that depend only on Wave 1 tasks.
 - **Wave N:** sub-tasks that depend only on tasks from earlier waves.
+
+For plans with explicit numbered task sections:
+
+- default to one execution wave per numbered plan task unless you can verify that two plan tasks are independent by both dependency text and touched-file sets;
+- keep all sub-tasks derived from the same numbered plan task in the same wave when that plan task is written as a TDD sequence or otherwise assumes a shared intermediate state;
+- do NOT parallelize two numbered plan tasks that modify the same file, even if they appear adjacent and small;
+- when a later plan task says "append", "replace", "update", "expand", "then", or otherwise references outputs from an earlier task, treat it as dependent on that earlier task.
 
 Within each wave, tasks that touch completely different files and have no shared dependencies can run in parallel, up to 5 concurrent sub-agents. Tasks within the same wave that modify the same files or share dependencies MUST run sequentially within that wave.
 
@@ -119,12 +136,17 @@ Execute sub-tasks wave by wave. Within each wave, run independent sub-tasks in p
 
 **For each sub-task in the current wave:**
 
-1. **Create a temporary sub-task file** at `.tmp-subtask-<N>.md` in the execution root containing only the Phase 2 sub-task description.
+1. **Create a temporary sub-task file** at `.tmp-subtask-<N>.md` in the execution root. The file MUST begin with a standard agent preamble before any task content:
+   - State the agent's role: "You are a focused implementation agent. Implement exactly what this prompt describes. Nothing more, nothing less. Do NOT read or reference any other plan document, roadmap, or task files."
+   - Name each code standard recipe to load using the Skill tool before writing any code, using the exact skill name (e.g. `rust-services:production-code-recipe`). Include this even when the task body mentions the same skills.
+   - State the working directory (execution root).
+   - End the file with: "After completing the task, report: all files you created or modified, any exported types or function signatures later tasks may depend on, and the result of any verification commands you ran."
 2. **Launch an implementation sub-agent** using the Agent tool with a general-purpose agent and the following prompt contract:
    - Read only the assigned sub-task file.
    - Implement exactly what it describes. Nothing more, nothing less.
    - Do NOT read or reference any full plan document, roadmap, or other task files.
-   - Load the listed code standard recipes before writing code.
+   - If the sub-task was derived from a plan task section, treat the sub-task file as the sole source of truth for that task's copied code snippets, commands, and acceptance criteria.
+   - Load the listed code standard recipes using the Skill tool before writing any code.
    - Write tests only when the sub-task says to write them.
    - Report files created or modified and any exports/interfaces later tasks might need.
    - Work in the execution root.
