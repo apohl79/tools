@@ -86,11 +86,20 @@ Also updates the global `projects--current' unless FRAME-ONLY is non-nil."
 (defun projects--set-multi-layout (layout &optional frame)
   (set-frame-parameter (or frame (selected-frame)) 'projects-multi-layout layout))
 
+(defun projects--clear-window-project-params ()
+  "Clear projects-project window parameter from all windows in the selected frame.
+Must be called when leaving multi-project mode to prevent stale parameters
+from persisting into single-project mode."
+  (dolist (win (window-list nil 0))
+    (set-window-parameter win 'projects-project nil)))
+
 (defun projects-enter-single-project-view ()
   (interactive)
   (let ((project (projects-current-window-project)))
     (projects--set-view-mode 'single-project)
     (set-frame-parameter nil 'projects-multi-layout nil)
+    ;; Clear window project assignments — these are multi-project-mode-only
+    (projects--clear-window-project-params)
     ;; Clear per-buffer header-line-format set during multi-project mode
     (dolist (buf (buffer-list))
       (with-current-buffer buf
@@ -356,7 +365,12 @@ name registered in `projects--table'."
     (let* ((entry  (gethash name projects--table))
            (config (and entry (plist-get entry :window-config))))
       (if config
-          (set-window-configuration config)
+          (progn
+            (set-window-configuration config)
+            ;; A restored config may contain stale projects-project window params
+            ;; from a previous multi-project session. Clear them — they are only
+            ;; meaningful in multi-project mode.
+            (projects--clear-window-project-params))
         (projects--ensure-visible-buffer)))
     (projects--tab-bar-refresh)
     (run-hooks 'projects-switch-hook)))
