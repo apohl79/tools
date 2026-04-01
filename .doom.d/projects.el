@@ -6,6 +6,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'subr-x)
 
 ;;; ---------------------------------------------------------------------------
 ;;; Constants
@@ -63,6 +64,35 @@ Also updates the global `projects--current' unless FRAME-ONLY is non-nil."
   (set-frame-parameter nil 'projects-current name)
   (unless frame-only
     (setq projects--current name)))
+
+(defun projects-view-mode (&optional frame)
+  (or (frame-parameter (or frame (selected-frame)) 'projects-view-mode)
+      'single-project))
+
+(defun projects-multi-project-view-p (&optional frame)
+  (eq (projects-view-mode frame) 'multi-project))
+
+(defun projects-current-window-project (&optional window)
+  (let ((win (or window (selected-window))))
+    (or (window-parameter win 'projects-project)
+        (projects-current (window-frame win)))))
+
+(defun projects--set-window-project (window project)
+  (set-window-parameter window 'projects-project project))
+
+(defun projects--set-view-mode (mode &optional frame)
+  (set-frame-parameter (or frame (selected-frame)) 'projects-view-mode mode))
+
+(defun projects--set-multi-layout (layout &optional frame)
+  (set-frame-parameter (or frame (selected-frame)) 'projects-multi-layout layout))
+
+(defun projects-enter-single-project-view ()
+  (interactive)
+  (let ((project (projects-current-window-project)))
+    (projects--set-view-mode 'single-project)
+    (set-frame-parameter nil 'projects-multi-layout nil)
+    (when project
+      (projects-switch project))))
 
 (defun projects-get (name)
   "Return the plist for project NAME, or nil."
@@ -301,6 +331,61 @@ name registered in `projects--table'."
       (projects--ensure-visible-buffer)))
   (projects--tab-bar-refresh)
   (run-hooks 'projects-switch-hook))
+
+(defun projects--valid-multi-layout-p (layout)
+  (memq layout '(2 4 6)))
+
+(defun projects--read-multi-layout (&optional prompt)
+  (let* ((choice (completing-read (or prompt "Multi-project layout: ") '("2" "4" "6") nil t nil nil "2")))
+    (string-to-number choice)))
+
+(defun projects--refresh-window-project-headers ()
+  "Refresh header-line in each window to reflect its assigned project. (Stub — full impl in later task.)"
+  nil)
+
+(defun projects--apply-multi-project-layout (layout &optional projects)
+  "Split the frame into LAYOUT windows and assign projects to each.
+PROJECTS is an optional list of project names; defaults to visible projects seed."
+  (let* ((current (projects-current))
+         (seed (or projects
+                   (let* ((visible (projects-names-visible))
+                          (ordered (if (and current (member current visible))
+                                       (cons current (cl-remove current visible :test #'equal))
+                                     visible)))
+                     (or ordered (and current (list current))))))
+         (wins nil))
+    (delete-other-windows)
+    (pcase layout
+      (2 (split-window-right))
+      (4 (split-window-right)
+         (other-window 1)
+         (split-window-below)
+         (other-window -1)
+         (split-window-below))
+      (6 (split-window-right)
+         (other-window 1)
+         (split-window-below)
+         (split-window-below)
+         (other-window -1)
+         (split-window-below)
+         (split-window-below)))
+    (setq wins (window-list nil 0))
+    (let ((index 0))
+      (dolist (win wins)
+        (let ((project (nth (mod index (max 1 (length seed))) seed)))
+          (projects--set-window-project win project)
+          (setq index (1+ index)))))
+    (select-window (car wins))))
+
+(defun projects-enter-multi-project-view (layout)
+  (interactive (list (projects--read-multi-layout)))
+  (unless (projects--valid-multi-layout-p layout)
+    (user-error "Unsupported layout: %s" layout))
+  (projects--set-view-mode 'multi-project)
+  (projects--set-multi-layout layout)
+  (projects--apply-multi-project-layout layout)
+  (projects--refresh-window-project-headers)
+  (projects--tab-bar-refresh))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Buffer Management
