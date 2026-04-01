@@ -140,6 +140,14 @@ Also updates the global `projects--current' unless FRAME-ONLY is non-nil."
     (cl-some (lambda (pattern) (string-match-p pattern name))
              projects--special-buffer-patterns)))
 
+(defun projects--pinned-buffer-p (buf)
+  "Return t if BUF is an interactive special buffer that must not be displaced.
+Unlike `projects-special-buffer-p', this excludes fallback buffers like *scratch*
+and *Messages* that should be replaced by project content after a buffer kill."
+  (let ((name (buffer-name buf)))
+    (cl-some (lambda (pattern) (string-match-p pattern name))
+             '("^\\*vterm" "^\\*eat" "^magit" "^COMMIT_EDITMSG$"))))
+
 ;;; ---------------------------------------------------------------------------
 ;;; CRUD
 ;;; ---------------------------------------------------------------------------
@@ -535,7 +543,7 @@ mode the frame-wide current project is used."
            (proj-bufs (when proj (plist-get (gethash proj projects--table) :buffers))))
       (unless (or (null proj)
                   (string= bname info-buf-name)
-                  (projects-special-buffer-p buf)
+                  (projects--pinned-buffer-p buf)
                   (memq buf proj-bufs))
         (let ((next (cl-find-if
                      (lambda (b)

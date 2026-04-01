@@ -326,7 +326,10 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   :desc "Restore from backup…"       "l" (lambda () (interactive) (let ((current-prefix-arg t)) (call-interactively #'projects-restore)))
   :desc "Save projects state"        "a" #'projects-save
   :desc "Project info buffer"        "i" #'projects-show-info
-  :desc "Clone from git"             "g" #'projects-clone-from-git)
+  :desc "Clone from git"             "g" #'projects-clone-from-git
+  :desc "Single-project view"        "1" #'projects-enter-single-project-view
+  :desc "Multi-project view"         "2" #'projects-enter-multi-project-view
+  :desc "Change multi-project layout" "L" #'projects-change-multi-project-layout)
  )
 
 ;; Remove leftover Doom workspace/winner bindings from the w prefix
@@ -337,10 +340,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 
 ;; Override C-x b to use project-aware buffer switching
 (map! "C-x b"       #'projects-switch-buffer
-      "M-TAB"       #'projects-switch-dispatch
-      "C-c w 1"     #'projects-enter-single-project-view
-      "C-c w m"     #'projects-enter-multi-project-view
-      "C-c w l"     #'projects-change-multi-project-layout)
+      "M-TAB"       #'projects-switch-dispatch)
 
 (map! :map vertico-map
       "M-TAB" #'vertico-next)
