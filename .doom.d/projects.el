@@ -808,9 +808,10 @@ Used by header-line rendering where selected-window is temporarily rebound.")
          (bg       (face-background 'my/workspace-tab-inactive nil t))
          (divider  (or (face-foreground 'vertical-border nil t) "gray50"))
          (uline    `(:color ,divider :position descent))
-         ;; Text face: active window gets active fg but inactive bg; inactive just inherits.
+         ;; Text face: active window keeps full active face (blue bg, dark text);
+         ;; inactive uses inactive face. Both get the underline divider.
          (text-face (if selected
-                        `(:inherit my/workspace-tab-active :background ,bg :underline ,uline)
+                        `(:inherit my/workspace-tab-active :underline ,uline)
                       `(:inherit my/workspace-tab-inactive :underline ,uline)))
          (text   (propertize (format " %s " (or project "no project")) 'face text-face))
          ;; Filler extends the bg + underline (horizontal divider) across the full header width.
