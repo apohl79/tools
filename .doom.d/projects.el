@@ -441,10 +441,12 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
 ;;; ---------------------------------------------------------------------------
 
 (defun projects-register-buffer (buf &optional project-name)
-  "Register BUF as belonging to PROJECT-NAME (defaults to current project).
-Does nothing if BUF is a special/global buffer or if BUF is dead."
+  "Register BUF as belonging to PROJECT-NAME or the active project scope."
   (when (buffer-live-p buf)
-    (let ((proj (or project-name (projects-current))))
+    (let ((proj (or project-name
+                    (if (projects-multi-project-view-p)
+                        (projects-current-window-project)
+                      (projects-current)))))
       (when (and proj (not (projects-special-buffer-p buf)))
         (with-current-buffer buf
           (setq-local projects--buffer-project proj))
@@ -498,34 +500,37 @@ like any normal frame."
           (message "[projects] buffer-killed: %s from project %s" (buffer-name buf) proj)
           (plist-put entry :buffers (delq buf bufs))
           (puthash proj entry projects--table)
-          ;; After the kill, ensure all windows stay within the current project
-          (when (equal proj (projects-current))
+          ;; After the kill, ensure all windows stay within their project
+          (when (or (equal proj (projects-current))
+                    (projects-multi-project-view-p))
             (run-with-timer 0 nil #'projects--fix-windows-after-kill)))))))
+
+(defun projects--window-target-project (window)
+  (if (projects-multi-project-view-p (window-frame window))
+      (projects-current-window-project window)
+    (projects-current (window-frame window))))
 
 (defun projects--fix-windows-after-kill ()
   "Ensure no window shows a non-project buffer after a project buffer is killed.
-Any window showing a buffer that does not belong to the current project
-(including *scratch*, *Messages*, etc.) is redirected to another project
-buffer or the project info buffer. Never shows scratch after a kill."
-  (let* ((proj (projects-current))
-         (info-buf-name (when proj (projects--info-buffer-name proj))))
-    (when proj
-      (dolist (win (window-list nil 0))
-        (let* ((buf (window-buffer win))
-               (bname (buffer-name buf))
-               (buf-proj (buffer-local-value 'projects--buffer-project buf)))
-          ;; Replace if window shows a buffer not belonging to this project
-          (unless (or (string= bname info-buf-name)
-                      (equal buf-proj proj))
-            (let ((next (cl-find-if
-                         (lambda (b)
-                           (and (buffer-live-p b)
-                                (not (eq b buf))
-                                (equal (buffer-local-value 'projects--buffer-project b)
-                                       proj)))
-                         (buffer-list))))
-              (with-selected-window win
-                (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
+In multi-project mode each window's assigned project is used; in single-project
+mode the frame-wide current project is used."
+  (dolist (win (window-list nil 0))
+    (let* ((proj (projects--window-target-project win))
+           (buf (window-buffer win))
+           (bname (buffer-name buf))
+           (info-buf-name (when proj (projects--info-buffer-name proj)))
+           (proj-bufs (when proj (plist-get (gethash proj projects--table) :buffers))))
+      (unless (or (null proj)
+                  (string= bname info-buf-name)
+                  (memq buf proj-bufs))
+        (let ((next (cl-find-if
+                     (lambda (b)
+                       (and (buffer-live-p b)
+                            (not (eq b buf))
+                            (memq b proj-bufs)))
+                     (buffer-list))))
+          (with-selected-window win
+            (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))
 
 (defun projects-switch-buffer ()
   "Switch to a buffer belonging to the active project scope."
@@ -537,9 +542,8 @@ buffer or the project info buffer. Never shows scratch after a kill."
          (all (buffer-list))
          (project-bufs (when proj
                          (cl-remove-if-not
-                          (lambda (b)
-                            (equal (buffer-local-value 'projects--buffer-project b) proj))
-                          all)))
+                          #'buffer-live-p
+                          (plist-get (gethash proj projects--table) :buffers))))
          (special-bufs (unless multi
                          (cl-remove-if-not #'projects-special-buffer-p all)))
          (ordered (append project-bufs special-bufs))
