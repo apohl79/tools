@@ -322,33 +322,44 @@ name registered in `projects--table'."
            (projects-current) name (if norecord " (norecord)" "")
            (projects-multi-project-view-p)
            (or (ignore-errors (cadr (backtrace-frame 2))) "?"))
-  ;; Save current window layout for the outgoing project (before anything changes)
-  (let ((old (projects-current)))
-    (when (and old (not (projects-hidden-p old)))
-      (let ((entry (gethash old projects--table)))
-        (when entry
-          (plist-put entry :window-config (current-window-configuration))
-          (puthash old entry projects--table)))))
-  (projects--set-current name)
-  (unless norecord
-    (let ((proj (gethash name projects--table)))
-      (plist-put proj :switch-time (float-time))
-      (puthash name proj projects--table)))
-  ;; Set default directory to the project root so find-file etc. start there
-  ;; Skip for hidden projects — they are isolated and should not affect global dir
-  (unless (projects-hidden-p name)
-    (when-let ((dir (projects-dir name)))
-      (setq-default default-directory dir)))
-  ;; Show/hide tab-bar depending on whether the new project is hidden
-  (projects--update-frame-tab-bar)
-  ;; Restore saved window layout, or fall back to ensure-visible-buffer
-  (let* ((entry  (gethash name projects--table))
-         (config (and entry (plist-get entry :window-config))))
-    (if config
-        (set-window-configuration config)
-      (projects--ensure-visible-buffer)))
-  (projects--tab-bar-refresh)
-  (run-hooks 'projects-switch-hook))
+  (if (projects-multi-project-view-p)
+      ;; In multi-project mode: only update frame-level tracking, never touch layout.
+      ;; Window assignments are managed per-window; projects-switch must not clobber them.
+      (progn
+        (message "[projects] switch (multi-project mode): updating frame tracking only, not touching windows")
+        (projects--set-current name)
+        (unless norecord
+          (let ((proj (gethash name projects--table)))
+            (plist-put proj :switch-time (float-time))
+            (puthash name proj projects--table)))
+        (unless (projects-hidden-p name)
+          (when-let ((dir (projects-dir name)))
+            (setq-default default-directory dir)))
+        (run-hooks 'projects-switch-hook))
+    ;; Single-project mode: full switch with window config save/restore.
+    ;; Save current window layout for the outgoing project (before anything changes)
+    (let ((old (projects-current)))
+      (when (and old (not (projects-hidden-p old)))
+        (let ((entry (gethash old projects--table)))
+          (when entry
+            (plist-put entry :window-config (current-window-configuration))
+            (puthash old entry projects--table)))))
+    (projects--set-current name)
+    (unless norecord
+      (let ((proj (gethash name projects--table)))
+        (plist-put proj :switch-time (float-time))
+        (puthash name proj projects--table)))
+    (unless (projects-hidden-p name)
+      (when-let ((dir (projects-dir name)))
+        (setq-default default-directory dir)))
+    (projects--update-frame-tab-bar)
+    (let* ((entry  (gethash name projects--table))
+           (config (and entry (plist-get entry :window-config))))
+      (if config
+          (set-window-configuration config)
+        (projects--ensure-visible-buffer)))
+    (projects--tab-bar-refresh)
+    (run-hooks 'projects-switch-hook)))
 
 (defconst projects--multi-layouts '("2x1" "2x2" "3x2")
   "Available multi-project layout names, in display order.")
@@ -534,7 +545,12 @@ like any normal frame."
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects-switch "tmp"))
-     ;; Normal case: register with active project scope
+     ;; Multi-project mode: skip early registration here.
+     ;; window-buffer-change-functions will register the buffer with the correct
+     ;; window project once it is displayed in a multi-project window.
+     (multi
+      (message "[projects] find-file-hook: deferring registration to window-buffer-change-hook (multi-project)"))
+     ;; Normal single-project case
      (t
       (projects-register-buffer buf)))))
 
