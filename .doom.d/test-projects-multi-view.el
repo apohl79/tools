@@ -19,7 +19,7 @@
 (defun my/vterm-size-refresh (&rest _) nil)
 (defun +doom-dashboard-reload (&rest _) nil)
 
-(load-file "/Users/andreas.pohl/tools/.doom.d/projects.el")
+(load-file (expand-file-name "projects.el" (if load-file-name (file-name-directory load-file-name) default-directory)))
 (remove-hook 'kill-emacs-hook #'projects-save)
 
 (defun projects-test--reset-state ()
