@@ -340,8 +340,12 @@ name registered in `projects--table'."
     (string-to-number choice)))
 
 (defun projects--refresh-window-project-headers ()
-  "Refresh header-line in each window to reflect its assigned project. (Stub — full impl in later task.)"
-  nil)
+  (dolist (win (window-list nil 0))
+    (with-current-buffer (window-buffer win)
+      (setq header-line-format
+            (when (projects-multi-project-view-p (window-frame win))
+              '(:eval (projects--window-header-line))))))
+  (force-mode-line-update t))
 
 (defun projects--window-project-seed-list ()
   (let* ((current (projects-current))
@@ -408,6 +412,7 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   (projects--set-multi-layout layout)
   (projects--apply-multi-project-layout layout)
   (projects--refresh-window-project-headers)
+  (projects--update-frame-tab-bar)
   (projects--tab-bar-refresh))
 
 (defun projects-switch-window-project (name)
@@ -729,6 +734,12 @@ Buffers not under any project directory fall into 'Other'."
 ;;; Tab-bar Integration
 ;;; ---------------------------------------------------------------------------
 
+(defun projects--window-header-line ()
+  (let* ((project (projects-current-window-project))
+         (selected (eq (selected-window) (get-buffer-window (current-buffer) t)))
+         (face (if selected 'my/workspace-tab-active 'my/workspace-tab-inactive)))
+    (propertize (format " %s " (or project "no project")) 'face face)))
+
 (defun projects--tab-bar-format ()
   "Tab-bar format function: renders all projects MRU-sorted with active one highlighted.
 Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functions.el."
@@ -765,10 +776,11 @@ Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functio
     (force-mode-line-update t)))
 
 (defun projects--update-frame-tab-bar (&optional frame)
-  "Show or hide the tab-bar for FRAME based on whether its project is hidden."
+  "Show or hide the tab-bar for FRAME based on whether its project is hidden or in multi-project view."
   (let* ((f (or frame (selected-frame)))
          (proj (projects-current f))
-         (hide (and proj (projects-hidden-p proj))))
+         (hide (or (projects-multi-project-view-p f)
+                   (and proj (projects-hidden-p proj)))))
     (set-frame-parameter f 'tab-bar-lines (if hide 0 1))))
 
 ;;; ---------------------------------------------------------------------------
@@ -815,7 +827,12 @@ Rotates up to `projects--backup-count' backups before writing."
             (print-length nil))
         (pp (list :version 1
                   :current projects--current
-                  :projects data)
+                  :projects data
+                  :view-mode (projects-view-mode)
+                  :multi-layout (frame-parameter nil 'projects-multi-layout)
+                  :window-projects (mapcar (lambda (win)
+                                             (window-parameter win 'projects-project))
+                                           (window-list nil 0)))
             (current-buffer)))))
   (let ((inhibit-message t))
     (message "Projects saved")))
@@ -953,6 +970,20 @@ With prefix arg \\[universal-argument], prompt to choose from available backups.
                             (car (projects-names-mru)))))
             (setq projects--current restored)
             (set-frame-parameter nil 'projects-current restored))
+
+          ;; Restore view mode
+          (let* ((saved-view-mode (plist-get data :view-mode))
+                 (saved-multi-layout (plist-get data :multi-layout))
+                 (saved-window-projects (plist-get data :window-projects)))
+            (if (eq saved-view-mode 'multi-project)
+                (progn
+                  (projects--set-view-mode 'multi-project)
+                  (projects--set-multi-layout saved-multi-layout)
+                  (when saved-window-projects
+                    (projects--apply-multi-project-layout saved-multi-layout saved-window-projects)))
+              (projects--set-view-mode 'single-project))
+            (projects--refresh-window-project-headers)
+            (projects--update-frame-tab-bar))
 
           ;; Clean up and show dashboard (deferred so progress renders)
           (run-with-timer 0.2 nil
