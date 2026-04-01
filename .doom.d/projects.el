@@ -91,6 +91,13 @@ Also updates the global `projects--current' unless FRAME-ONLY is non-nil."
   (let ((project (projects-current-window-project)))
     (projects--set-view-mode 'single-project)
     (set-frame-parameter nil 'projects-multi-layout nil)
+    ;; Clear per-buffer header-line-format set during multi-project mode
+    (dolist (buf (buffer-list))
+      (with-current-buffer buf
+        (when (equal header-line-format '(:eval (projects--window-header-line)))
+          (kill-local-variable 'header-line-format))))
+    (force-mode-line-update t)
+    (projects--update-frame-tab-bar)
     (when project
       (projects-switch project))))
 
@@ -356,14 +363,15 @@ name registered in `projects--table'."
     (or ordered (and current (list current)))))
 
 (defun projects--fill-project-list (projects count)
-  (let ((seed (copy-sequence projects))
-        (result nil)
-        (index 0))
-    (dotimes (_ count)
-      (let ((project (nth (mod index (length seed)) seed)))
-        (push project result)
-        (setq index (1+ index))))
-    (nreverse result)))
+  (when (and projects (> (length projects) 0))
+    (let ((seed (copy-sequence projects))
+          (result nil)
+          (index 0))
+      (dotimes (_ count)
+        (let ((project (nth (mod index (length seed)) seed)))
+          (push project result)
+          (setq index (1+ index))))
+      (nreverse result))))
 
 (defun projects--split-for-layout (layout)
   (delete-other-windows)
@@ -392,17 +400,17 @@ name registered in `projects--table'."
   "Split the frame into LAYOUT windows and assign projects to each.
 PROJECTS is an optional list of project names to assign; defaults to visible projects."
   (let* ((wins nil)
-         (assignments (projects--fill-project-list
-                       (or projects (projects--window-project-seed-list))
-                       layout)))
-    (projects--split-for-layout layout)
-    (setq wins (window-list nil 0))
-    (cl-mapc (lambda (win project)
-               (projects--set-window-project win project)
-               (with-selected-window win
-                 (switch-to-buffer (projects--window-buffer-for-project project))))
-             wins assignments)
-    (select-window (car wins))))
+         (seed (or projects (projects--window-project-seed-list)))
+         (assignments (projects--fill-project-list seed layout)))
+    (when assignments
+      (projects--split-for-layout layout)
+      (setq wins (window-list nil 0))
+      (cl-mapc (lambda (win project)
+                 (projects--set-window-project win project)
+                 (with-selected-window win
+                   (switch-to-buffer (projects--window-buffer-for-project project))))
+               wins assignments)
+      (select-window (car wins)))))
 
 (defun projects-enter-multi-project-view (layout)
   (interactive (list (projects--read-multi-layout)))
@@ -527,6 +535,7 @@ mode the frame-wide current project is used."
            (proj-bufs (when proj (plist-get (gethash proj projects--table) :buffers))))
       (unless (or (null proj)
                   (string= bname info-buf-name)
+                  (projects-special-buffer-p buf)
                   (memq buf proj-bufs))
         (let ((next (cl-find-if
                      (lambda (b)
@@ -1085,6 +1094,7 @@ Runs on `window-configuration-change-hook' so opening a special buffer
 alongside the info buffer collapses to fullscreen.
 Deferred via idle timer so window-size-change-functions fire naturally,
 allowing vterm/eat to resize correctly."
+  (unless (projects-multi-project-view-p)
   (when (> (projects--ordinary-window-count) 1)
     (let* ((frame (selected-frame))
            (info-win
@@ -1149,7 +1159,7 @@ allowing vterm/eat to resize correctly."
                              ((and (eq major-mode 'eat-mode)
                                    (fboundp 'eat-reset))
                               (eat-reset)))))))))))))
-         info-win)))))
+         info-win))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Provide
