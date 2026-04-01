@@ -410,6 +410,32 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   (projects--refresh-window-project-headers)
   (projects--tab-bar-refresh))
 
+(defun projects-switch-window-project (name)
+  (interactive
+   (list (completing-read "Switch window project: " (projects-names-visible) nil t)))
+  (unless (gethash name projects--table)
+    (user-error "Project '%s' does not exist" name))
+  (projects--set-window-project (selected-window) name)
+  (switch-to-buffer (projects--window-buffer-for-project name))
+  (projects--refresh-window-project-headers))
+
+(defun projects-switch-dispatch ()
+  (interactive)
+  (if (projects-multi-project-view-p)
+      (call-interactively #'projects-switch-window-project)
+    (call-interactively #'projects-switch)))
+
+(defun projects-change-multi-project-layout (layout)
+  (interactive (list (projects--read-multi-layout "Change multi-project layout: ")))
+  (unless (projects-multi-project-view-p)
+    (user-error "Not in multi-project view"))
+  (projects--set-multi-layout layout)
+  (projects--apply-multi-project-layout
+   layout
+   (mapcar (lambda (win) (window-parameter win 'projects-project))
+           (window-list nil 0)))
+  (projects--refresh-window-project-headers))
+
 ;;; ---------------------------------------------------------------------------
 ;;; Buffer Management
 ;;; ---------------------------------------------------------------------------
@@ -502,26 +528,25 @@ buffer or the project info buffer. Never shows scratch after a kill."
                 (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))))
 
 (defun projects-switch-buffer ()
-  "Switch to a buffer belonging to the current project.
-Project buffers are listed first; global special buffers appear at the end."
+  "Switch to a buffer belonging to the active project scope."
   (interactive)
-  (let* ((proj (projects-current))
+  (let* ((multi (projects-multi-project-view-p))
+         (proj (if multi
+                   (projects-current-window-project)
+                 (projects-current)))
          (all (buffer-list))
          (project-bufs (when proj
                          (cl-remove-if-not
                           (lambda (b)
                             (equal (buffer-local-value 'projects--buffer-project b) proj))
                           all)))
-         (special-bufs (cl-remove-if-not #'projects-special-buffer-p all))
+         (special-bufs (unless multi
+                         (cl-remove-if-not #'projects-special-buffer-p all)))
          (ordered (append project-bufs special-bufs))
          (names (mapcar #'buffer-name ordered)))
     (switch-to-buffer
      (completing-read (format "Buffer [%s]: " (or proj "global"))
-                      (lambda (str pred action)
-                        (if (eq action 'metadata)
-                            '(metadata (display-sort-function . identity))
-                          (complete-with-action action names str pred)))
-                      nil t))))
+                      names nil t))))
 
 (defun projects-move-buffer (buffer target-project)
   "Move BUFFER to TARGET-PROJECT."
