@@ -802,10 +802,21 @@ Used by header-line rendering where selected-window is temporarily rebound.")
 (defun projects--window-header-line ()
   ;; Compare the rendering window (selected-window during :eval) against the
   ;; keyboard-focused window captured outside of redisplay.
-  (let* ((project (projects-current-window-project))
+  (let* ((project  (projects-current-window-project))
          (selected (eq (selected-window) projects--focused-window))
-         (face (if selected 'my/workspace-tab-active 'my/workspace-tab-inactive)))
-    (propertize (format " %s " (or project "no project")) 'face face)))
+         ;; Use inactive bg everywhere; only the fg/weight differs for active window.
+         (bg       (face-background 'my/workspace-tab-inactive nil t))
+         (divider  (or (face-foreground 'vertical-border nil t) "gray50"))
+         (uline    `(:color ,divider :position descent))
+         ;; Text face: active window gets active fg but inactive bg; inactive just inherits.
+         (text-face (if selected
+                        `(:inherit my/workspace-tab-active :background ,bg :underline ,uline)
+                      `(:inherit my/workspace-tab-inactive :underline ,uline)))
+         (text   (propertize (format " %s " (or project "no project")) 'face text-face))
+         ;; Filler extends the bg + underline (horizontal divider) across the full header width.
+         (filler (propertize " " 'face `(:background ,bg :underline ,uline)
+                             'display '(space :align-to right))))
+    (concat text filler)))
 
 (defun projects--tab-bar-format ()
   "Tab-bar format function: renders all projects MRU-sorted with active one highlighted.
