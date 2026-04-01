@@ -318,7 +318,10 @@ name registered in `projects--table'."
       (user-error "Cannot switch projects from a temporary project"))
     (when (projects-hidden-p name)
       (user-error "Cannot switch to a hidden project")))
-  (message "[projects] switch: %s -> %s%s" (projects-current) name (if norecord " (norecord)" ""))
+  (message "[projects] switch: %s -> %s%s (multi=%s caller: %s)"
+           (projects-current) name (if norecord " (norecord)" "")
+           (projects-multi-project-view-p)
+           (or (ignore-errors (cadr (backtrace-frame 2))) "?"))
   ;; Save current window layout for the outgoing project (before anything changes)
   (let ((old (projects-current)))
     (when (and old (not (projects-hidden-p old)))
@@ -468,6 +471,9 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
                     (if (projects-multi-project-view-p)
                         (projects-current-window-project)
                       (projects-current)))))
+      (message "[projects] register-buffer: buf=%s proj=%s explicit=%s multi=%s sel-win=%s win-proj=%s"
+               (buffer-name buf) proj (not (null project-name)) (projects-multi-project-view-p)
+               (selected-window) (window-parameter (selected-window) 'projects-project))
       (when (and proj (not (projects-special-buffer-p buf)))
         (with-current-buffer buf
           (setq-local projects--buffer-project proj))
@@ -492,23 +498,55 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
 Only truly fresh client frames (client flag set, no project yet) route
 to tmp. Interactive daemon sessions that already have a project behave
 like any normal frame."
-  (cond
-   ;; Fresh client frame opened with a file via emacsclient (no project yet).
-   ;; Mark the frame as a tmp frame so all subsequent opens in it go there too.
-   ((and (frame-parameter nil 'client)
-         (null (frame-parameter nil 'projects-current)))
-    (projects--ensure-tmp-project)
-    (projects-register-buffer (current-buffer) "tmp")
-    (projects--set-current "tmp" t)    ; frame-only — don't change global
-    (projects--update-frame-tab-bar))
-   ;; No active project at all (e.g. emacs [file] at startup before session restore)
-   ((null (projects-current))
-    (projects--ensure-tmp-project)
-    (projects-register-buffer (current-buffer) "tmp")
-    (projects-switch "tmp"))
-   ;; Normal case: register with the frame's current project
-   (t
-    (projects-register-buffer (current-buffer)))))
+  (let ((buf (current-buffer))
+        (sel (selected-window))
+        (win-proj (window-parameter (selected-window) 'projects-project))
+        (multi (projects-multi-project-view-p)))
+    (message "[projects] find-file-hook: buf=%s selected-win=%s win-proj=%s multi=%s frame-proj=%s"
+             (buffer-name buf) sel win-proj multi (projects-current))
+    (cond
+     ;; Fresh client frame opened with a file via emacsclient (no project yet).
+     ((and (frame-parameter nil 'client)
+           (null (frame-parameter nil 'projects-current)))
+      (message "[projects] find-file-hook: routing to tmp (fresh client frame)")
+      (projects--ensure-tmp-project)
+      (projects-register-buffer buf "tmp")
+      (projects--set-current "tmp" t)
+      (projects--update-frame-tab-bar))
+     ;; No active project at all
+     ((null (projects-current))
+      (message "[projects] find-file-hook: routing to tmp (no current project)")
+      (projects--ensure-tmp-project)
+      (projects-register-buffer buf "tmp")
+      (projects-switch "tmp"))
+     ;; Normal case: register with active project scope
+     (t
+      (projects-register-buffer buf)))))
+
+(defun projects--window-buffer-change-hook (frame)
+  "In multi-project mode, re-register buffers appearing in windows with the
+correct window project, and refresh the header-line-format."
+  (when (projects-multi-project-view-p frame)
+    (let ((refreshed nil))
+      (dolist (win (window-list frame 0))
+        (let* ((buf      (window-buffer win))
+               (win-proj (window-parameter win 'projects-project))
+               (buf-proj (buffer-local-value 'projects--buffer-project buf)))
+          (when (and win-proj
+                     (not (projects-special-buffer-p buf))
+                     (not (string-match-p "^\\*project: " (buffer-name buf))))
+            ;; Re-register if the buffer belongs to a different project
+            (when (not (equal buf-proj win-proj))
+              (message "[projects] window-buffer-change: win=%s buf=%s old-proj=%s new-proj=%s"
+                       win (buffer-name buf) buf-proj win-proj)
+              (projects-register-buffer buf win-proj))
+            ;; Ensure header-line-format is set (new buffers won't have it yet)
+            (with-current-buffer buf
+              (unless (equal header-line-format '(:eval (projects--window-header-line)))
+                (setq header-line-format '(:eval (projects--window-header-line)))
+                (setq refreshed t))))))
+      (when refreshed
+        (force-mode-line-update t)))))
 
 (defun projects--cleanup-dead-buffers ()
   "Remove the current (dying) buffer from its owning project's buffer list."
@@ -752,8 +790,10 @@ Buffers not under any project directory fall into 'Other'."
 ;;; ---------------------------------------------------------------------------
 
 (defun projects--window-header-line ()
+  ;; During header-line :eval, (selected-window) is the rendering window.
+  ;; (frame-selected-window) returns the keyboard-focused window regardless of redisplay.
   (let* ((project (projects-current-window-project))
-         (selected (eq (selected-window) (get-buffer-window (current-buffer) t)))
+         (selected (eq (selected-window) (frame-selected-window)))
          (face (if selected 'my/workspace-tab-active 'my/workspace-tab-inactive)))
     (propertize (format " %s " (or project "no project")) 'face face)))
 
@@ -794,10 +834,14 @@ Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functio
 
 (defun projects--update-frame-tab-bar (&optional frame)
   "Show or hide the tab-bar for FRAME based on whether its project is hidden or in multi-project view."
-  (let* ((f (or frame (selected-frame)))
+  (let* ((f    (or frame (selected-frame)))
          (proj (projects-current f))
-         (hide (or (projects-multi-project-view-p f)
-                   (and proj (projects-hidden-p proj)))))
+         (multi (projects-multi-project-view-p f))
+         (hide  (or multi (and proj (projects-hidden-p proj)))))
+    (message "[projects] update-tab-bar: proj=%s multi=%s hidden=%s -> tab-bar=%s (caller: %s)"
+             proj multi (and proj (projects-hidden-p proj))
+             (if hide 0 1)
+             (or (ignore-errors (cadr (backtrace-frame 1))) "?"))
     (set-frame-parameter f 'tab-bar-lines (if hide 0 1))))
 
 ;;; ---------------------------------------------------------------------------
@@ -1062,6 +1106,8 @@ Idempotent: safe to call multiple times."
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'dired-mode-hook #'projects--find-file-hook)
     (add-hook 'window-configuration-change-hook #'projects--maybe-close-info-window)
+    ;; In multi-project mode: re-register buffers appearing in windows and keep headers fresh
+    (add-hook 'window-buffer-change-functions #'projects--window-buffer-change-hook)
     ;; quit-window buries buffers (no kill-buffer-hook) — fix windows afterwards
     (advice-add 'quit-window :after (lambda (&rest _)
                                       (projects--fix-windows-after-kill)))
@@ -1102,8 +1148,12 @@ Runs on `window-configuration-change-hook' so opening a special buffer
 alongside the info buffer collapses to fullscreen.
 Deferred via idle timer so window-size-change-functions fire naturally,
 allowing vterm/eat to resize correctly."
-  (unless (projects-multi-project-view-p)
+  (if (projects-multi-project-view-p)
+      (message "[projects] maybe-close-info: skipping (multi-project mode, win-count=%d)"
+               (projects--ordinary-window-count))
   (when (> (projects--ordinary-window-count) 1)
+    (message "[projects] maybe-close-info: checking (single-project mode, win-count=%d proj=%s)"
+             (projects--ordinary-window-count) (projects-current))
     (let* ((frame (selected-frame))
            (info-win
             (or
