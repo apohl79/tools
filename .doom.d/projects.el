@@ -812,8 +812,8 @@ Used by header-line rendering where selected-window is temporarily rebound.")
                       "gray30"))
          ;; Plain color string: most compatible underline form; renders reliably in header-line.
          (text-face (if selected
-                        `(:inherit my/workspace-tab-active :underline ,divider)
-                      `(:inherit my/workspace-tab-inactive :underline ,divider)))
+                        '(:inherit my/workspace-tab-active)
+                      '(:inherit my/workspace-tab-inactive)))
          (text   (propertize (format " %s " (or project "no project")) 'face text-face))
          ;; Filler: inactive bg + same underline, stretches to right edge.
          (filler (propertize " " 'face `(:background ,bg :underline ,divider)
