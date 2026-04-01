@@ -789,11 +789,21 @@ Buffers not under any project directory fall into 'Other'."
 ;;; Tab-bar Integration
 ;;; ---------------------------------------------------------------------------
 
+(defvar projects--focused-window nil
+  "The window with keyboard focus, captured by post-command-hook.
+Used by header-line rendering where selected-window is temporarily rebound.")
+
+(defun projects--track-focused-window ()
+  "Update `projects--focused-window' and trigger header-line refresh on focus change."
+  (unless (eq projects--focused-window (selected-window))
+    (setq projects--focused-window (selected-window))
+    (force-mode-line-update t)))
+
 (defun projects--window-header-line ()
-  ;; During header-line :eval, (selected-window) is the rendering window.
-  ;; (frame-selected-window) returns the keyboard-focused window regardless of redisplay.
+  ;; Compare the rendering window (selected-window during :eval) against the
+  ;; keyboard-focused window captured outside of redisplay.
   (let* ((project (projects-current-window-project))
-         (selected (eq (selected-window) (frame-selected-window)))
+         (selected (eq (selected-window) projects--focused-window))
          (face (if selected 'my/workspace-tab-active 'my/workspace-tab-inactive)))
     (propertize (format " %s " (or project "no project")) 'face face)))
 
@@ -1108,6 +1118,8 @@ Idempotent: safe to call multiple times."
     (add-hook 'window-configuration-change-hook #'projects--maybe-close-info-window)
     ;; In multi-project mode: re-register buffers appearing in windows and keep headers fresh
     (add-hook 'window-buffer-change-functions #'projects--window-buffer-change-hook)
+    ;; Track keyboard focus for header-line active/inactive rendering
+    (add-hook 'post-command-hook #'projects--track-focused-window)
     ;; quit-window buries buffers (no kill-buffer-hook) — fix windows afterwards
     (advice-add 'quit-window :after (lambda (&rest _)
                                       (projects--fix-windows-after-kill)))

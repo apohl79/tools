@@ -885,12 +885,20 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
                    (set-window-buffer new-window buffer)
                    new-window))
 
-                ;; 2+ windows - always use the other (non-active) window
+                ;; 2+ windows - in multi-project mode use the current window (each window
+                ;; owns its project); otherwise use the other (non-active) window
                 ((>= window-count 2)
                  (let* ((current-window (selected-window))
-                        (other-windows (remove current-window all-windows))
-                        (win (car other-windows)))
-                   (message "[claude-display] CASE: 2+ windows, using other win=%s (keeping current=%s)" win current-window)
+                        (multi (and (fboundp 'projects-multi-project-view-p)
+                                    (projects-multi-project-view-p)))
+                        (win (if multi
+                                 (progn
+                                   (message "[claude-display] CASE: 2+ windows MULTI-PROJECT, using current win=%s" current-window)
+                                   current-window)
+                               (let* ((other-windows (remove current-window all-windows)))
+                                 (message "[claude-display] CASE: 2+ windows, using other win=%s (keeping current=%s)"
+                                          (car other-windows) current-window)
+                                 (car other-windows)))))
                    (set-window-buffer win buffer)
                    win))
 
