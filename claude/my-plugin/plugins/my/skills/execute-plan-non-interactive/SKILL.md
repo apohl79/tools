@@ -24,7 +24,7 @@ You are the NON-INTERACTIVE ORCHESTRATOR. You coordinate execution by writing pr
 5. Resolve the execution root and worktree behavior using the same safety rules as the interactive orchestrator.
 6. Initialize persisted execution state at `<execution-root>/.tmp-execute-plan-state.json` before the first non-interactive handoff.
 7. Persist enough setup metadata to resume safely, including skill version, plan path, execution root, current phase, wave metadata, attempt counters, and the active batch contract.
-8. Mark the plan `EXECUTING` only after setup succeeds.
+8. Mark the plan `EXECUTING` only after setup succeeds. THIS IS NOT OPTIONAL.
 9. If setup completes without hitting a deterministic stop condition, continue directly into Phase 2 in the SAME run. Setup completion is not a checkpoint.
 
 # PHASE 2: TASK DECOMPOSITION

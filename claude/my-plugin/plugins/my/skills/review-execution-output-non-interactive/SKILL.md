@@ -65,9 +65,10 @@ If any required input is missing, unreadable, or inconsistent with persisted sta
    - Persist triage history so accepted, rejected, deferred, and verified items remain stable across retries.
    - Never silently resurrect `REJECTED` or `DEFERRED` findings without new evidence recorded in state.
 6. Own review-fix handoff generation.
-   - When unresolved accepted findings remain, write fix prompts using `.tmp-subtask-review-fix-attempt-<attempt>-<N>.md`.
-   - Include only unresolved `FIX_REQUIRED` items in the fix scope.
-   - Carry `VERIFIED_FIX`, `REJECTED`, and `DEFERRED` items forward as context, not active fix scope.
+   - When unresolved accepted findings remain, write exactly one fix prompt file per `FIX_REQUIRED` finding using `.tmp-subtask-review-fix-attempt-<attempt>-<N>.md`, where N increments per issue.
+   - If N unresolved `FIX_REQUIRED` issues exist, emit N fix prompt files as a single batch. Do not merge multiple issues into one prompt file.
+   - Each fix prompt must contain only the single `FIX_REQUIRED` finding it is responsible for, the exact files in scope, and required verification commands.
+   - Carry `VERIFIED_FIX`, `REJECTED`, and `DEFERRED` items forward as context in every fix prompt so fix agents know what has already been handled.
 7. Own review cap and deterministic stop behavior.
    - Maximum review attempts per Phase 5 run: 3.
    - Stop immediately after emitting a review batch or review-fix batch.
@@ -117,7 +118,7 @@ Triage rules:
 10. If no unresolved `FIX_REQUIRED` items remain, return `status: clean`.
    - A clean result is valid only after the full frozen three-reviewer batch completed and was triaged.
 11. If the helper detects orchestrator bypass or missing required reviewer outputs without a helper-owned blocked reason, return `status: blocked`.
-12. If unresolved `FIX_REQUIRED` items remain and the cap is not exhausted, write review-fix prompt files, emit handoffs, persist state, and return `status: fix_required` when the next orchestrator action is the delegated fix pass.
+12. If unresolved `FIX_REQUIRED` items remain and the cap is not exhausted, write exactly one review-fix prompt file per issue, emit one handoff line per prompt file as a batch, persist state, and return `status: fix_required`. The number of emitted fix handoffs MUST equal the number of unresolved `FIX_REQUIRED` items. Never merge multiple issues into a single prompt file or handoff.
 13. After the delegated fix pass completes, require explicit regression verification before the next review attempt. Regression verification means rerunning the required review-relevant checks for the touched files or workflow and persisting the verification outcome in `state_updates` before re-entering this helper.
 14. If the helper cannot continue deterministically, return `status: blocked`.
 15. If the retry cap is exhausted and unresolved `FIX_REQUIRED` items remain, return `status: abort` with deterministic stop notes.
@@ -149,9 +150,9 @@ Use when review is complete and no unresolved `FIX_REQUIRED` items remain.
 ### `status: fix_required`
 Use when accepted findings require a delegated review-fix handoff batch.
 
-- `next_step`: execute the emitted review-fix batch, persist resulting execution output, then re-enter this helper for the next review attempt
-- `notes`: unresolved `FIX_REQUIRED` findings, affected files, review-fix batch metadata, and required verification context
-- `state_updates`: authoritative review-state persistence, including attempt counters, active findings, and emitted fix-handoff metadata
+- `next_step`: execute the emitted review-fix batch — one handoff per `FIX_REQUIRED` finding — persist resulting execution output, then re-enter this helper for the next review attempt
+- `notes`: one entry per unresolved `FIX_REQUIRED` finding with its affected files and verification context, plus review-fix batch metadata
+- `state_updates`: authoritative review-state persistence, including attempt counters, per-issue active findings, and emitted fix-handoff metadata
 
 ### `status: waiting_for_handoffs`
 Use when a review batch has been emitted and the helper must stop for the full reviewer batch output.

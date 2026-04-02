@@ -57,8 +57,10 @@ If any required input is missing, stop and return `status: blocked` with the mis
    - `DEFERRED` — the finding is real but intentionally left unresolved for a documented follow-up, user decision, or later phase.
 5. Generate review-fix prompts when fixes are required.
    - The helper defines the fix prompt content.
-   - The fix prompt must include only unresolved `FIX_REQUIRED` findings, exact files in scope, required verification commands, and instructions to avoid unrelated edits.
-   - `VERIFIED_FIX`, `REJECTED`, and `DEFERRED` items must be carried forward as context, not re-fixed.
+   - EXACTLY ONE fix issue per prompt, EXACTLY ONE sub-agent per issue. This is mandatory.
+   - If N unresolved `FIX_REQUIRED` issues exist, create N fix prompts and dispatch N fix sub-agents as a batch. Do not merge issues into a single prompt.
+   - Each fix prompt must include only the single `FIX_REQUIRED` finding it is responsible for, the exact files in scope, required verification commands, and instructions to avoid unrelated edits.
+   - Carry all `VERIFIED_FIX`, `REJECTED`, and `DEFERRED` items forward as context in every fix prompt so fix agents know what has already been handled.
 6. Enforce a review retry cap.
    - Maximum review attempts per Phase 5 run: 3.
    - If unresolved accepted findings remain after the cap, return `status: user_decision_required` with the unresolved findings and the exact decision needed.
@@ -95,8 +97,8 @@ The orchestrator or any caller must not treat a single reviewer, pair of reviewe
    - A helper-owned clean result is valid only after the full frozen reviewer set has completed and been triaged.
 6. If no unresolved `FIX_REQUIRED` findings remain, return `status: clean`.
 7. If unresolved `FIX_REQUIRED` findings remain and the retry cap is not exhausted:
-   - generate a review-fix prompt
-   - delegate the review-fix work through a focused sub-agent underneath this helper
+   - generate exactly one review-fix prompt per unresolved `FIX_REQUIRED` finding
+   - dispatch exactly one focused fix sub-agent per prompt as a batch — never merge multiple issues into a single sub-agent
    - hand control back to the orchestrator through `status: fix_required`
    - require post-fix regression verification before the next review attempt
 8. If the helper cannot continue because input, evidence, or execution state is insufficient, return `status: blocked`.
@@ -130,8 +132,8 @@ Use when review is complete and no unresolved `FIX_REQUIRED` findings remain.
 ### `status: fix_required`
 Use when accepted findings require a delegated fix pass.
 
-- `next_step`: run one fix pass using the helper-generated review-fix prompt, run post-fix regression verification, then re-enter this helper with updated review state
-- `notes`: unresolved accepted findings, affected files, verification required, and updated prior-review context
+- `next_step`: run the helper-generated fix batch — one sub-agent per `FIX_REQUIRED` finding — then run post-fix regression verification, then re-enter this helper with updated review state
+- `notes`: unresolved accepted findings (one entry per finding), affected files per finding, verification required, and updated prior-review context
 
 ### `status: blocked`
 Use when the helper cannot continue deterministically.

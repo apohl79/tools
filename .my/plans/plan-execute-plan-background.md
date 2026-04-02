@@ -5,7 +5,7 @@
 **JIRA:** none
 **Tech Stack:** Markdown (skill file only)
 **Code Standards:** n/a
-**Status:** READY
+**Status:** CANCELLED
 **no-worktree:** [x]
 **no-pr:** [x]
 **draft-pr:** [ ]
