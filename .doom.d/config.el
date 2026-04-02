@@ -129,7 +129,30 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
     (set-face-attribute 'my/workspace-tab-active nil
                         :background (doom-color 'blue) :foreground (doom-color 'bg) :weight 'bold)
     (set-face-attribute 'my/workspace-tab-inactive nil
-                        :background (doom-darken (doom-color 'bg-alt) 0.2) :foreground (doom-color 'fg-alt))))
+                        :background "#000000" :foreground "#B8860B")))
+
+;; Preserve multi-project window layout when transient menus open/close.
+;; Save the full window configuration before transient opens, restore it
+;; after exit. This reliably undoes any size changes transient introduces.
+(defvar my/projects-pre-transient-config nil)
+
+(defun my/projects-transient-save-config ()
+  (when (and (fboundp 'projects-multi-project-view-p)
+             (projects-multi-project-view-p))
+    (setq my/projects-pre-transient-config (current-window-configuration))))
+
+(defun my/projects-transient-restore-config ()
+  (when my/projects-pre-transient-config
+    (let ((config my/projects-pre-transient-config))
+      (setq my/projects-pre-transient-config nil)
+      (run-with-timer
+       0.05 nil
+       (lambda ()
+         (ignore-errors (set-window-configuration config)))))))
+
+(after! transient
+  (add-hook 'transient-setup-buffer-hook #'my/projects-transient-save-config)
+  (add-hook 'transient-post-exit-hook    #'my/projects-transient-restore-config))
 
 ;; Projects tab-bar integration
 ;; Uses my/workspace-tab-active / my/workspace-tab-inactive faces (defined in +functions.el)

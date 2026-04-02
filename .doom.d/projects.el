@@ -193,6 +193,11 @@ NAME must be unique. DIR is created if it does not exist."
            projects--table)
   (message "[projects] create: %s dir=%s" name dir)
   (projects-switch name)
+  ;; In multi-project mode, also assign the new project to the current window.
+  (when (projects-multi-project-view-p)
+    (projects--set-window-project (selected-window) name)
+    (switch-to-buffer (projects--window-buffer-for-project name))
+    (projects--refresh-window-project-headers))
   name)
 
 (defun projects--repo-name-from-url (url)
@@ -390,8 +395,13 @@ name registered in `projects--table'."
     (_ 2)))
 
 (defun projects--read-multi-layout (&optional prompt)
-  (completing-read (or prompt "Multi-project layout: ")
-                   projects--multi-layouts nil t nil nil "2x1"))
+  (let* ((choices (mapcar (lambda (l)
+                            (format "%s (%d)" l (projects--layout-window-count l)))
+                          projects--multi-layouts))
+         (result (completing-read (or prompt "Multi-project layout: ")
+                                  choices nil t nil nil
+                                  (format "2x1 (%d)" (projects--layout-window-count "2x1")))))
+    (car (split-string result " "))))
 
 (defun projects--refresh-window-project-headers ()
   (dolist (win (window-list nil 0))
@@ -559,11 +569,16 @@ like any normal frame."
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects-switch "tmp"))
-     ;; Multi-project mode: skip early registration here.
-     ;; window-buffer-change-functions will register the buffer with the correct
-     ;; window project once it is displayed in a multi-project window.
+     ;; Multi-project mode with a known window project: register immediately so
+     ;; that any concurrent buffer-kill / fix-windows-after-kill sees the buffer
+     ;; as belonging here.  Without a known win-proj we defer to
+     ;; window-buffer-change-hook as before.
+     ((and multi win-proj)
+      (message "[projects] find-file-hook: registering buf=%s to win-proj=%s (multi, immediate)"
+               (buffer-name buf) win-proj)
+      (projects-register-buffer buf win-proj))
      (multi
-      (message "[projects] find-file-hook: deferring registration to window-buffer-change-hook (multi-project)"))
+      (message "[projects] find-file-hook: deferring registration to window-buffer-change-hook (multi-project, no win-proj)"))
      ;; Normal single-project case
      (t
       (projects-register-buffer buf)))))
@@ -577,15 +592,15 @@ correct window project, and refresh the header-line-format."
         (let* ((buf      (window-buffer win))
                (win-proj (window-parameter win 'projects-project))
                (buf-proj (buffer-local-value 'projects--buffer-project buf)))
-          (when (and win-proj
-                     (not (projects-special-buffer-p buf))
-                     (not (string-match-p "^\\*project: " (buffer-name buf))))
-            ;; Re-register if the buffer belongs to a different project
-            (when (not (equal buf-proj win-proj))
+          (when win-proj
+            ;; Re-register non-special buffers if they belong to a different project
+            (when (and (not (projects-special-buffer-p buf))
+                       (not (string-match-p "^\\*project: " (buffer-name buf)))
+                       (not (equal buf-proj win-proj)))
               (message "[projects] window-buffer-change: win=%s buf=%s old-proj=%s new-proj=%s"
                        win (buffer-name buf) buf-proj win-proj)
               (projects-register-buffer buf win-proj))
-            ;; Ensure header-line-format is set (new buffers won't have it yet)
+            ;; Ensure header-line-format is set for every buffer in a project window
             (with-current-buffer buf
               (unless (equal header-line-format '(:eval (projects--window-header-line)))
                 (setq header-line-format '(:eval (projects--window-header-line)))
@@ -649,8 +664,7 @@ mode the frame-wide current project is used."
                          (cl-remove-if-not
                           #'buffer-live-p
                           (plist-get (gethash proj projects--table) :buffers))))
-         (special-bufs (unless multi
-                         (cl-remove-if-not #'projects-special-buffer-p all)))
+         (special-bufs (cl-remove-if-not #'projects-special-buffer-p all))
          (ordered (append project-bufs special-bufs))
          (names (mapcar #'buffer-name ordered)))
     (switch-to-buffer
@@ -849,8 +863,10 @@ Used by header-line rendering where selected-window is temporarily rebound.")
   ;; keyboard-focused window captured outside of redisplay.
   (let* ((project  (projects-current-window-project))
          (selected (eq (selected-window) projects--focused-window))
-         ;; Use inactive bg everywhere; only the fg/weight differs for active window.
-         (bg      (face-background 'my/workspace-tab-inactive nil t))
+         ;; Use active bg for selected window, inactive bg otherwise.
+         (bg      (if selected
+                      (face-background 'my/workspace-tab-active nil t)
+                    (face-background 'my/workspace-tab-inactive nil t)))
          ;; Use vertical-border fg, then bg, then fallback — same color as window dividers.
          (divider (or (face-foreground 'vertical-border nil t)
                       (face-background 'vertical-border nil t)
@@ -860,8 +876,10 @@ Used by header-line rendering where selected-window is temporarily rebound.")
                         '(:inherit my/workspace-tab-active)
                       '(:inherit my/workspace-tab-inactive)))
          (text   (propertize (format " %s " (or project "no project")) 'face text-face))
-         ;; Filler: inactive bg + same underline, stretches to right edge.
-         (filler (propertize " " 'face `(:background ,bg :underline ,divider)
+         ;; Filler: bg + underline for inactive only, stretches to right edge.
+         (filler (propertize " " 'face (if selected
+                                          `(:background ,bg)
+                                        `(:background ,bg :underline ,divider))
                              'display '(space :align-to right))))
     (concat text filler)))
 
