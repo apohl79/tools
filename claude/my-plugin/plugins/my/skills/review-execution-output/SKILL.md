@@ -6,7 +6,7 @@ description: Use when interactive execute-plan Phase 5 must run a deterministic 
 
 This helper runs the interactive execute-plan code-review loop.
 
-It runs in the same agent as the interactive orchestrator. It coordinates reviewers, prompts, triage, retries, and verification. It does NOT write production code, test code, or apply fixes directly.
+It runs in the same agent as the interactive orchestrator. It coordinates reviewer-team runs, triage, retries, and verification. It does NOT write production code, test code, or apply fixes directly. It does NOT directly launch reviewers — reviewer orchestration is fully delegated to `my:run-reviewer-team`.
 
 ## Required Inputs
 
@@ -28,82 +28,54 @@ If any required input is missing, stop and return `status: blocked` with the mis
 
 - This helper runs in the same agent as the interactive execute-plan orchestrator.
 - Execution orchestration state remains orchestrator-owned. Review state remains helper-owned and separate from execution orchestration state and validation state.
-- Reviewer isolation and review-fix isolation happen only in focused sub-agents underneath this helper.
+- Reviewer isolation happens inside `my:run-reviewer-team` sub-invocations. Fix isolation happens in focused sub-agents dispatched by this helper.
 - Persisted review metadata must include, when relevant, `skill_version`, `current_phase`, `current_attempt`, and the frozen reviewer set.
 - Treat persisted helper-owned review state as authoritative when it exists. Never infer missing review state from memory when persisted state is available.
 
 ## Responsibilities
 
-1. Freeze the reviewer set before the first review attempt.
-   - Select the reviewer set once for this Phase 5 run.
-   - The default required reviewer set is exactly three focused reviewers: one Claude reviewer, one Codex reviewer, and one Gemini reviewer.
-   - Reuse the same reviewer set for every retry in this helper run.
-   - Do not swap reviewers mid-loop unless the orchestrator restarts Phase 5 from scratch with new state.
-   - Freezing the reviewer set is helper-owned, not orchestrator-owned.
-   - Reducing the set below these three reviewers, replacing one with a generic fallback reviewer, or letting the orchestrator pick a smaller set is forbidden unless the helper returns `blocked` with a concrete tool-availability reason recorded in `notes`.
-   - If the orchestrator already ran any direct reviewer outside this helper-owned set, treat that as out-of-band noise: do not count it as Phase 5 progress, and require the full frozen reviewer set to run anyway.
-2. Generate reviewer prompts at the helper level.
-   - The helper owns the reviewer prompt templates, reviewer temp-file naming, and reviewer prompt contract.
-   - Each reviewer prompt must include the exact review scope, changed files, language and recipe context, prior review context, and the reporting contract.
-   - Concern-specific reviewer prompt content belongs here, not in the orchestrator or in any non-interactive transport protocol file.
-3. Apply prior-review-context rules.
-   - Pass forward prior review outcomes so repeated issues are not rediscovered without context.
+1. Delegate each reviewer-team run to `my:run-reviewer-team`.
+   - Pass `plan_context`, `execution_outputs`, `changed_files`, `language`, `recipe_list`, and the accumulated `prior_review_context` for each invocation.
+   - Do not freeze reviewer sets, build reviewer prompts, or launch reviewers directly. That is owned by `my:run-reviewer-team`.
+   - If `my:run-reviewer-team` returns `status: blocked`, propagate `status: blocked` from this helper with the blocker detail.
+   - A review attempt is complete only when `my:run-reviewer-team` returns `status: complete`.
+   - Do not declare `clean`, `fix_required`, or any terminal result from a partial or missing reviewer-team report.
+2. Apply prior-review-context rules.
+   - Pass all prior triage history to each `my:run-reviewer-team` invocation so repeated issues are not rediscovered without context.
    - Distinguish already fixed findings from still-open findings.
    - Preserve rejected or deferred items so later attempts do not silently revive or erase them.
-4. Triage every finding into exactly one bucket:
-   - `FIX_REQUIRED` — the finding is accepted as real, in-scope, and must be fixed before Phase 5 can exit clean.
-   - `VERIFIED_FIX` — a prior `FIX_REQUIRED` issue is now fixed and verified.
-   - `REJECTED` — the finding is invalid, out of scope, or based on incorrect reviewer assumptions.
-   - `DEFERRED` — the finding is real but intentionally left unresolved for a documented follow-up, user decision, or later phase.
-5. Generate review-fix prompts when fixes are required.
+3. Triage the reviewer-team report.
+   - Accept the triage produced by `my:run-reviewer-team` as-is.
+   - Apply helper-level decisions only for `DEFERRED` items that require an explicit user decision.
+4. Generate review-fix prompts when fixes are required.
    - The helper defines the fix prompt content.
    - EXACTLY ONE fix issue per prompt, EXACTLY ONE sub-agent per issue. This is mandatory.
    - If N unresolved `FIX_REQUIRED` issues exist, create N fix prompts and dispatch N fix sub-agents as a batch. Do not merge issues into a single prompt.
    - Each fix prompt must include only the single `FIX_REQUIRED` finding it is responsible for, the exact files in scope, required verification commands, and instructions to avoid unrelated edits.
    - Carry all `VERIFIED_FIX`, `REJECTED`, and `DEFERRED` items forward as context in every fix prompt so fix agents know what has already been handled.
-6. Enforce a review retry cap.
+5. Enforce a review retry cap.
    - Maximum review attempts per Phase 5 run: 3.
    - If unresolved accepted findings remain after the cap, return `status: user_decision_required` with the unresolved findings and the exact decision needed.
-7. Require post-fix regression verification.
-   - After every fix attempt, rerun review-relevant verification before another review pass.
+6. Require post-fix regression verification.
+   - After every fix attempt, rerun review-relevant verification before invoking `my:run-reviewer-team` again.
    - At minimum, rerun any targeted checks needed to confirm the reviewed behavior still works and no regression was introduced in the touched area.
-
-## Reviewer Prompt Contract
-
-Every reviewer prompt must instruct the reviewer to:
-
-- review only the provided plan context, execution outputs, changed files, and prior-review context
-- stay within the current Phase 5 scope
-- avoid making code changes directly
-- report concrete findings with file paths and reasoning
-- classify findings so the helper can map them into `FIX_REQUIRED`, `VERIFIED_FIX`, `REJECTED`, or `DEFERRED`
-- distinguish blocking `FIX_REQUIRED` findings from informational notes and already-verified fixes
-- avoid re-raising findings already marked resolved, rejected, or deferred unless new evidence invalidates the prior decision
-
-The helper must use the full frozen reviewer set for every review attempt, and that frozen set must remain stable across retries in the same run.
-The required default frozen reviewer set is exactly three reviewers: Claude, Codex, and Gemini. Any deviation from that set requires a `blocked` result with explicit tool-availability evidence in `notes`.
-The orchestrator or any caller must not treat a single reviewer, pair of reviewers, or ad-hoc alternate skill as equivalent to the helper-owned three-reviewer batch.
 
 ## Review Loop
 
 1. Validate required inputs.
-2. Freeze the reviewer set.
-3. Build reviewer prompts using the helper-level contract.
-4. Run review and collect findings through the full frozen reviewer set launched underneath this helper.
-   - A review attempt is incomplete until all three reviewer outputs have been collected.
-   - Do not declare `clean`, `fix_required`, or any other terminal review result from a partial reviewer batch.
-5. Triage findings and merge them with prior review context.
-   - If the helper detects that the orchestrator bypassed helper-owned review execution, return `status: blocked` unless the helper can still run the full required reviewer set in the current invocation.
-   - A helper-owned clean result is valid only after the full frozen reviewer set has completed and been triaged.
-6. If no unresolved `FIX_REQUIRED` findings remain, return `status: clean`.
-7. If unresolved `FIX_REQUIRED` findings remain and the retry cap is not exhausted:
+2. Invoke `my:run-reviewer-team` with all required inputs and the current `prior_review_context`.
+3. If `my:run-reviewer-team` returns `status: blocked`, return `status: blocked` immediately with the blocker detail.
+4. Merge the returned findings with prior review context.
+   - If the helper detects that the orchestrator bypassed helper-owned review execution, return `status: blocked` unless this invocation can still run a full reviewer-team pass via `my:run-reviewer-team`.
+5. If no unresolved `FIX_REQUIRED` findings remain, return `status: clean`.
+6. If unresolved `FIX_REQUIRED` findings remain and the retry cap is not exhausted:
    - generate exactly one review-fix prompt per unresolved `FIX_REQUIRED` finding
    - dispatch exactly one focused fix sub-agent per prompt as a batch — never merge multiple issues into a single sub-agent
    - hand control back to the orchestrator through `status: fix_required`
-   - require post-fix regression verification before the next review attempt
-8. If the helper cannot continue because input, evidence, or execution state is insufficient, return `status: blocked`.
-9. If the retry cap is exhausted and unresolved `FIX_REQUIRED` findings remain, return `status: user_decision_required`.
-10. Never blur Phase 5 boundaries with validation logic. Review state changes stay inside helper-owned review state until the helper returns its deterministic result.
+   - require post-fix regression verification before the next reviewer-team run
+7. If the helper cannot continue because input, evidence, or execution state is insufficient, return `status: blocked`.
+8. If the retry cap is exhausted and unresolved `FIX_REQUIRED` findings remain, return `status: user_decision_required`.
+9. Never blur Phase 5 boundaries with validation logic. Review state changes stay inside helper-owned review state until the helper returns its deterministic result.
 
 ## Completion Contract
 
@@ -127,7 +99,7 @@ Allowed `status` values:
 Use when review is complete and no unresolved `FIX_REQUIRED` findings remain.
 
 - `next_step`: proceed to interactive execute-plan Phase 6
-- `notes`: reviewer set used, confirmation that all three required reviewers completed, review attempt count, triage summary, and any non-blocking observations
+- `notes`: reviewer set used (from `my:run-reviewer-team` report), confirmation that all three required reviewers completed, review attempt count, triage summary, and any non-blocking observations
 
 ### `status: fix_required`
 Use when accepted findings require a delegated fix pass.
