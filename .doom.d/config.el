@@ -136,23 +136,33 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 ;; after exit. This reliably undoes any size changes transient introduces.
 (defvar my/projects-pre-transient-config nil)
 
-(defun my/projects-transient-save-config ()
-  (when (and (fboundp 'projects-multi-project-view-p)
-             (projects-multi-project-view-p))
-    (setq my/projects-pre-transient-config (current-window-configuration))))
-
 (defun my/projects-transient-restore-config ()
+  (message "[transient-layout] post-exit-hook fired, config saved=%s"
+           (if my/projects-pre-transient-config "yes" "no"))
   (when my/projects-pre-transient-config
     (let ((config my/projects-pre-transient-config))
       (setq my/projects-pre-transient-config nil)
       (run-with-timer
-       0.05 nil
+       0.1 nil
        (lambda ()
-         (ignore-errors (set-window-configuration config)))))))
+         (message "[transient-layout] restoring window config")
+         (condition-case err
+             (set-window-configuration config)
+           (error (message "[transient-layout] restore FAILED: %s" err))))))))
 
 (after! transient
-  (add-hook 'transient-setup-buffer-hook #'my/projects-transient-save-config)
-  (add-hook 'transient-post-exit-hook    #'my/projects-transient-restore-config))
+  ;; transient-setup-buffer-hook only fires on first buffer creation (setup=t).
+  ;; Advise transient--show directly so we save before every display-buffer call.
+  (defun my/projects-transient--pre-show ()
+    (let ((multi (and (fboundp 'projects-multi-project-view-p)
+                      (projects-multi-project-view-p)))
+          (win-live (window-live-p transient--window)))
+      (message "[transient-layout] pre-show: multi=%s transient-win-live=%s" multi win-live)
+      (when (and multi (not win-live))
+        (message "[transient-layout] saving window config")
+        (setq my/projects-pre-transient-config (current-window-configuration)))))
+  (advice-add 'transient--show :before #'my/projects-transient--pre-show)
+  (add-hook 'transient-post-exit-hook #'my/projects-transient-restore-config))
 
 ;; Projects tab-bar integration
 ;; Uses my/workspace-tab-active / my/workspace-tab-inactive faces (defined in +functions.el)
