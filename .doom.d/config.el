@@ -488,9 +488,14 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
                                             (and (frame-live-p f)
                                                  (display-graphic-p f)))
                                           (frame-list))))
+                  (message "[mini-frame] around: graphic=%s gframe=%s fn=%s"
+                           (display-graphic-p) gframe fn)
                   (if gframe
                       (with-selected-frame gframe
+                        (message "[mini-frame] calling with-selected-frame %s, graphic now=%s"
+                                 gframe (display-graphic-p))
                         (apply orig fn args))
+                    (message "[mini-frame] no graphic frame found, passing through")
                     (apply orig fn args)))))
   (mini-frame-mode 1))
 
