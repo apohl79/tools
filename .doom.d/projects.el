@@ -730,7 +730,7 @@ mode the frame-wide current project is used."
 (defun projects-info-open-vterm ()
   "Open a vterm in the current project's root directory."
   (interactive)
-  (vterm))
+  (+vterm/here nil))
 
 (defvar projects-info-mode-map
   (let ((map (make-sparse-keymap)))
