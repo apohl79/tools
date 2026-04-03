@@ -1236,8 +1236,10 @@ Idempotent: safe to call multiple times."
     (advice-add 'vterm-other-window :before #'projects--set-window-project-dir)
     (with-eval-after-load 'eat
       (advice-add 'eat :before #'projects--set-window-project-dir))
-    (with-eval-after-load 'claude-code
-      (advice-add 'claude-code :before #'projects--set-window-project-dir))
+    ;; advice-add on an unloaded symbol is safe — Emacs stores it for when
+    ;; the function is defined. Do NOT wrap in with-eval-after-load: if
+    ;; claude-code is already loaded at hook-setup time the callback never fires.
+    (advice-add 'claude-code :before #'projects--set-window-project-dir)
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'dired-mode-hook #'projects--find-file-hook)
