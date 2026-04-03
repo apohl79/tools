@@ -470,23 +470,12 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (use-package! mini-frame
   :config
   (setq mini-frame-show-parameters
-        (lambda ()
-          (let* ((fw (frame-pixel-width))
-                 (fh (frame-pixel-height))
-                 (w  (round (* fw 0.60)))
-                 (x  (round (/ (- fw w) 2.0)))
-                 (y  (round (* fh 0.28))))
-            `((left   . ,x)
-              (top    . ,y)
-              (width  . (text-pixels . ,w))
-              (height . 1)))))
-  (setq mini-frame-resize          'grow-only
+        '((top   . 0.28)
+          (width . 0.60)
+          (left  . 0.20))
+        mini-frame-resize           'grow-only
         mini-frame-resize-max-height 20
-        mini-frame-ignore-commands
-        '(read-passwd
-          read-string
-          y-or-n-p
-          yes-or-no-p))
+        mini-frame-ignore-commands  '(read-passwd y-or-n-p yes-or-no-p))
   (mini-frame-mode 1))
 
 ;; Dim inactive buffers to highlight the active one
