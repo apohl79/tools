@@ -644,6 +644,10 @@ mode the frame-wide current project is used."
            (bname (buffer-name buf))
            (info-buf-name (when proj (projects--info-buffer-name proj)))
            (proj-bufs (when proj (plist-get (gethash proj projects--table) :buffers))))
+      (message "[projects] fix-windows: win=%s proj=%s buf=%s info=%s pinned=%s in-proj=%s"
+               win proj bname info-buf-name
+               (projects--pinned-buffer-p buf)
+               (and proj-bufs (memq buf proj-bufs) t))
       (unless (or (null proj)
                   (string= bname info-buf-name)
                   (projects--pinned-buffer-p buf)
@@ -654,8 +658,23 @@ mode the frame-wide current project is used."
                             (not (eq b buf))
                             (memq b proj-bufs)))
                      (buffer-list))))
+          (message "[projects] fix-windows: switching win=%s to %s (next=%s)"
+                   win (or (and next (buffer-name next)) (concat "*project: " proj "*")) next)
           (with-selected-window win
             (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))
+
+(defun projects-inspect (name)
+  "Show directory and buffer list for project NAME in *Messages*."
+  (interactive
+   (list (completing-read "Inspect project: " (projects-names) nil t
+                          nil nil (or (projects-current-window-project) (projects-current)))))
+  (let ((dir   (projects-dir name))
+        (bufs  (projects-buffers name))
+        (entry (gethash name projects--table)))
+    (message "[projects] %s  dir=%s  buffers=(%s)  hidden=%s"
+             name dir
+             (mapconcat #'buffer-name bufs " ")
+             (projects-hidden-p name))))
 
 (defun projects-switch-buffer ()
   "Switch to a buffer belonging to the active project scope."
@@ -1182,6 +1201,15 @@ Updates only the per-frame project; does not affect other frames."
       ;; is deferred until next event loop; a timer fires after current cycle completes.
       (run-with-timer 0 nil #'projects--tab-bar-refresh))))
 
+(defun projects--set-window-project-dir (&rest _)
+  "Set `default-directory' to the current window's project root.
+Used as :before advice on vterm/eat so the terminal opens in the right dir."
+  (when (projects-multi-project-view-p)
+    (when-let* ((proj (projects-current-window-project))
+                (dir  (projects-dir proj)))
+      (message "[projects] set-window-project-dir: %s -> %s" proj dir)
+      (setq default-directory dir))))
+
 (defvar projects--hooks-installed-p nil
   "Non-nil if projects hooks have already been installed.")
 
@@ -1192,7 +1220,14 @@ Idempotent: safe to call multiple times."
     (setq projects--hooks-installed-p t)
     (add-hook 'find-file-hook #'projects--find-file-hook)
     (add-hook 'kill-buffer-hook #'projects--cleanup-dead-buffers)
-    ;; Register terminal and dired buffers with the current project on creation
+    ;; Register terminal and dired buffers with the current project on creation.
+    ;; For vterm/eat: also set default-directory to the window project's root
+    ;; before the terminal opens, since the buffer is created with whatever
+    ;; default-directory was current — the mode-hook fires too late to change it.
+    (advice-add 'vterm :before #'projects--set-window-project-dir)
+    (advice-add 'vterm-other-window :before #'projects--set-window-project-dir)
+    (with-eval-after-load 'eat
+      (advice-add 'eat :before #'projects--set-window-project-dir))
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'dired-mode-hook #'projects--find-file-hook)
