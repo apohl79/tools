@@ -490,7 +490,12 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   (require 'vertico-buffer)
   (setq vertico-buffer-display-action '(display-buffer-same-window))
   (add-hook 'minibuffer-setup-hook #'my/vertico-buffer-setup)
-  (add-hook 'minibuffer-exit-hook  #'my/vertico-buffer-teardown))
+  ;; Depth 100: run after vertico-buffer's own restore hook (added per-session
+  ;; at default depth), so the project window is already restored before we
+  ;; turn off vertico-buffer-mode. Without this, (vertico-buffer-mode -1) fires
+  ;; first and the restore logic finds the mode already off and skips cleanup,
+  ;; leaving the minibuffer buffer sitting in the project window.
+  (add-hook 'minibuffer-exit-hook  #'my/vertico-buffer-teardown 100))
 
 ;; Dim inactive buffers to highlight the active one
 (use-package! dimmer
