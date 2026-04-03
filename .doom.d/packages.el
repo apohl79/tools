@@ -72,6 +72,9 @@
 ;; Highlight active buffer by dimming inactive ones
 (package! dimmer)
 
+;; Minibuffer in a centered child frame (no window layout disruption)
+(package! mini-frame)
+
 ;; Add border to active window
 (package! selected-window-accent-mode)
 
