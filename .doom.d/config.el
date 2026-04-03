@@ -1,5 +1,4 @@
 (message "Loading configuration...")
-(message "*** General")
 
 (load! "+functions")
 
@@ -57,7 +56,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 ;; Ensure proper terminal setup for emacsclient frames (defined in +functions.el).
 (add-hook 'after-make-frame-functions #'my/setup-terminal-frame)
 
-(message "*** General / General behavior")
 
 ;; Make all "yes or no" prompts show "y or n" instead
 (fset 'yes-or-no-p 'y-or-n-p)
@@ -100,7 +98,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 ;; C-x C-c: close current frame, or kill Emacs if it's the last one (defined in +functions.el).
 (global-set-key (kbd "C-x C-c") #'my/close-frame-or-kill-emacs)
 
-(message "*** General / Dashboard")
 
 ;; Add the projects widget to the dashboard (without the shortmenu)
 ;; Widget function is defined in +functions.el
@@ -174,7 +171,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   (tab-bar-mode 1)
   (add-hook 'projects-switch-hook #'projects--tab-bar-refresh))
 
-(message "*** General / Org")
 
 (setq org-directory "~/ownCloud/org"
       org-agenda-files (directory-files-recursively org-directory "\\.org$")
@@ -239,7 +235,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (set-terminal-coding-system 'utf-8)
 (set-keyboard-coding-system 'utf-8)
 
-(message "*** Key Bindings")
 
 
 (undefine-key! "C-z" "s-w" "s-+" "s--")
@@ -397,7 +392,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (after! undo-fu
   (map! :map undo-fu-mode-map "C-?" #'undo-fu-only-redo))
 
-(message "*** Looks")
 
 (setq doom-theme 'doom-city-lights)
 
@@ -466,38 +460,27 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   ;; treemacs png/svg special icons don't look great, so we patch the icon set
   (add-hook 'treemacs-mode-hook 'my/update-treemacs-icons))
 
-;; Minibuffer in a centered child frame — no window layout disruption
-(use-package! mini-frame
-  :demand t
-  :config
-  (add-to-list 'mini-frame-advice-functions 'completing-read)
-  (setq mini-frame-show-parameters
-        '((top   . 0.28)
-          (width . 0.60)
-          (left  . 0.20))
-        mini-frame-resize           'grow-only
-        mini-frame-resize-max-height 20
-        mini-frame-ignore-commands  '(read-passwd y-or-n-p yes-or-no-p))
-  ;; In daemon mode (display-graphic-p) returns nil when the selected frame is
-  ;; the daemon's non-graphic initial frame, causing mini-frame to bail out.
-  ;; Wrap mini-frame-read-from-minibuffer so it always runs with a live
-  ;; graphic frame selected — which is what the user is actually interacting with.
-  (advice-add 'mini-frame-read-from-minibuffer :around
-              (lambda (orig fn &rest args)
-                (let ((gframe (cl-find-if (lambda (f)
-                                            (and (frame-live-p f)
-                                                 (display-graphic-p f)))
-                                          (frame-list))))
-                  (message "[mini-frame] around: graphic=%s gframe=%s fn=%s"
-                           (display-graphic-p) gframe fn)
-                  (if gframe
-                      (with-selected-frame gframe
-                        (message "[mini-frame] calling with-selected-frame %s, graphic now=%s"
-                                 gframe (display-graphic-p))
-                        (apply orig fn args))
-                    (message "[mini-frame] no graphic frame found, passing through")
-                    (apply orig fn args)))))
-  (mini-frame-mode 1))
+;; Preserve multi-project window layout while the minibuffer is active.
+;; In terminal Emacs, the minibuffer grows (via resize-mini-windows) and
+;; steals height from regular windows. window-preserve-size prevents that
+;; for all non-side, non-minibuffer windows during each minibuffer session.
+(defun my/minibuffer-preserve-layout ()
+  (when (and (fboundp 'projects-multi-project-view-p)
+             (projects-multi-project-view-p))
+    (dolist (w (window-list nil 0))
+      (unless (or (window-minibuffer-p w)
+                  (window-parameter w 'window-side))
+        (window-preserve-size w nil t)))))
+
+(defun my/minibuffer-release-layout ()
+  (when (and (fboundp 'projects-multi-project-view-p)
+             (projects-multi-project-view-p))
+    (dolist (w (window-list nil 0))
+      (unless (window-parameter w 'window-side)
+        (window-preserve-size w nil nil)))))
+
+(add-hook 'minibuffer-setup-hook #'my/minibuffer-preserve-layout)
+(add-hook 'minibuffer-exit-hook  #'my/minibuffer-release-layout)
 
 ;; Dim inactive buffers to highlight the active one
 (use-package! dimmer
@@ -598,7 +581,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
                 " " filename-and-process)
           (mark " " (name 16 -1) " " filename))))
 
-(message "*** Coding / General")
 
 ;; Compilation buffer: stop at the first error and skip warnings
 (setq compilation-scroll-output 'next-error
@@ -621,13 +603,11 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 
 (setq projectile-completion-system 'default)
 
-(message "*** Coding / Git")
 
 ;; Make the git summary line longer
 (after! magit
   (setq git-commit-summary-max-length 120))
 
-(message "*** Coding / LSP - lsp-mode")
 (use-package! lsp-mode
   :defer t
   :hook ((c++-ts-mode . lsp-deferred)
@@ -699,7 +679,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
             (setq-local c-ts-mode-indent-offset 4)
             (setq-local tab-width 4)))
 
-(message "*** Coding / Mode Mapping")
 
 (setq auto-mode-alist
       (append '(("\\.app$"                  . c++-ts-mode)
@@ -747,7 +726,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   :custom
   (jtsx-enable-all-syntax-highlighting-features t))
 
-(message "*** Coding / Tree-Sitter")
 
 ;;(add-to-list 'major-mode-remap-alist '(js-ts-mode . js-mode))
 ;;(add-to-list 'major-mode-remap-alist '(typescript-ts-mode . typescript-mode))
@@ -811,7 +789,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
                     indent-region-function 'my/google-java-format-indent-region)
               (add-hook 'before-save-hook 'google-java-format-buffer nil 'local)))
 
-(message "*** Coding / Templates")
 
 ;; Set up default file templates based on the project
 (set-file-template! "\\.hpp$" :trigger "__hpp" :mode 'c++-mode)
@@ -826,7 +803,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
             (when (and (= (buffer-size) 0))
               (+file-templates/apply))))
 
-(message "*** Coding / Terminal")
 
 (setq vterm-disable-bold-font t
       vterm-disable-underline t
