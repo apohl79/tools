@@ -129,7 +129,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
     (set-face-attribute 'my/workspace-tab-active nil
                         :background (doom-color 'blue) :foreground (doom-color 'bg) :weight 'bold)
     (set-face-attribute 'my/workspace-tab-inactive nil
-                        :background "#000000" :foreground "#B8860B")))
+                        :background (face-foreground 'vertical-border nil t) :foreground "#B8860B")))
 
 ;; Preserve multi-project window layout when transient menus open/close.
 ;; save-window-configuration causes buffer-assignment conflicts that trigger
@@ -470,10 +470,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (use-package! mini-frame
   :demand t
   :config
-  ;; Vertico advises completing-read-default (not read-from-minibuffer), so
-  ;; it intercepts before mini-frame's default advice target. Adding
-  ;; completing-read here ensures mini-frame creates the child frame first,
-  ;; then vertico sets up inside it.
   (add-to-list 'mini-frame-advice-functions 'completing-read)
   (setq mini-frame-show-parameters
         '((top   . 0.28)
@@ -482,6 +478,18 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
         mini-frame-resize           'grow-only
         mini-frame-resize-max-height 20
         mini-frame-ignore-commands  '(read-passwd y-or-n-p yes-or-no-p))
+  ;; Diagnostics: trace every call through mini-frame's advice and log why
+  ;; it bails out. Check *Messages* after invoking any completing-read command.
+  (advice-add 'mini-frame-read-from-minibuffer :before
+              (lambda (fn &rest _)
+                (message "[mini-frame] advice fired: fn=%s cmd=%s graphic=%s minibufp=%s isearch=%s ignore-cmd=%s mode=%s"
+                         fn this-command
+                         (display-graphic-p)
+                         (minibufferp)
+                         isearch-mode
+                         (and (symbolp this-command)
+                              (member this-command mini-frame-ignore-commands))
+                         mini-frame-mode)))
   (mini-frame-mode 1))
 
 ;; Dim inactive buffers to highlight the active one
