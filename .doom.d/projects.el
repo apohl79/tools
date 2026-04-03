@@ -30,7 +30,8 @@
     "^\\*doom"
     "^\\*vterm"
     "^\\*eat"
-    "^COMMIT_EDITMSG$")
+    "^COMMIT_EDITMSG$"
+    "^ \\*Minibuf")
   "Buffers matching these patterns are global (visible in all projects).")
 
 ;;; ---------------------------------------------------------------------------
@@ -593,21 +594,16 @@ correct window project, and refresh the header-line-format."
                (win-proj (window-parameter win 'projects-project))
                (buf-proj (buffer-local-value 'projects--buffer-project buf)))
           (when win-proj
-            ;; Re-register non-special buffers if they belong to a different project.
-            ;; Skip if buf already belongs to another window that correctly owns it —
-            ;; the same buffer can appear in two windows (different projects) and
-            ;; blindly re-registering each causes a ping-pong loop.
+            ;; Only register buffers that have no project yet (buf-proj=nil).
+            ;; Buffers already assigned to a project keep their assignment
+            ;; regardless of which window displays them — use projects-move-buffer
+            ;; for intentional reassignment. This prevents vertico-buffer-mode
+            ;; and claude-display from re-homing buffers to the wrong project.
             (when (and (not (projects-special-buffer-p buf))
                        (not (string-match-p "^\\*project: " (buffer-name buf)))
-                       (not (equal buf-proj win-proj))
-                       (not (cl-some (lambda (other)
-                                       (and (not (eq other win))
-                                            (eq (window-buffer other) buf)
-                                            (equal buf-proj
-                                                   (window-parameter other 'projects-project))))
-                                     (window-list frame 0))))
-              (message "[projects] window-buffer-change: win=%s buf=%s old-proj=%s new-proj=%s"
-                       win (buffer-name buf) buf-proj win-proj)
+                       (null buf-proj))
+              (message "[projects] window-buffer-change: win=%s buf=%s old-proj=nil new-proj=%s"
+                       win (buffer-name buf) win-proj)
               (projects-register-buffer buf win-proj))
             ;; Ensure header-line-format is set for every buffer in a project window
             (with-current-buffer buf
