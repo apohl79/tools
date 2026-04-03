@@ -1236,6 +1236,8 @@ Idempotent: safe to call multiple times."
     (advice-add 'vterm-other-window :before #'projects--set-window-project-dir)
     (with-eval-after-load 'eat
       (advice-add 'eat :before #'projects--set-window-project-dir))
+    (with-eval-after-load 'claude-code
+      (advice-add 'claude-code :before #'projects--set-window-project-dir))
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'dired-mode-hook #'projects--find-file-hook)

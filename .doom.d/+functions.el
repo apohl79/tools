@@ -900,6 +900,12 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
                                           (car other-windows) current-window)
                                  (car other-windows)))))
                    (set-window-buffer win buffer)
+                   ;; Re-register to the target window's project — find-file-hook
+                   ;; may have already assigned the buffer to the window where it
+                   ;; was created, which is wrong after claude-display moves it.
+                   (when (fboundp 'projects-register-buffer)
+                     (when-let ((wp (window-parameter win 'projects-project)))
+                       (projects-register-buffer buffer wp)))
                    win))
 
                 ;; Fallback - should not happen
