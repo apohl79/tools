@@ -125,7 +125,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 ;; Theme-aware colors (`:height` is ignored in TTY, which is fine)
 (add-hook 'doom-load-theme-hook
   (lambda ()
-    (set-face-attribute 'tab-bar nil :background (doom-darken (doom-color 'bg-alt) 0.2) :box nil :height 0.9)
+    (set-face-attribute 'tab-bar nil :background (face-foreground 'vertical-border nil t) :box nil :height 0.9)
     (set-face-attribute 'my/workspace-tab-active nil
                         :background (doom-color 'blue) :foreground (doom-color 'bg) :weight 'bold)
     (set-face-attribute 'my/workspace-tab-inactive nil
@@ -470,6 +470,11 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (use-package! mini-frame
   :demand t
   :config
+  ;; Vertico advises completing-read-default (not read-from-minibuffer), so
+  ;; it intercepts before mini-frame's default advice target. Adding
+  ;; completing-read here ensures mini-frame creates the child frame first,
+  ;; then vertico sets up inside it.
+  (add-to-list 'mini-frame-advice-functions 'completing-read)
   (setq mini-frame-show-parameters
         '((top   . 0.28)
           (width . 0.60)
