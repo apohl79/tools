@@ -461,6 +461,37 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   (add-hook 'treemacs-mode-hook 'my/update-treemacs-icons))
 
 
+;; In multi-view mode, show vertico candidates inside the project window
+;; (same window that triggered completing-read) instead of growing the
+;; minibuffer and disrupting the layout.
+;;
+;; vertico-buffer--setup uses with-minibuffer-selected-window, so
+;; display-buffer-same-window places candidates in the project window.
+;; Our global minibuffer-setup-hook fires before vertico's buffer-local
+;; setup hook, so enabling vertico-buffer-mode here takes effect.
+(defvar my/vertico-buffer-enabled-count 0
+  "Nesting counter: how many multi-view minibuffer sessions are active.")
+
+(defun my/vertico-buffer-setup ()
+  (when (and (fboundp 'projects-multi-project-view-p)
+             (projects-multi-project-view-p))
+    (cl-incf my/vertico-buffer-enabled-count)
+    (unless vertico-buffer-mode
+      (vertico-buffer-mode 1))))
+
+(defun my/vertico-buffer-teardown ()
+  (when (> my/vertico-buffer-enabled-count 0)
+    (cl-decf my/vertico-buffer-enabled-count)
+    (when (and (= my/vertico-buffer-enabled-count 0)
+               vertico-buffer-mode)
+      (vertico-buffer-mode -1))))
+
+(after! vertico
+  (require 'vertico-buffer)
+  (setq vertico-buffer-display-action '(display-buffer-same-window))
+  (add-hook 'minibuffer-setup-hook #'my/vertico-buffer-setup)
+  (add-hook 'minibuffer-exit-hook  #'my/vertico-buffer-teardown))
+
 ;; Dim inactive buffers to highlight the active one
 (use-package! dimmer
   :config
