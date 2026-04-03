@@ -1236,10 +1236,18 @@ Idempotent: safe to call multiple times."
     (advice-add 'vterm-other-window :before #'projects--set-window-project-dir)
     (with-eval-after-load 'eat
       (advice-add 'eat :before #'projects--set-window-project-dir))
-    ;; advice-add on an unloaded symbol is safe — Emacs stores it for when
-    ;; the function is defined. Do NOT wrap in with-eval-after-load: if
-    ;; claude-code is already loaded at hook-setup time the callback never fires.
-    (advice-add 'claude-code :before #'projects--set-window-project-dir)
+    ;; claude-code--directory uses (project-root (project-current)) which walks
+    ;; up to the git root — ignoring default-directory. In multi-view mode,
+    ;; override it to return the window project's registered dir directly.
+    (advice-add 'claude-code--directory :around
+                (lambda (orig)
+                  (if (and (projects-multi-project-view-p)
+                           (projects-current-window-project))
+                      (let ((dir (projects-dir (projects-current-window-project))))
+                        (message "[projects] claude-code--directory override: %s -> %s"
+                                 (projects-current-window-project) dir)
+                        dir)
+                    (funcall orig))))
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'dired-mode-hook #'projects--find-file-hook)
