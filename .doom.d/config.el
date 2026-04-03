@@ -468,6 +468,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 
 ;; Minibuffer in a centered child frame — no window layout disruption
 (use-package! mini-frame
+  :demand t
   :config
   (setq mini-frame-show-parameters
         '((top   . 0.28)
