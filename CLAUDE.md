@@ -14,6 +14,10 @@
 
 When running Emacs batch tests, NEVER use `~/tools/emacs` or any wrapper that may connect to a running Emacs daemon. ALWAYS call `/opt/homebrew/bin/emacs` directly.
 
+### RUNTIME
+
+Always running in **terminal mode** (`emacsclient -t`). No GUI frames ever. GUI-only solutions (child frames, posframe, mini-frame) will never work.
+
 ### DEBUGGING
 
 Before making any speculative fix to Emacs config, add diagnostic `message` calls first so the problem is understood from logs, not guessed. Never do trial-and-error without logging.

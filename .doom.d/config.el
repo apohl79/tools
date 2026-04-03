@@ -460,27 +460,6 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   ;; treemacs png/svg special icons don't look great, so we patch the icon set
   (add-hook 'treemacs-mode-hook 'my/update-treemacs-icons))
 
-;; Preserve multi-project window layout while the minibuffer is active.
-;; In terminal Emacs, the minibuffer grows (via resize-mini-windows) and
-;; steals height from regular windows. window-preserve-size prevents that
-;; for all non-side, non-minibuffer windows during each minibuffer session.
-(defun my/minibuffer-preserve-layout ()
-  (when (and (fboundp 'projects-multi-project-view-p)
-             (projects-multi-project-view-p))
-    (dolist (w (window-list nil 0))
-      (unless (or (window-minibuffer-p w)
-                  (window-parameter w 'window-side))
-        (window-preserve-size w nil t)))))
-
-(defun my/minibuffer-release-layout ()
-  (when (and (fboundp 'projects-multi-project-view-p)
-             (projects-multi-project-view-p))
-    (dolist (w (window-list nil 0))
-      (unless (window-parameter w 'window-side)
-        (window-preserve-size w nil nil)))))
-
-(add-hook 'minibuffer-setup-hook #'my/minibuffer-preserve-layout)
-(add-hook 'minibuffer-exit-hook  #'my/minibuffer-release-layout)
 
 ;; Dim inactive buffers to highlight the active one
 (use-package! dimmer
