@@ -478,18 +478,20 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
         mini-frame-resize           'grow-only
         mini-frame-resize-max-height 20
         mini-frame-ignore-commands  '(read-passwd y-or-n-p yes-or-no-p))
-  ;; Diagnostics: trace every call through mini-frame's advice and log why
-  ;; it bails out. Check *Messages* after invoking any completing-read command.
-  (advice-add 'mini-frame-read-from-minibuffer :before
-              (lambda (fn &rest _)
-                (message "[mini-frame] advice fired: fn=%s cmd=%s graphic=%s minibufp=%s isearch=%s ignore-cmd=%s mode=%s"
-                         fn this-command
-                         (display-graphic-p)
-                         (minibufferp)
-                         isearch-mode
-                         (and (symbolp this-command)
-                              (member this-command mini-frame-ignore-commands))
-                         mini-frame-mode)))
+  ;; In daemon mode (display-graphic-p) returns nil when the selected frame is
+  ;; the daemon's non-graphic initial frame, causing mini-frame to bail out.
+  ;; Wrap mini-frame-read-from-minibuffer so it always runs with a live
+  ;; graphic frame selected — which is what the user is actually interacting with.
+  (advice-add 'mini-frame-read-from-minibuffer :around
+              (lambda (orig fn &rest args)
+                (let ((gframe (cl-find-if (lambda (f)
+                                            (and (frame-live-p f)
+                                                 (display-graphic-p f)))
+                                          (frame-list))))
+                  (if gframe
+                      (with-selected-frame gframe
+                        (apply orig fn args))
+                    (apply orig fn args)))))
   (mini-frame-mode 1))
 
 ;; Dim inactive buffers to highlight the active one
