@@ -593,10 +593,19 @@ correct window project, and refresh the header-line-format."
                (win-proj (window-parameter win 'projects-project))
                (buf-proj (buffer-local-value 'projects--buffer-project buf)))
           (when win-proj
-            ;; Re-register non-special buffers if they belong to a different project
+            ;; Re-register non-special buffers if they belong to a different project.
+            ;; Skip if buf already belongs to another window that correctly owns it —
+            ;; the same buffer can appear in two windows (different projects) and
+            ;; blindly re-registering each causes a ping-pong loop.
             (when (and (not (projects-special-buffer-p buf))
                        (not (string-match-p "^\\*project: " (buffer-name buf)))
-                       (not (equal buf-proj win-proj)))
+                       (not (equal buf-proj win-proj))
+                       (not (cl-some (lambda (other)
+                                       (and (not (eq other win))
+                                            (eq (window-buffer other) buf)
+                                            (equal buf-proj
+                                                   (window-parameter other 'projects-project))))
+                                     (window-list frame 0))))
               (message "[projects] window-buffer-change: win=%s buf=%s old-proj=%s new-proj=%s"
                        win (buffer-name buf) buf-proj win-proj)
               (projects-register-buffer buf win-proj))

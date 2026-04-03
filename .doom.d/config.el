@@ -132,37 +132,37 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
                         :background "#000000" :foreground "#B8860B")))
 
 ;; Preserve multi-project window layout when transient menus open/close.
-;; Save the full window configuration before transient opens, restore it
-;; after exit. This reliably undoes any size changes transient introduces.
-(defvar my/projects-pre-transient-config nil)
+;; save-window-configuration causes buffer-assignment conflicts that trigger
+;; registration ping-pong. Instead save/restore only line-based window heights.
+(defvar my/projects-pre-transient-sizes nil)
 
-(defun my/projects-transient-restore-config ()
-  (message "[transient-layout] post-exit-hook fired, config saved=%s"
-           (if my/projects-pre-transient-config "yes" "no"))
-  (when my/projects-pre-transient-config
-    (let ((config my/projects-pre-transient-config))
-      (setq my/projects-pre-transient-config nil)
+(defun my/projects-transient-restore-sizes ()
+  (when my/projects-pre-transient-sizes
+    (let ((saved my/projects-pre-transient-sizes))
+      (setq my/projects-pre-transient-sizes nil)
       (run-with-timer
        0.1 nil
        (lambda ()
-         (message "[transient-layout] restoring window config")
-         (condition-case err
-             (set-window-configuration config)
-           (error (message "[transient-layout] restore FAILED: %s" err))))))))
+         (dolist (entry saved)
+           (let* ((w       (car entry))
+                  (target  (cdr entry))
+                  (delta   (- target (window-total-height w))))
+             (when (and (window-live-p w) (/= delta 0))
+               (ignore-errors (window-resize w delta))))))))))
 
 (after! transient
-  ;; transient-setup-buffer-hook only fires on first buffer creation (setup=t).
-  ;; Advise transient--show directly so we save before every display-buffer call.
   (defun my/projects-transient--pre-show ()
-    (let ((multi (and (fboundp 'projects-multi-project-view-p)
-                      (projects-multi-project-view-p)))
-          (win-live (window-live-p transient--window)))
-      (message "[transient-layout] pre-show: multi=%s transient-win-live=%s" multi win-live)
-      (when (and multi (not win-live))
-        (message "[transient-layout] saving window config")
-        (setq my/projects-pre-transient-config (current-window-configuration)))))
+    (when (and (fboundp 'projects-multi-project-view-p)
+               (projects-multi-project-view-p)
+               (not (window-live-p transient--window)))
+      (setq my/projects-pre-transient-sizes
+            (delq nil
+                  (mapcar (lambda (w)
+                            (unless (window-parameter w 'window-side)
+                              (cons w (window-total-height w))))
+                          (window-list nil 0))))))
   (advice-add 'transient--show :before #'my/projects-transient--pre-show)
-  (add-hook 'transient-post-exit-hook #'my/projects-transient-restore-config))
+  (add-hook 'transient-post-exit-hook #'my/projects-transient-restore-sizes))
 
 ;; Projects tab-bar integration
 ;; Uses my/workspace-tab-active / my/workspace-tab-inactive faces (defined in +functions.el)
