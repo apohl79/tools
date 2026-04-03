@@ -727,6 +727,11 @@ mode the frame-wide current project is used."
   (interactive)
   (call-interactively (key-binding (kbd "C-c p v"))))
 
+(defun projects-info-open-vterm ()
+  "Open a vterm in the current project's root directory."
+  (interactive)
+  (vterm))
+
 (defvar projects-info-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "n") #'claude-code)
@@ -734,6 +739,7 @@ mode the frame-wide current project is used."
     (define-key map (kbd "r") #'claude-code-resume)
     (define-key map (kbd "d") #'projects-info-open-directory)
     (define-key map (kbd "g") #'projects-info-open-magit)
+    (define-key map (kbd "v") #'projects-info-open-vterm)
     map)
   "Keymap for `projects-info-mode'.")
 
@@ -790,7 +796,9 @@ Returns the buffer."
         (insert (propertize "    d" 'face 'font-lock-keyword-face))
         (insert "  open dir  ")
         (insert (propertize "     g" 'face 'font-lock-keyword-face))
-        (insert "  magit\n"))
+        (insert "  magit  ")
+        (insert (propertize "     v" 'face 'font-lock-keyword-face))
+        (insert "  vterm\n"))
       (unless (derived-mode-p 'projects-info-mode)
         (projects-info-mode))
       (goto-char (point-min)))
