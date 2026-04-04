@@ -650,7 +650,10 @@ mode the frame-wide current project is used."
                (and proj-bufs (memq buf proj-bufs) t))
       (unless (or (null proj)
                   (string= bname info-buf-name)
-                  (projects--pinned-buffer-p buf)
+                  ;; Only skip displacement if the pinned buffer actually belongs
+                  ;; to this project — a vterm from another project must still be
+                  ;; replaced (pinned protects legitimate occupants, not intruders).
+                  (and (projects--pinned-buffer-p buf) (memq buf proj-bufs))
                   (memq buf proj-bufs))
         (let ((next (cl-find-if
                      (lambda (b)
