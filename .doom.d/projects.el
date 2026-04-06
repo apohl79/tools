@@ -691,7 +691,13 @@ mode the frame-wide current project is used."
                          (cl-remove-if-not
                           #'buffer-live-p
                           (plist-get (gethash proj projects--table) :buffers))))
-         (special-bufs (cl-remove-if-not #'projects-special-buffer-p all))
+         (special-bufs (cl-remove-if-not
+                         (lambda (b)
+                           (and (projects-special-buffer-p b)
+                                ;; Exclude internal buffers (space-prefixed names,
+                                ;; e.g. " *Minibuf-0*") from the switcher.
+                                (not (string-prefix-p " " (buffer-name b)))))
+                         all))
          (ordered (append project-bufs special-bufs))
          (names (mapcar #'buffer-name ordered)))
     (switch-to-buffer
