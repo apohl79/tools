@@ -348,7 +348,7 @@ and updates frame-level tracking. Tab-bar and header-line are refreshed."
                           projects--multi-layouts))
          (result (completing-read (or prompt "Multi-project layout: ")
                                   choices nil t nil nil
-                                  (format "2x1 (%d)" (projects--layout-window-count "2x1")))))
+                                  (format "1x1 (%d)" (projects--layout-window-count "1x1")))))
     (car (split-string result " "))))
 
 (defun projects--refresh-window-project-headers ()
@@ -467,31 +467,25 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   "Register newly opened files with the current project."
   (let ((buf (current-buffer))
         (win-proj (window-parameter (selected-window) 'projects-project)))
-    (message "[projects] find-file-hook: buf=%s selected-win=%s win-proj=%s frame-proj=%s"
-             (buffer-name buf) (selected-window) win-proj (projects-current))
     (cond
      ;; Fresh client frame opened with a file via emacsclient (no project yet).
      ((and (frame-parameter nil 'client)
            (null (frame-parameter nil 'projects-current)))
-      (message "[projects] find-file-hook: routing to tmp (fresh client frame)")
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects--set-current "tmp" t)
       (projects--update-frame-tab-bar))
      ;; No active project at all
      ((null (projects-current))
-      (message "[projects] find-file-hook: routing to tmp (no current project)")
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects-switch "tmp"))
      ;; Known window project: register immediately
      (win-proj
-      (message "[projects] find-file-hook: registering buf=%s to win-proj=%s"
-               (buffer-name buf) win-proj)
       (projects-register-buffer buf win-proj))
      ;; No window project yet — defer to window-buffer-change-hook
      (t
-      (message "[projects] find-file-hook: deferring registration (no win-proj)")))))
+      nil))))
 
 (defun projects--window-buffer-change-hook (frame)
   "Re-register buffers appearing in windows with the correct window project,
@@ -1031,7 +1025,10 @@ With prefix arg \\[universal-argument], prompt to choose from available backups.
                  (saved-window-projects (plist-get data :window-projects)))
             (projects--set-multi-layout saved-layout)
             (when saved-window-projects
-              (projects--apply-multi-project-layout saved-layout saved-window-projects))
+              (let ((valid-window-projects
+                     (mapcar (lambda (p) (and p (gethash p projects--table) p))
+                             saved-window-projects)))
+                (projects--apply-multi-project-layout saved-layout valid-window-projects)))
             (projects--refresh-window-project-headers)
             (projects--update-frame-tab-bar))
 
