@@ -256,14 +256,17 @@ name registered in `projects--table'."
     (dolist (buf (projects-buffers name))
       (kill-buffer buf))
     (remhash name projects--table)
-    ;; Reassign any windows still showing the deleted project
-    (dolist (win (window-list nil 0))
-      (when (equal (window-parameter win 'projects-project) name)
-        (let ((replacement (car (projects-names-visible))))
-          (when replacement
-            (projects--set-window-project win replacement)
-            (with-selected-window win
-              (switch-to-buffer (projects--window-buffer-for-project replacement)))))))
+    ;; Reassign any windows still showing the deleted project (all frames)
+    (dolist (f (frame-list))
+      (dolist (win (window-list f 0))
+        (when (equal (window-parameter win 'projects-project) name)
+          (let ((replacement (car (projects-names-visible))))
+            (if replacement
+                (progn
+                  (projects--set-window-project win replacement)
+                  (with-selected-window win
+                    (switch-to-buffer (projects--window-buffer-for-project replacement))))
+              (set-window-parameter win 'projects-project nil))))))
     ;; Switch away from the deleted project in any frame that had it active
     (dolist (f (frame-list))
       (when (equal (frame-parameter f 'projects-current) name)
