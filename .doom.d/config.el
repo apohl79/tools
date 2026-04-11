@@ -154,9 +154,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 
 (after! transient
   (defun my/projects-transient--pre-show ()
-    (when (and (fboundp 'projects-multi-project-view-p)
-               (projects-multi-project-view-p)
-               (not (window-live-p transient--window)))
+    (when (not (window-live-p transient--window))
       (setq my/projects-pre-transient-sizes
             (delq nil
                   (mapcar (lambda (w)
@@ -481,11 +479,9 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   "Nesting counter: how many multi-view minibuffer sessions are active.")
 
 (defun my/vertico-buffer-setup ()
-  (when (and (fboundp 'projects-multi-project-view-p)
-             (projects-multi-project-view-p))
-    (cl-incf my/vertico-buffer-enabled-count)
-    (unless vertico-buffer-mode
-      (vertico-buffer-mode 1))))
+  (cl-incf my/vertico-buffer-enabled-count)
+  (unless vertico-buffer-mode
+    (vertico-buffer-mode 1)))
 
 (defun my/vertico-buffer-teardown ()
   (when (> my/vertico-buffer-enabled-count 0)
