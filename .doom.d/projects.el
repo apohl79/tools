@@ -161,11 +161,6 @@ NAME must be unique. DIR is created if it does not exist."
            projects--table)
   (message "[projects] create: %s dir=%s" name dir)
   (projects-switch name)
-  ;; In multi-project mode, also assign the new project to the current window.
-  (when (projects-multi-project-view-p)
-    (projects--set-window-project (selected-window) name)
-    (switch-to-buffer (projects--window-buffer-for-project name))
-    (projects--refresh-window-project-headers))
   name)
 
 (defun projects--repo-name-from-url (url)
@@ -261,6 +256,14 @@ name registered in `projects--table'."
     (dolist (buf (projects-buffers name))
       (kill-buffer buf))
     (remhash name projects--table)
+    ;; Reassign any windows still showing the deleted project
+    (dolist (win (window-list nil 0))
+      (when (equal (window-parameter win 'projects-project) name)
+        (let ((replacement (car (projects-names-visible))))
+          (when replacement
+            (projects--set-window-project win replacement)
+            (with-selected-window win
+              (switch-to-buffer (projects--window-buffer-for-project replacement)))))))
     ;; Switch away from the deleted project in any frame that had it active
     (dolist (f (frame-list))
       (when (equal (frame-parameter f 'projects-current) name)
