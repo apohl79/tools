@@ -1053,6 +1053,8 @@ Updates default-directory and tab-bar highlighting."
                (gethash buf-proj projects--table)
                (not (projects-hidden-p buf-proj))
                (not (projects-hidden-p frame-proj)))
+      (message "[projects] auto-switch frame: %s -> %s (buffer: %s)"
+               frame-proj buf-proj (buffer-name buf))
       (set-frame-parameter frame 'projects-current buf-proj)
       (unless (frame-parameter frame 'client)
         (setq projects--current buf-proj))
@@ -1094,7 +1096,9 @@ Idempotent: safe to call multiple times."
                 (lambda (orig)
                   (if-let ((proj (projects-current-window-project))
                            (dir (projects-dir proj)))
-                      dir
+                      (progn
+                        (message "[projects] claude-code--directory override: %s -> %s" proj dir)
+                        dir)
                     (funcall orig))))
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
