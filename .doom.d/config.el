@@ -72,7 +72,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (setq confirm-kill-emacs nil)
 
 ;; Make sure we get asked to accept non-safe local variables from .dir-locals.el files
-(setq enable-local-variables :all)
+(setq enable-local-variables t)
 
 ;; "ctrl - left click" buffer menu: increase number of items shown.
 ;; Set max length of this list. default 20. see next.
