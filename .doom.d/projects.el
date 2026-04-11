@@ -1019,10 +1019,12 @@ With prefix arg \\[universal-argument], prompt to choose from available backups.
                  (saved-window-projects (plist-get data :window-projects)))
             (projects--set-multi-layout saved-layout)
             (when saved-window-projects
-              (let ((valid-window-projects
-                     (mapcar (lambda (p) (and p (gethash p projects--table) p))
-                             saved-window-projects)))
-                (projects--apply-multi-project-layout saved-layout valid-window-projects)))
+              (let* ((valid-window-projects
+                      (mapcar (lambda (p) (and p (gethash p projects--table) p))
+                              saved-window-projects))
+                     (clean-window-projects
+                      (cl-remove nil valid-window-projects)))
+                (projects--apply-multi-project-layout saved-layout clean-window-projects)))
             (projects--refresh-window-project-headers)
             (projects--update-frame-tab-bar))
 
