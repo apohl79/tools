@@ -267,15 +267,15 @@ name registered in `projects--table'."
                   (with-selected-window win
                     (switch-to-buffer (projects--window-buffer-for-project replacement))))
               (set-window-parameter win 'projects-project nil))))))
-    ;; Switch away from the deleted project in any frame that had it active
-    (dolist (f (frame-list))
-      (when (equal (frame-parameter f 'projects-current) name)
-        (let ((others (projects-names-visible)))
-          (if others
-              (with-selected-frame f (projects-switch (car others)))
-            (set-frame-parameter f 'projects-current nil)))))
-    (when (equal projects--current name)
-      (setq projects--current nil))
+    ;; Update frame-level project tracking (windows were already reassigned above)
+    (let ((replacement (car (projects-names-visible))))
+      (dolist (f (frame-list))
+        (when (equal (frame-parameter f 'projects-current) name)
+          (set-frame-parameter f 'projects-current replacement)))
+      (when (equal projects--current name)
+        (setq projects--current replacement)))
+    (projects--update-frame-tab-bar)
+    (projects--tab-bar-refresh)
     (message "[projects] delete: %s" name)))
 
 ;;; ---------------------------------------------------------------------------
@@ -290,22 +290,17 @@ name registered in `projects--table'."
 Updates the window's project assignment, shows a project buffer,
 and updates frame-level tracking. Tab-bar and header-line are refreshed."
   (interactive
-   (progn
-     (when (projects-hidden-p (projects-current))
-       (user-error "Cannot switch projects from a temporary project"))
-     (let ((candidates (cl-remove (projects-current-window-project)
-                                  (projects-names-visible) :test #'equal)))
-       (list (completing-read "Switch to project: "
-                              (lambda (str pred action)
-                                (if (eq action 'metadata)
-                                    '(metadata (display-sort-function . identity))
-                                  (complete-with-action action candidates str pred)))
-                              nil t)))))
+   (let ((candidates (cl-remove (projects-current-window-project)
+                                (projects-names-visible) :test #'equal)))
+     (list (completing-read "Switch to project: "
+                            (lambda (str pred action)
+                              (if (eq action 'metadata)
+                                  '(metadata (display-sort-function . identity))
+                                (complete-with-action action candidates str pred)))
+                            nil t))))
   (unless (gethash name projects--table)
     (user-error "Project '%s' does not exist" name))
   (when (called-interactively-p 'any)
-    (when (projects-hidden-p (projects-current))
-      (user-error "Cannot switch projects from a temporary project"))
     (when (projects-hidden-p name)
       (user-error "Cannot switch to a hidden project")))
   (message "[projects] switch: %s -> %s%s (caller: %s)"
