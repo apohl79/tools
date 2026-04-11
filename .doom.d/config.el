@@ -348,7 +348,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
  ;; Projects system keybindings — uses :leader so both SPC w and C-c w work.
  :leader
  (:prefix ("w" . "projects")
-  :desc "Switch project (MRU)"      "w" #'projects-switch
+  :desc "Switch project"             "w" #'projects-switch
   :desc "New project"                "n" #'projects-create
   :desc "Rename project"             "r" #'projects-rename
   :desc "Delete project"             "k" #'projects-delete
@@ -357,12 +357,12 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   :desc "Save projects state"        "s" #'projects-save
   :desc "Restore projects session"   "R" #'projects-restore
   :desc "Restore from backup…"       "l" (lambda () (interactive) (let ((current-prefix-arg t)) (call-interactively #'projects-restore)))
-  :desc "Save projects state"        "a" #'projects-save
   :desc "Project info buffer"        "i" #'projects-show-info
   :desc "Clone from git"             "g" #'projects-clone-from-git
-  :desc "Single-project view"        "1" #'projects-enter-single-project-view
-  :desc "Multi-project view"         "2" #'projects-enter-multi-project-view
-  :desc "Change multi-project layout" "L" #'projects-change-multi-project-layout)
+  :desc "Layout: 1x1"                "1" (lambda () (interactive) (projects-set-layout "1x1"))
+  :desc "Layout: 2x1"                "2" (lambda () (interactive) (projects-set-layout "2x1"))
+  :desc "Layout: 2x2"                "3" (lambda () (interactive) (projects-set-layout "2x2"))
+  :desc "Layout: 3x2"                "4" (lambda () (interactive) (projects-set-layout "3x2")))
  )
 
 ;; Remove leftover Doom workspace/winner bindings from the w prefix
