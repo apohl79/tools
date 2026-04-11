@@ -448,9 +448,6 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
                     (if (projects-multi-project-view-p)
                         (projects-current-window-project)
                       (projects-current)))))
-      (message "[projects] register-buffer: buf=%s proj=%s explicit=%s multi=%s sel-win=%s win-proj=%s"
-               (buffer-name buf) proj (not (null project-name)) (projects-multi-project-view-p)
-               (selected-window) (window-parameter (selected-window) 'projects-project))
       (when (and proj (not (projects-special-buffer-p buf)))
         (with-current-buffer buf
           (setq-local projects--buffer-project proj))
@@ -474,31 +471,22 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   "Register newly opened files with the current project."
   (let ((buf (current-buffer))
         (win-proj (window-parameter (selected-window) 'projects-project)))
-    (message "[projects] find-file-hook: buf=%s selected-win=%s win-proj=%s frame-proj=%s"
-             (buffer-name buf) (selected-window) win-proj (projects-current))
     (cond
      ;; Fresh client frame opened with a file via emacsclient (no project yet).
      ((and (frame-parameter nil 'client)
            (null (frame-parameter nil 'projects-current)))
-      (message "[projects] find-file-hook: routing to tmp (fresh client frame)")
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects--set-current "tmp" t)
       (projects--update-frame-tab-bar))
      ;; No active project at all
      ((null (projects-current))
-      (message "[projects] find-file-hook: routing to tmp (no current project)")
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects-switch "tmp"))
      ;; Known window project: register immediately
      (win-proj
-      (message "[projects] find-file-hook: registering buf=%s to win-proj=%s"
-               (buffer-name buf) win-proj)
-      (projects-register-buffer buf win-proj))
-     ;; No window project yet — defer to window-buffer-change-hook
-     (t
-      (message "[projects] find-file-hook: deferring registration (no win-proj)")))))
+      (projects-register-buffer buf win-proj)))))
 
 (defun projects--window-buffer-change-hook (frame)
   "Re-register buffers appearing in windows with the correct window project,
@@ -512,8 +500,6 @@ and refresh the header-line-format."
           (when (and (not (projects-special-buffer-p buf))
                      (not (string-match-p "^\\*project: " (buffer-name buf)))
                      (null buf-proj))
-            (message "[projects] window-buffer-change: win=%s buf=%s old-proj=nil new-proj=%s"
-                     win (buffer-name buf) win-proj)
             (projects-register-buffer buf win-proj))
           (with-current-buffer buf
             (unless (equal header-line-format '(:eval (projects--window-header-line)))
@@ -526,9 +512,6 @@ and refresh the header-line-format."
   "Remove the dying buffer from its project and pre-set replacement in windows."
   (let ((proj projects--buffer-project)
         (buf (current-buffer)))
-    (message "[projects] cleanup-dead: buf=%s proj=%s in-table=%s"
-             (buffer-name buf) proj
-             (and proj (memq buf (plist-get (gethash proj projects--table) :buffers)) t))
     (when proj
       (let* ((entry (gethash proj projects--table))
              (bufs (plist-get entry :buffers)))
@@ -565,10 +548,6 @@ mode the frame-wide current project is used."
            (bname (buffer-name buf))
            (info-buf-name (when proj (projects--info-buffer-name proj)))
            (proj-bufs (when proj (plist-get (gethash proj projects--table) :buffers))))
-      (message "[projects] fix-windows: win=%s proj=%s buf=%s info=%s pinned=%s in-proj=%s"
-               win proj bname info-buf-name
-               (projects--pinned-buffer-p buf)
-               (and proj-bufs (memq buf proj-bufs) t))
       (unless (or (null proj)
                   (string= bname info-buf-name)
                   ;; Only skip displacement if the pinned buffer actually belongs
@@ -584,8 +563,6 @@ mode the frame-wide current project is used."
                             (not (get-buffer-window b))
                             (equal (buffer-local-value 'projects--buffer-project b) proj)))
                      proj-bufs)))
-          (message "[projects] fix-windows: switching win=%s to %s (next=%s)"
-                   win (or (and next (buffer-name next)) (concat "*project: " proj "*")) next)
           (with-selected-window win
             (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))
 
@@ -1095,7 +1072,6 @@ Updates default-directory and tab-bar highlighting."
 Used as :before advice on vterm/eat so the terminal opens in the right dir."
   (when-let* ((proj (projects-current-window-project))
               (dir  (projects-dir proj)))
-    (message "[projects] set-window-project-dir: %s -> %s" proj dir)
     (setq default-directory dir)))
 
 (defvar projects--hooks-installed-p nil
@@ -1123,9 +1099,7 @@ Idempotent: safe to call multiple times."
                 (lambda (orig)
                   (if-let ((proj (projects-current-window-project))
                            (dir (projects-dir proj)))
-                      (progn
-                        (message "[projects] claude-code--directory override: %s -> %s" proj dir)
-                        dir)
+                      dir
                     (funcall orig))))
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
