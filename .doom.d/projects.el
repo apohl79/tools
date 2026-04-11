@@ -448,9 +448,7 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   "Register BUF as belonging to PROJECT-NAME or the active project scope."
   (when (buffer-live-p buf)
     (let ((proj (or project-name
-                    (if (projects-multi-project-view-p)
-                        (projects-current-window-project)
-                      (projects-current)))))
+                    (projects-current-window-project))))
       (when (and proj (not (projects-special-buffer-p buf)))
         (with-current-buffer buf
           (setq-local projects--buffer-project proj))
@@ -543,8 +541,7 @@ and refresh the header-line-format."
 
 (defun projects--fix-windows-after-kill ()
   "Ensure no window shows a non-project buffer after a project buffer is killed.
-In multi-project mode each window's assigned project is used; in single-project
-mode the frame-wide current project is used."
+Each window's assigned project is used to find a suitable replacement buffer."
   (dolist (win (window-list nil 0))
     (let* ((proj (projects--window-target-project win))
            (buf (window-buffer win))
@@ -585,10 +582,7 @@ mode the frame-wide current project is used."
 (defun projects-switch-buffer ()
   "Switch to a buffer belonging to the active project scope."
   (interactive)
-  (let* ((multi (projects-multi-project-view-p))
-         (proj (if multi
-                   (projects-current-window-project)
-                 (projects-current)))
+  (let* ((proj (projects-current-window-project))
          (all (buffer-list))
          (project-bufs (when proj
                          (cl-remove-if-not
@@ -721,9 +715,7 @@ Returns the buffer."
   "Show the info buffer for the current project.
 In multi-project mode, uses the window's assigned project."
   (interactive)
-  (let ((proj (if (projects-multi-project-view-p)
-                  (projects-current-window-project)
-                projects--current)))
+  (let ((proj (projects-current-window-project)))
     (if proj
         (switch-to-buffer (projects--create-info-buffer proj))
       (user-error "No active project"))))
