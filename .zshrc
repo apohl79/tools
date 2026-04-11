@@ -158,3 +158,17 @@ export ENABLE_TOOL_SEARCH=true
 command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure >/dev/null 2>&1
 . "$HOME/.cargo/env"
 command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure 2>/dev/null
+
+# plan-executor
+command -v plan-executor >/dev/null 2>&1 && plan-executor ensure 2>/dev/null
+
+# MCP Gateway — keep running independent of Claude sessions
+(mcp-gateway-ensure 2>/dev/null &)
+
+# pnpm
+export PNPM_HOME="/tmp/pnpm-latest"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end

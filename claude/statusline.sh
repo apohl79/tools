@@ -20,7 +20,7 @@ ENABLE_API_DURATION=${ENABLE_API_DURATION:-0}
 # Lines added/removed in session (green/red)
 ENABLE_LINES=${ENABLE_LINES:-0}
 # Cumulative input/output token counts (dim)
-ENABLE_TOKENS=${ENABLE_TOKENS:-1}
+ENABLE_TOKENS=${ENABLE_TOKENS:-0}
 # Claude Code version (dim gray)
 ENABLE_VERSION=${ENABLE_VERSION:-0}
 # Vim mode indicator — NORMAL/INSERT (bold yellow)

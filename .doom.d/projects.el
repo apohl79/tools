@@ -374,7 +374,11 @@ name registered in `projects--table'."
             ;; from a previous multi-project session. Clear them — they are only
             ;; meaningful in multi-project mode.
             (projects--clear-window-project-params))
-        (projects--ensure-visible-buffer)))
+        ;; No saved config — start with a single window
+        (delete-other-windows))
+      ;; Always validate: replace any foreign-project buffers that leaked in
+      ;; (stale window-config, killed buffers substituted by Emacs, etc.)
+      (projects--ensure-visible-buffer))
     (projects--tab-bar-refresh)
     (run-hooks 'projects-switch-hook)))
 
