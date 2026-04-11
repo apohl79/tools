@@ -26,7 +26,12 @@
               (unless (cl-some #'buffer-file-name (buffer-list))
                 ;; Use a 0-second timer so Emacs returns to the event loop first
                 ;; (frame must be painted before the loading screen can appear)
-                (run-with-timer 0 nil #'projects-restore)))))
+                (run-with-timer 0 nil #'projects-restore)
+                ;; Ensure a default layout is set if restore doesn't set one
+                (run-with-timer 0.5 nil
+                                (lambda ()
+                                  (unless (frame-parameter nil 'projects-multi-layout)
+                                    (projects--set-multi-layout "1x1")))))))))
 
 
 (defun my/projects-setup-client-frame ()
