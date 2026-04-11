@@ -26,7 +26,12 @@
               (unless (cl-some #'buffer-file-name (buffer-list))
                 ;; Use a 0-second timer so Emacs returns to the event loop first
                 ;; (frame must be painted before the loading screen can appear)
-                (run-with-timer 0 nil #'projects-restore)))))
+                (run-with-timer 0 nil #'projects-restore)
+                ;; Ensure a default layout is set if restore doesn't set one
+                (run-with-timer 0.5 nil
+                                (lambda ()
+                                  (unless (frame-parameter nil 'projects-multi-layout)
+                                    (projects--set-multi-layout "1x1")))))))))
 
 
 (defun my/projects-setup-client-frame ()
@@ -67,7 +72,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (setq confirm-kill-emacs nil)
 
 ;; Make sure we get asked to accept non-safe local variables from .dir-locals.el files
-(setq enable-local-variables :all)
+(setq enable-local-variables t)
 
 ;; "ctrl - left click" buffer menu: increase number of items shown.
 ;; Set max length of this list. default 20. see next.
@@ -149,9 +154,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 
 (after! transient
   (defun my/projects-transient--pre-show ()
-    (when (and (fboundp 'projects-multi-project-view-p)
-               (projects-multi-project-view-p)
-               (not (window-live-p transient--window)))
+    (when (not (window-live-p transient--window))
       (setq my/projects-pre-transient-sizes
             (delq nil
                   (mapcar (lambda (w)
@@ -343,7 +346,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
  ;; Projects system keybindings — uses :leader so both SPC w and C-c w work.
  :leader
  (:prefix ("w" . "projects")
-  :desc "Switch project (MRU)"      "w" #'projects-switch
+  :desc "Switch project"             "w" #'projects-switch
   :desc "New project"                "n" #'projects-create
   :desc "Rename project"             "r" #'projects-rename
   :desc "Delete project"             "k" #'projects-delete
@@ -352,12 +355,12 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   :desc "Save projects state"        "s" #'projects-save
   :desc "Restore projects session"   "R" #'projects-restore
   :desc "Restore from backup…"       "l" (lambda () (interactive) (let ((current-prefix-arg t)) (call-interactively #'projects-restore)))
-  :desc "Save projects state"        "a" #'projects-save
   :desc "Project info buffer"        "i" #'projects-show-info
   :desc "Clone from git"             "g" #'projects-clone-from-git
-  :desc "Single-project view"        "1" #'projects-enter-single-project-view
-  :desc "Multi-project view"         "2" #'projects-enter-multi-project-view
-  :desc "Change multi-project layout" "L" #'projects-change-multi-project-layout)
+  :desc "Layout: 1x1"                "1" (lambda () (interactive) (projects-set-layout "1x1"))
+  :desc "Layout: 2x1"                "2" (lambda () (interactive) (projects-set-layout "2x1"))
+  :desc "Layout: 2x2"                "3" (lambda () (interactive) (projects-set-layout "2x2"))
+  :desc "Layout: 3x2"                "4" (lambda () (interactive) (projects-set-layout "3x2")))
  )
 
 ;; Remove leftover Doom workspace/winner bindings from the w prefix
@@ -476,11 +479,9 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   "Nesting counter: how many multi-view minibuffer sessions are active.")
 
 (defun my/vertico-buffer-setup ()
-  (when (and (fboundp 'projects-multi-project-view-p)
-             (projects-multi-project-view-p))
-    (cl-incf my/vertico-buffer-enabled-count)
-    (unless vertico-buffer-mode
-      (vertico-buffer-mode 1))))
+  (cl-incf my/vertico-buffer-enabled-count)
+  (unless vertico-buffer-mode
+    (vertico-buffer-mode 1)))
 
 (defun my/vertico-buffer-teardown ()
   (when (> my/vertico-buffer-enabled-count 0)
