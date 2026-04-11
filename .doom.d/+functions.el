@@ -1160,6 +1160,101 @@ Ignore transient cursor reset errors triggered during window changes."
         (vterm-copy-mode -1)))))
 
 ;;; ---------------------------------------------------------------------------
+;;; Clickable file paths in vterm
+;;; ---------------------------------------------------------------------------
+
+(defvar my/vterm-file-link-regexp
+  (concat
+   "\\(?:\\./\\|/\\)?"                               ; optional ./ or /
+   "\\(?:[a-zA-Z0-9_.@+-]+/\\)+"                    ; one or more dir/ components
+   "[a-zA-Z0-9_.@+-]+\\.[a-zA-Z0-9]\\{1,10\\}"      ; filename.ext
+   "\\(?::[0-9]+\\(?::[0-9]+\\)?\\)?")               ; optional :line or :line:col
+  "Regexp matching file paths in vterm buffers.
+Requires at least one directory component (contains /) to avoid false positives.")
+
+(defvar my/vterm-file-link-keymap
+  (let ((map (make-sparse-keymap)))
+    (define-key map [mouse-1] #'my/vterm-file-link-open-at-click)
+    (define-key map (kbd "RET") #'my/vterm-file-link-open-at-point)
+    map)
+  "Keymap for clickable file path overlays in vterm.")
+
+(defun my/vterm-file-link--parse (str)
+  "Parse STR into (PATH . LINE), stripping optional :line:col suffix."
+  (if (string-match "\\`\\(.+\\.[a-zA-Z0-9]+\\):\\([0-9]+\\)\\(?::[0-9]+\\)?\\'" str)
+      (cons (match-string 1 str) (string-to-number (match-string 2 str)))
+    (cons str nil)))
+
+(defun my/vterm-file-link--resolve (path)
+  "Resolve relative PATH against the buffer's project dir.
+Returns absolute path if the file exists, nil otherwise."
+  (let* ((project (or (bound-and-true-p projects--buffer-project)
+                      (when (fboundp 'projects-current-window-project)
+                        (projects-current-window-project))))
+         (dir (or (when (and project (fboundp 'projects-dir))
+                    (projects-dir project))
+                  default-directory))
+         (full (expand-file-name path dir)))
+    (when (file-regular-p full) full)))
+
+(defun my/vterm-file-link-fontify (start end)
+  "Scan START..END for file paths and add clickable overlays."
+  (dolist (ov (overlays-in start end))
+    (when (overlay-get ov 'my/vterm-file-link)
+      (delete-overlay ov)))
+  (save-excursion
+    (goto-char start)
+    (while (re-search-forward my/vterm-file-link-regexp end t)
+      (let* ((raw (match-string-no-properties 0))
+             (parsed (my/vterm-file-link--parse raw))
+             (path (car parsed))
+             (line (cdr parsed))
+             (full-path (my/vterm-file-link--resolve path)))
+        (when full-path
+          (let ((ov (make-overlay (match-beginning 0) (match-end 0) nil t nil)))
+            (overlay-put ov 'my/vterm-file-link t)
+            (overlay-put ov 'my/file-full-path full-path)
+            (overlay-put ov 'my/file-line line)
+            (overlay-put ov 'face '(:underline t))
+            (overlay-put ov 'mouse-face 'highlight)
+            (overlay-put ov 'keymap my/vterm-file-link-keymap)))))))
+
+(defun my/vterm-file-link--open (overlay)
+  "Open the file referenced by OVERLAY in the source buffer's project."
+  (let* ((full-path (overlay-get overlay 'my/file-full-path))
+         (line      (overlay-get overlay 'my/file-line))
+         (src-buf   (overlay-buffer overlay))
+         (project   (when (buffer-live-p src-buf)
+                      (with-current-buffer src-buf
+                        (bound-and-true-p projects--buffer-project)))))
+    (when full-path
+      (find-file full-path)
+      (when (and project (fboundp 'projects-register-buffer))
+        (projects-register-buffer (current-buffer) project))
+      (when line
+        (goto-char (point-min))
+        (forward-line (1- line))))))
+
+(defun my/vterm-file-link-open-at-click (event)
+  "Open the file path overlay at mouse click EVENT."
+  (interactive "e")
+  (let* ((pos (posn-point (event-start event)))
+         (ov (cl-find-if (lambda (o) (overlay-get o 'my/vterm-file-link))
+                         (overlays-at pos))))
+    (when ov (my/vterm-file-link--open ov))))
+
+(defun my/vterm-file-link-open-at-point ()
+  "Open the file path overlay at point."
+  (interactive)
+  (let ((ov (cl-find-if (lambda (o) (overlay-get o 'my/vterm-file-link))
+                        (overlays-at (point)))))
+    (when ov (my/vterm-file-link--open ov))))
+
+(defun my/vterm-file-link-setup ()
+  "Enable clickable file path detection in the current vterm buffer."
+  (jit-lock-register #'my/vterm-file-link-fontify))
+
+;;; ---------------------------------------------------------------------------
 ;;; Databases
 ;;; ---------------------------------------------------------------------------
 

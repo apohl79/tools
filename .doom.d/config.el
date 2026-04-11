@@ -368,7 +368,8 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 
 ;; Override C-x b to use project-aware buffer switching
 (map! "C-x b"       #'projects-switch-buffer
-      "M-TAB"       #'projects-switch-dispatch)
+      "M-TAB"       #'projects-switch-dispatch
+      "C-c C-x"     #'projects-show-info)
 
 (map! :map vertico-map
       "M-TAB" #'vertico-next)
@@ -438,6 +439,8 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 (set-face-attribute 'line-number-current-line nil :font my/fixed-font)
 
 (add-hook 'vterm-mode-hook (lambda () (display-line-numbers-mode 0)))
+;; Re-enable modeline in vterm (Doom's vterm module hides it via hide-mode-line-mode)
+(add-hook 'vterm-mode-hook (lambda () (hide-mode-line-mode -1)) 90)
 (add-hook 'eat-mode-hook (lambda () (display-line-numbers-mode 0)))
 
 ;; Set the project name as frame title (window name in macOS)
@@ -837,11 +840,12 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   ;; Override vterm--self-insert-meta for keys we need in claude-code
   ;; S-return arrives as M-RET - send CSI u encoding for newline in Claude
   (define-key vterm-mode-map (kbd "M-RET") (lambda () (interactive) (vterm-send-string "\e[13;2u")))
-  ;; M-TAB = C-M-i: override vterm--self-insert-meta so OPT+TAB switches projects
+  ;; M-TAB: override vterm--self-insert-meta so OPT+TAB switches projects
   (define-key vterm-mode-map (kbd "M-TAB") #'projects-switch-dispatch)
-  (define-key vterm-mode-map (kbd "C-M-i") #'projects-switch-dispatch)
   ;; Enable clickable URLs in vterm buffers
   (add-hook 'vterm-mode-hook #'goto-address-mode)
+  ;; Enable clickable file paths in vterm buffers (my/vterm-file-link-* in +functions.el)
+  (add-hook 'vterm-mode-hook #'my/vterm-file-link-setup)
 
   ;; my/copy-to-clipboard, my/vterm-mouse-select-to-clipboard,
   ;; my/vterm-double-click-to-clipboard defined in +functions.el
@@ -880,7 +884,7 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
   :config
   ;; Bind C-M-x globally via global-set-key (not :bind) so mode-specific
   ;; bindings like eval-defun in emacs-lisp-mode take precedence.
-  (global-set-key (kbd "C-M-x") #'claude-code-transient)
+  (global-set-key (kbd "C-M-x") claude-code-command-map)
   (setq claude-code-program-switches '("--dangerously-skip-permissions")
         claude-code-confirm-kill 'nil
         claude-code-terminal-backend 'vterm  ; use vterm to avoid eat charset errors

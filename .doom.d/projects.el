@@ -26,10 +26,7 @@
     "^\\*Warnings\\*$"
     "^\\*Compile-Log\\*$"
     "^\\*lsp"
-    "^magit"
     "^\\*doom"
-    "^\\*vterm"
-    "^\\*eat"
     "^COMMIT_EDITMSG$"
     "^ \\*Minibuf")
   "Buffers matching these patterns are global (visible in all projects).")
@@ -614,9 +611,14 @@ correct window project, and refresh the header-line-format."
         (force-mode-line-update t)))))
 
 (defun projects--cleanup-dead-buffers ()
-  "Remove the current (dying) buffer from its owning project's buffer list."
+  "Remove the current (dying) buffer from its owning project's buffer list.
+In multi-project mode, immediately replace the dying buffer in any window
+that shows it, so Emacs never gets a chance to substitute a foreign buffer."
   (let ((proj projects--buffer-project)
         (buf (current-buffer)))
+    (message "[projects] cleanup-dead: buf=%s proj=%s in-table=%s"
+             (buffer-name buf) proj
+             (and proj (memq buf (plist-get (gethash proj projects--table) :buffers)) t))
     (when proj
       (let* ((entry (gethash proj projects--table))
              (bufs (plist-get entry :buffers)))
@@ -624,7 +626,22 @@ correct window project, and refresh the header-line-format."
           (message "[projects] buffer-killed: %s from project %s" (buffer-name buf) proj)
           (plist-put entry :buffers (delq buf bufs))
           (puthash proj entry projects--table)
-          ;; After the kill, ensure all windows stay within their project
+          ;; In multi-project mode, pre-set windows showing the dying buffer to a
+          ;; project-local replacement BEFORE Emacs picks a global default.
+          (when (projects-multi-project-view-p)
+            (let* ((remaining (plist-get (gethash proj projects--table) :buffers))
+                   (replacement (cl-find-if
+                                 (lambda (b)
+                                   (and (buffer-live-p b)
+                                        (not (eq b buf))
+                                        (not (get-buffer-window b))
+                                        (equal (buffer-local-value 'projects--buffer-project b) proj)))
+                                 remaining)))
+              (dolist (win (get-buffer-window-list buf nil t))
+                (let ((rep (or replacement (projects--create-info-buffer proj))))
+                  (message "[projects] buffer-killed: pre-setting win=%s to %s" win (buffer-name rep))
+                  (set-window-buffer win rep)))))
+          ;; Deferred pass to catch any windows the synchronous pass missed
           (when (or (equal proj (projects-current))
                     (projects-multi-project-view-p))
             (run-with-timer 0 nil #'projects--fix-windows-after-kill)))))))
@@ -653,14 +670,16 @@ mode the frame-wide current project is used."
                   ;; Only skip displacement if the pinned buffer actually belongs
                   ;; to this project — a vterm from another project must still be
                   ;; replaced (pinned protects legitimate occupants, not intruders).
-                  (and (projects--pinned-buffer-p buf) (memq buf proj-bufs))
-                  (memq buf proj-bufs))
+                  (and (projects--pinned-buffer-p buf)
+                       (equal (buffer-local-value 'projects--buffer-project buf) proj))
+                  (equal (buffer-local-value 'projects--buffer-project buf) proj))
         (let ((next (cl-find-if
                      (lambda (b)
                        (and (buffer-live-p b)
                             (not (eq b buf))
-                            (memq b proj-bufs)))
-                     (buffer-list))))
+                            (not (get-buffer-window b))
+                            (equal (buffer-local-value 'projects--buffer-project b) proj)))
+                     proj-bufs)))
           (message "[projects] fix-windows: switching win=%s to %s (next=%s)"
                    win (or (and next (buffer-name next)) (concat "*project: " proj "*")) next)
           (with-selected-window win
@@ -776,18 +795,19 @@ Returns the buffer."
          (buf (get-buffer-create buf-name))
          (entry (gethash project-name projects--table))
          (dir (plist-get entry :dir))
-         (buf-count (length (projects-buffers project-name))))
+)
     (with-current-buffer buf
       (let ((inhibit-read-only t))
         (erase-buffer)
         (setq-local projects--buffer-project nil)  ; info buffer is global
         (setq-local default-directory dir)
         (insert "\n\n")
-        (insert (propertize (format "  Project: %s\n" project-name)
-                            'face '(:weight bold :height 1.4)))
+        (insert (propertize "  Project: " 'face '(:weight bold :height 1.4)))
+        (let ((blue (doom-color 'blue)))
+          (insert (propertize (format "%s\n" project-name)
+                              'face `(:weight bold :height 1.4
+                                      ,@(when blue (list :foreground blue))))))
         (insert (propertize (format "  Directory: %s\n" (abbreviate-file-name dir))
-                            'face 'font-lock-comment-face))
-        (insert (propertize (format "  Buffers: %d\n" buf-count)
                             'face 'font-lock-comment-face))
         (insert "\n")
         (insert (propertize "  Open a file with C-x C-f to get started.\n"
@@ -814,11 +834,15 @@ Returns the buffer."
     buf))
 
 (defun projects-show-info ()
-  "Show the info buffer for the current project."
+  "Show the info buffer for the current project.
+In multi-project mode, uses the window's assigned project."
   (interactive)
-  (if projects--current
-      (switch-to-buffer (projects--create-info-buffer projects--current))
-    (user-error "No active project")))
+  (let ((proj (if (projects-multi-project-view-p)
+                  (projects-current-window-project)
+                projects--current)))
+    (if proj
+        (switch-to-buffer (projects--create-info-buffer proj))
+      (user-error "No active project"))))
 
 (defun projects--ensure-visible-buffer ()
   "Ensure ALL visible windows show buffers belonging to the current project.
@@ -1305,12 +1329,8 @@ Runs on `window-configuration-change-hook' so opening a special buffer
 alongside the info buffer collapses to fullscreen.
 Deferred via idle timer so window-size-change-functions fire naturally,
 allowing vterm/eat to resize correctly."
-  (if (projects-multi-project-view-p)
-      (message "[projects] maybe-close-info: skipping (multi-project mode, win-count=%d)"
-               (projects--ordinary-window-count))
+  (unless (projects-multi-project-view-p)
   (when (> (projects--ordinary-window-count) 1)
-    (message "[projects] maybe-close-info: checking (single-project mode, win-count=%d proj=%s)"
-             (projects--ordinary-window-count) (projects-current))
     (let* ((frame (selected-frame))
            (info-win
             (or

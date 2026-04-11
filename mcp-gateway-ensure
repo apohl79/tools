@@ -1,0 +1,47 @@
+#!/bin/bash
+# mcp-gateway-ensure — Ensure the MCP gateway is running permanently.
+# Delegates to the claudes-kitchen gateway-session-start.sh script.
+# Keeps a sentinel process alive whose PID is registered as a session,
+# so gateway-session-end.sh never sees an empty sessions dir.
+# Safe to call from .zshrc — fast no-op when already running.
+
+SCRIPT="$HOME/workspace/code/claudes-kitchen/plugins/gateway/hooks/gateway-session-start.sh"
+
+if [ ! -x "$SCRIPT" ]; then
+  echo "mcp-gateway-ensure: script not found: $SCRIPT" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+"$SCRIPT"
+rc=$?
+
+# Ensure a sentinel process is running. The session-end hook checks
+# kill -0 on each session PID — only a real user-owned process survives.
+GATEWAY_STATE="$HOME/.cache/mcp-gateway"
+SESSIONS_DIR="$GATEWAY_STATE/sessions"
+SENTINEL_FILE="$GATEWAY_STATE/sentinel-pid"
+
+mkdir -p "$SESSIONS_DIR"
+
+sentinel_alive=false
+if [ -f "$SENTINEL_FILE" ]; then
+  pid=$(cat "$SENTINEL_FILE")
+  if kill -0 "$pid" 2>/dev/null; then
+    sentinel_alive=true
+  fi
+fi
+
+if ! $sentinel_alive; then
+  nohup sleep infinity >/dev/null 2>&1 &
+  pid=$!
+  disown "$pid" 2>/dev/null
+  echo "$pid" > "$SENTINEL_FILE"
+fi
+
+# Register sentinel PID as a session
+touch "$SESSIONS_DIR/$pid"
+
+# Clean up stale non-numeric sentinel files from previous approach
+rm -f "$SESSIONS_DIR/permanent" 2>/dev/null
+
+exit $rc
