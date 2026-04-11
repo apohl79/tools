@@ -5,7 +5,7 @@
 **JIRA:** none
 **Tech Stack:** Emacs Lisp (Doom Emacs config)
 **Code Standards:** n/a
-**Status:** READY
+**Status:** DONE
 **no-worktree:** [ ]
 **no-pr:** [ ]
 **draft-pr:** [ ]
