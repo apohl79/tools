@@ -290,17 +290,22 @@ name registered in `projects--table'."
 Updates the window's project assignment, shows a project buffer,
 and updates frame-level tracking. Tab-bar and header-line are refreshed."
   (interactive
-   (let ((candidates (cl-remove (projects-current-window-project)
-                                (projects-names-visible) :test #'equal)))
-     (list (completing-read "Switch to project: "
-                            (lambda (str pred action)
-                              (if (eq action 'metadata)
-                                  '(metadata (display-sort-function . identity))
-                                (complete-with-action action candidates str pred)))
-                            nil t))))
+   (progn
+     (when (projects-hidden-p (projects-current))
+       (user-error "Cannot switch projects from a temporary project"))
+     (let ((candidates (cl-remove (projects-current-window-project)
+                                  (projects-names-visible) :test #'equal)))
+       (list (completing-read "Switch to project: "
+                              (lambda (str pred action)
+                                (if (eq action 'metadata)
+                                    '(metadata (display-sort-function . identity))
+                                  (complete-with-action action candidates str pred)))
+                              nil t)))))
   (unless (gethash name projects--table)
     (user-error "Project '%s' does not exist" name))
   (when (called-interactively-p 'any)
+    (when (projects-hidden-p (projects-current))
+      (user-error "Cannot switch projects from a temporary project"))
     (when (projects-hidden-p name)
       (user-error "Cannot switch to a hidden project")))
   (message "[projects] switch: %s -> %s%s (caller: %s)"
