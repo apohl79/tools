@@ -715,8 +715,7 @@ Returns the buffer."
     buf))
 
 (defun projects-show-info ()
-  "Show the info buffer for the current project.
-In multi-project mode, uses the window's assigned project."
+  "Show the info buffer for the current window's project."
   (interactive)
   (let ((proj (projects-current-window-project)))
     (if proj
@@ -1057,8 +1056,6 @@ Updates default-directory and tab-bar highlighting."
                (gethash buf-proj projects--table)
                (not (projects-hidden-p buf-proj))
                (not (projects-hidden-p frame-proj)))
-      (message "[projects] auto-switch frame: %s -> %s (buffer: %s)"
-               frame-proj buf-proj (buffer-name buf))
       (set-frame-parameter frame 'projects-current buf-proj)
       (unless (frame-parameter frame 'client)
         (setq projects--current buf-proj))
@@ -1107,7 +1104,7 @@ Idempotent: safe to call multiple times."
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
     (add-hook 'dired-mode-hook #'projects--find-file-hook)
     (add-hook 'window-configuration-change-hook #'projects--maybe-close-info-window)
-    ;; In multi-project mode: re-register buffers appearing in windows and keep headers fresh
+    ;; Re-register buffers appearing in windows and keep headers fresh
     (add-hook 'window-buffer-change-functions #'projects--window-buffer-change-hook)
     ;; Track keyboard focus for header-line active/inactive rendering
     (add-hook 'post-command-hook #'projects--track-focused-window)
