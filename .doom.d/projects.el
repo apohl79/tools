@@ -382,8 +382,8 @@ name registered in `projects--table'."
     (projects--tab-bar-refresh)
     (run-hooks 'projects-switch-hook)))
 
-(defconst projects--multi-layouts '("2x1" "2x2" "3x2")
-  "Available multi-project layout names, in display order.")
+(defconst projects--multi-layouts '("1x1" "2x1" "2x2" "3x2")
+  "Available project layout names, in display order.")
 
 (defun projects--valid-multi-layout-p (layout)
   (member layout projects--multi-layouts))
@@ -391,10 +391,11 @@ name registered in `projects--table'."
 (defun projects--layout-window-count (layout)
   "Return the number of windows for LAYOUT string (e.g. \"2x1\" → 2)."
   (pcase layout
+    ("1x1" 1)
     ("2x1" 2)
     ("2x2" 4)
     ("3x2" 6)
-    (_ 2)))
+    (_ 1)))
 
 (defun projects--read-multi-layout (&optional prompt)
   (let* ((choices (mapcar (lambda (l)
@@ -435,6 +436,7 @@ name registered in `projects--table'."
 (defun projects--split-for-layout (layout)
   (delete-other-windows)
   (pcase layout
+    ("1x1" nil)  ; single window, nothing to split
     ("2x1" (split-window-right))
     ("2x2" (split-window-right)
             (other-window 1)
