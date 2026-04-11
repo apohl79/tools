@@ -1069,34 +1069,25 @@ With prefix arg \\[universal-argument], prompt to choose from available backups.
 ;;; ---------------------------------------------------------------------------
 
 (defun projects--auto-switch-on-display (frame)
-  "Auto-switch project when the selected window shows a buffer from a different project.
-Fires on `window-buffer-change-functions' — handles the case where killing
-a buffer causes Emacs to show a buffer from another project.
-Updates only the per-frame project; does not affect other frames."
-  (let* ((buf          (window-buffer (frame-selected-window frame)))
-         (buf-proj     (buffer-local-value 'projects--buffer-project buf))
-         (frame-proj   (projects-current frame)))
+  "Track the focused window's project as the frame-level current project.
+Updates default-directory and tab-bar highlighting."
+  (let* ((buf      (window-buffer (frame-selected-window frame)))
+         (buf-proj (buffer-local-value 'projects--buffer-project buf))
+         (frame-proj (projects-current frame)))
     (when (and buf-proj
                (not (equal buf-proj frame-proj))
                (gethash buf-proj projects--table)
-               ;; Never auto-switch into or out of a hidden project
                (not (projects-hidden-p buf-proj))
                (not (projects-hidden-p frame-proj)))
-      (message "[projects] auto-switch %s -> %s (frame, triggered by buffer: %s)"
+      (message "[projects] auto-switch frame: %s -> %s (buffer: %s)"
                frame-proj buf-proj (buffer-name buf))
-      ;; Update only this frame — other frames keep their own current project
       (set-frame-parameter frame 'projects-current buf-proj)
-      ;; Update global for non-client frames (regular project auto-switches)
       (unless (frame-parameter frame 'client)
         (setq projects--current buf-proj))
-      ;; Only update global default-directory for non-client, non-hidden project switches
-      (unless (or (frame-parameter frame 'client) (projects-hidden-p buf-proj))
+      (unless (projects-hidden-p buf-proj)
         (when-let ((dir (projects-dir buf-proj)))
           (setq-default default-directory dir)))
-      ;; Show/hide tab-bar for this frame based on the new project
       (projects--update-frame-tab-bar frame)
-      ;; Defer refresh — force-mode-line-update inside window-buffer-change-functions
-      ;; is deferred until next event loop; a timer fires after current cycle completes.
       (run-with-timer 0 nil #'projects--tab-bar-refresh))))
 
 (defun projects--set-window-project-dir (&rest _)
@@ -1126,15 +1117,14 @@ Idempotent: safe to call multiple times."
     (with-eval-after-load 'eat
       (advice-add 'eat :before #'projects--set-window-project-dir))
     ;; claude-code--directory uses (project-root (project-current)) which walks
-    ;; up to the git root — ignoring default-directory. In multi-view mode,
-    ;; override it to return the window project's registered dir directly.
+    ;; up to the git root — ignoring default-directory. Always override it to
+    ;; return the window project's registered dir directly.
     (advice-add 'claude-code--directory :around
                 (lambda (orig)
-                  (if (and (projects-multi-project-view-p)
-                           (projects-current-window-project))
-                      (let ((dir (projects-dir (projects-current-window-project))))
-                        (message "[projects] claude-code--directory override: %s -> %s"
-                                 (projects-current-window-project) dir)
+                  (if-let ((proj (projects-current-window-project))
+                           (dir (projects-dir proj)))
+                      (progn
+                        (message "[projects] claude-code--directory override: %s -> %s" proj dir)
                         dir)
                     (funcall orig))))
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
