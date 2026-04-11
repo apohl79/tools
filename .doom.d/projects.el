@@ -895,11 +895,10 @@ Rotates up to `projects--backup-count' backups before writing."
     (with-temp-file projects--save-file
       (let ((print-level nil)
             (print-length nil))
-        (pp (list :version 1
+        (pp (list :version 2
                   :current projects--current
                   :projects data
-                  :view-mode (projects-view-mode)
-                  :multi-layout (frame-parameter nil 'projects-multi-layout)
+                  :layout (or (frame-parameter nil 'projects-multi-layout) "1x1")
                   :window-projects (mapcar (lambda (win)
                                              (window-parameter win 'projects-project))
                                            (window-list nil 0)))
@@ -962,7 +961,7 @@ With prefix arg \\[universal-argument], prompt to choose from available backups.
            (version (plist-get data :version))
            (saved-current (plist-get data :current))
            (project-list (plist-get data :projects)))
-      (if (not (equal version 1))
+      (if (not (member version '(1 2)))
           (message "Unknown projects session version: %s" version)
         ;; --- valid session: proceed with restore ---
         (let* ((total (apply #'+ (mapcar (lambda (proj)
@@ -1041,17 +1040,14 @@ With prefix arg \\[universal-argument], prompt to choose from available backups.
             (setq projects--current restored)
             (set-frame-parameter nil 'projects-current restored))
 
-          ;; Restore view mode
-          (let* ((saved-view-mode (plist-get data :view-mode))
-                 (saved-multi-layout (plist-get data :multi-layout))
+          ;; Restore layout
+          (let* ((saved-layout (or (plist-get data :layout)
+                                   (plist-get data :multi-layout)
+                                   "1x1"))
                  (saved-window-projects (plist-get data :window-projects)))
-            (if (eq saved-view-mode 'multi-project)
-                (progn
-                  (projects--set-view-mode 'multi-project)
-                  (projects--set-multi-layout saved-multi-layout)
-                  (when saved-window-projects
-                    (projects--apply-multi-project-layout saved-multi-layout saved-window-projects)))
-              (projects--set-view-mode 'single-project))
+            (projects--set-multi-layout saved-layout)
+            (when saved-window-projects
+              (projects--apply-multi-project-layout saved-layout saved-window-projects))
             (projects--refresh-window-project-headers)
             (projects--update-frame-tab-bar))
 
