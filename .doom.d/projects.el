@@ -280,12 +280,15 @@ name registered in `projects--table'."
   "Hook run after switching to a project.")
 
 (defun projects-switch (name &optional norecord)
-  "Switch to project NAME. Updates tab-bar and active buffers."
+  "Switch the current window to project NAME.
+Updates the window's project assignment, shows a project buffer,
+and updates frame-level tracking. Tab-bar and header-line are refreshed."
   (interactive
    (progn
      (when (projects-hidden-p (projects-current))
        (user-error "Cannot switch projects from a temporary project"))
-     (let ((candidates (cl-remove (projects-current) (projects-names-visible) :test #'equal)))
+     (let ((candidates (cl-remove (projects-current-window-project)
+                                  (projects-names-visible) :test #'equal)))
        (list (completing-read "Switch to project: "
                               (lambda (str pred action)
                                 (if (eq action 'metadata)
@@ -294,63 +297,34 @@ name registered in `projects--table'."
                               nil t)))))
   (unless (gethash name projects--table)
     (user-error "Project '%s' does not exist" name))
-  ;; Block interactive switching to/from hidden projects
   (when (called-interactively-p 'any)
     (when (projects-hidden-p (projects-current))
       (user-error "Cannot switch projects from a temporary project"))
     (when (projects-hidden-p name)
       (user-error "Cannot switch to a hidden project")))
-  (message "[projects] switch: %s -> %s%s (multi=%s caller: %s)"
-           (projects-current) name (if norecord " (norecord)" "")
-           (projects-multi-project-view-p)
+  (message "[projects] switch: %s -> %s%s (caller: %s)"
+           (projects-current-window-project) name
+           (if norecord " (norecord)" "")
            (or (ignore-errors (cadr (backtrace-frame 2))) "?"))
-  (if (projects-multi-project-view-p)
-      ;; In multi-project mode: only update frame-level tracking, never touch layout.
-      ;; Window assignments are managed per-window; projects-switch must not clobber them.
-      (progn
-        (message "[projects] switch (multi-project mode): updating frame tracking only, not touching windows")
-        (projects--set-current name)
-        (unless norecord
-          (let ((proj (gethash name projects--table)))
-            (plist-put proj :switch-time (float-time))
-            (puthash name proj projects--table)))
-        (unless (projects-hidden-p name)
-          (when-let ((dir (projects-dir name)))
-            (setq-default default-directory dir)))
-        (run-hooks 'projects-switch-hook))
-    ;; Single-project mode: full switch with window config save/restore.
-    ;; Save current window layout for the outgoing project (before anything changes)
-    (let ((old (projects-current)))
-      (when (and old (not (projects-hidden-p old)))
-        (let ((entry (gethash old projects--table)))
-          (when entry
-            (plist-put entry :window-config (current-window-configuration))
-            (puthash old entry projects--table)))))
-    (projects--set-current name)
-    (unless norecord
-      (let ((proj (gethash name projects--table)))
-        (plist-put proj :switch-time (float-time))
-        (puthash name proj projects--table)))
-    (unless (projects-hidden-p name)
-      (when-let ((dir (projects-dir name)))
-        (setq-default default-directory dir)))
-    (projects--update-frame-tab-bar)
-    (let* ((entry  (gethash name projects--table))
-           (config (and entry (plist-get entry :window-config))))
-      (if config
-          (progn
-            (set-window-configuration config)
-            ;; A restored config may contain stale projects-project window params
-            ;; from a previous multi-project session. Clear them — they are only
-            ;; meaningful in multi-project mode.
-            (projects--clear-window-project-params))
-        ;; No saved config — start with a single window
-        (delete-other-windows))
-      ;; Always validate: replace any foreign-project buffers that leaked in
-      ;; (stale window-config, killed buffers substituted by Emacs, etc.)
-      (projects--ensure-visible-buffer))
-    (projects--tab-bar-refresh)
-    (run-hooks 'projects-switch-hook)))
+  ;; Update frame-level current project
+  (projects--set-current name)
+  ;; Update switch time
+  (unless norecord
+    (let ((proj (gethash name projects--table)))
+      (plist-put proj :switch-time (float-time))
+      (puthash name proj projects--table)))
+  ;; Set global default-directory
+  (unless (projects-hidden-p name)
+    (when-let ((dir (projects-dir name)))
+      (setq-default default-directory dir)))
+  ;; Update this window's project assignment and show a project buffer
+  (projects--set-window-project (selected-window) name)
+  (switch-to-buffer (projects--window-buffer-for-project name))
+  ;; Refresh UI
+  (projects--refresh-window-project-headers)
+  (projects--update-frame-tab-bar)
+  (projects--tab-bar-refresh)
+  (run-hooks 'projects-switch-hook))
 
 (defconst projects--multi-layouts '("1x1" "2x1" "2x2" "3x2")
   "Available project layout names, in display order.")
@@ -458,20 +432,10 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   (projects--update-frame-tab-bar)
   (projects--tab-bar-refresh))
 
-(defun projects-switch-window-project (name)
-  (interactive
-   (list (completing-read "Switch window project: " (projects-names-visible) nil t)))
-  (unless (gethash name projects--table)
-    (user-error "Project '%s' does not exist" name))
-  (projects--set-window-project (selected-window) name)
-  (switch-to-buffer (projects--window-buffer-for-project name))
-  (projects--refresh-window-project-headers))
 
 (defun projects-switch-dispatch ()
   (interactive)
-  (if (projects-multi-project-view-p)
-      (call-interactively #'projects-switch-window-project)
-    (call-interactively #'projects-switch)))
+  (call-interactively #'projects-switch))
 
 (defun projects-change-multi-project-layout (layout)
   (interactive (list (projects--read-multi-layout "Change multi-project layout: ")))
@@ -820,44 +784,6 @@ In multi-project mode, uses the window's assigned project."
         (switch-to-buffer (projects--create-info-buffer proj))
       (user-error "No active project"))))
 
-(defun projects--ensure-visible-buffer ()
-  "Ensure ALL visible windows show buffers belonging to the current project.
-Windows showing buffers from other projects are replaced.  Multiple windows
-each receive a different project buffer (pool approach) so the same buffer
-is not duplicated across windows."
-  (let* ((proj (projects-current))
-         (info-buf-name (when proj (projects--info-buffer-name proj))))
-    (when proj
-      (let* ((all-wins (window-list nil 0))
-             ;; A window needs fixing if it shows: a foreign project's buffer,
-             ;; OR another project's info buffer (even though it starts with *).
-             (needs-fix
-              (cl-remove-if
-               (lambda (win)
-                 (let* ((buf  (window-buffer win))
-                        (bname (buffer-name buf))
-                        (bproj (buffer-local-value 'projects--buffer-project buf)))
-                   (or (string= bname info-buf-name)   ; already this project's info
-                       (equal bproj proj)              ; already this project's buffer
-                       ;; special buffer that is NOT another project's info
-                       (and (projects-special-buffer-p buf)
-                            (not (string-match-p "^\\*project: " bname))))))
-               all-wins))
-             ;; Buffers already visible in windows we're keeping — exclude from pool
-             (kept-bufs (mapcar #'window-buffer
-                                (cl-set-difference all-wins needs-fix)))
-             ;; Pool: project buffers not already pinned in a kept window, MRU order
-             (pool (cl-remove-if
-                    (lambda (b)
-                      (or (not (buffer-live-p b))
-                          (memq b kept-bufs)
-                          (not (equal (buffer-local-value 'projects--buffer-project b)
-                                      proj))))
-                    (buffer-list))))
-        (dolist (win needs-fix)
-          (let ((replacement (or (pop pool) (projects--create-info-buffer proj))))
-            (with-selected-window win
-              (switch-to-buffer replacement))))))))
 
 ;;; ---------------------------------------------------------------------------
 ;;; ibuffer Integration
