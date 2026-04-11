@@ -504,8 +504,6 @@ and refresh the header-line-format."
           (when (and (not (projects-special-buffer-p buf))
                      (not (string-match-p "^\\*project: " (buffer-name buf)))
                      (null buf-proj))
-            (message "[projects] window-buffer-change: win=%s buf=%s old-proj=nil new-proj=%s"
-                     win (buffer-name buf) win-proj)
             (projects-register-buffer buf win-proj))
           (with-current-buffer buf
             (unless (equal header-line-format '(:eval (projects--window-header-line)))
@@ -518,9 +516,6 @@ and refresh the header-line-format."
   "Remove the dying buffer from its project and pre-set replacement in windows."
   (let ((proj projects--buffer-project)
         (buf (current-buffer)))
-    (message "[projects] cleanup-dead: buf=%s proj=%s in-table=%s"
-             (buffer-name buf) proj
-             (and proj (memq buf (plist-get (gethash proj projects--table) :buffers)) t))
     (when proj
       (let* ((entry (gethash proj projects--table))
              (bufs (plist-get entry :buffers)))
@@ -1075,7 +1070,6 @@ Updates default-directory and tab-bar highlighting."
 Used as :before advice on vterm/eat so the terminal opens in the right dir."
   (when-let* ((proj (projects-current-window-project))
               (dir  (projects-dir proj)))
-    (message "[projects] set-window-project-dir: %s -> %s" proj dir)
     (setq default-directory dir)))
 
 (defvar projects--hooks-installed-p nil
@@ -1103,9 +1097,7 @@ Idempotent: safe to call multiple times."
                 (lambda (orig)
                   (if-let ((proj (projects-current-window-project))
                            (dir (projects-dir proj)))
-                      (progn
-                        (message "[projects] claude-code--directory override: %s -> %s" proj dir)
-                        dir)
+                      dir
                     (funcall orig))))
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
