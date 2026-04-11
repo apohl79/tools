@@ -467,22 +467,31 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   "Register newly opened files with the current project."
   (let ((buf (current-buffer))
         (win-proj (window-parameter (selected-window) 'projects-project)))
+    (message "[projects] find-file-hook: buf=%s selected-win=%s win-proj=%s frame-proj=%s"
+             (buffer-name buf) (selected-window) win-proj (projects-current))
     (cond
      ;; Fresh client frame opened with a file via emacsclient (no project yet).
      ((and (frame-parameter nil 'client)
            (null (frame-parameter nil 'projects-current)))
+      (message "[projects] find-file-hook: routing to tmp (fresh client frame)")
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects--set-current "tmp" t)
       (projects--update-frame-tab-bar))
      ;; No active project at all
      ((null (projects-current))
+      (message "[projects] find-file-hook: routing to tmp (no current project)")
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects-switch "tmp"))
      ;; Known window project: register immediately
      (win-proj
-      (projects-register-buffer buf win-proj)))))
+      (message "[projects] find-file-hook: registering buf=%s to win-proj=%s"
+               (buffer-name buf) win-proj)
+      (projects-register-buffer buf win-proj))
+     ;; No window project yet — defer to window-buffer-change-hook
+     (t
+      (message "[projects] find-file-hook: deferring registration (no win-proj)")))))
 
 (defun projects--window-buffer-change-hook (frame)
   "Re-register buffers appearing in windows with the correct window project,
@@ -496,6 +505,8 @@ and refresh the header-line-format."
           (when (and (not (projects-special-buffer-p buf))
                      (not (string-match-p "^\\*project: " (buffer-name buf)))
                      (null buf-proj))
+            (message "[projects] window-buffer-change: win=%s buf=%s old-proj=nil new-proj=%s"
+                     win (buffer-name buf) win-proj)
             (projects-register-buffer buf win-proj))
           (with-current-buffer buf
             (unless (equal header-line-format '(:eval (projects--window-header-line)))
@@ -508,6 +519,9 @@ and refresh the header-line-format."
   "Remove the dying buffer from its project and pre-set replacement in windows."
   (let ((proj projects--buffer-project)
         (buf (current-buffer)))
+    (message "[projects] cleanup-dead: buf=%s proj=%s in-table=%s"
+             (buffer-name buf) proj
+             (and proj (memq buf (plist-get (gethash proj projects--table) :buffers)) t))
     (when proj
       (let* ((entry (gethash proj projects--table))
              (bufs (plist-get entry :buffers)))
@@ -1062,6 +1076,7 @@ Updates default-directory and tab-bar highlighting."
 Used as :before advice on vterm/eat so the terminal opens in the right dir."
   (when-let* ((proj (projects-current-window-project))
               (dir  (projects-dir proj)))
+    (message "[projects] set-window-project-dir: %s -> %s" proj dir)
     (setq default-directory dir)))
 
 (defvar projects--hooks-installed-p nil
