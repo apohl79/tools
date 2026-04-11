@@ -1098,7 +1098,9 @@ Idempotent: safe to call multiple times."
                 (lambda (orig)
                   (if-let ((proj (projects-current-window-project))
                            (dir (projects-dir proj)))
-                      dir
+                      (progn
+                        (message "[projects] claude-code--directory override: %s -> %s" proj dir)
+                        dir)
                     (funcall orig))))
     (add-hook 'vterm-mode-hook #'projects--find-file-hook)
     (add-hook 'eat-mode-hook   #'projects--find-file-hook)
