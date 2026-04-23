@@ -179,7 +179,7 @@ pip_packages = [
 # Claude Code CLI (installed via official curl script)
 [layer2.claude_code]
 install_url = "https://claude.ai/install.sh"
-marketplace_path = "{script_dir}/claude/my-plugin"
+marketplace_path = "{script_dir}/.claude/my-plugin"
 plugin = "my@my-tools"
 
 # Settings to patch into ~/.claude/settings.json after install
@@ -300,30 +300,30 @@ target = "{home}/.terminfo"
 
 [[layer5.symlinks]]
 name = "claude-statusline"
-source = "{script_dir}/claude/statusline.sh"
+source = "{script_dir}/.claude/statusline.sh"
 target = "{home}/.claude/statusline.sh"
 
 [[layer5.symlinks]]
 name = "claude-supervisor"
-source = "{script_dir}/claude/supervisor"
+source = "{script_dir}/.claude/supervisor"
 target = "{home}/.claude/supervisor"
 
 [[layer5.symlinks]]
 name = "claude-notify"
-source = "{script_dir}/claude/notify"
+source = "{script_dir}/.claude/notify"
 target = "{home}/.claude/notify"
 
 [[layer5.symlinks]]
 name = "claude-commands"
-source = "{script_dir}/claude/commands"
+source = "{script_dir}/.claude/commands"
 target = "{home}/.claude/commands"
 
 [[layer5.symlinks]]
 name = "claude-skills"
-source = "{script_dir}/claude/skills"
+source = "{script_dir}/.claude/skills"
 target = "{home}/.claude/skills"
 
 [[layer5.symlinks]]
 name = "claude-post-edit-check"
-source = "{script_dir}/claude/post-edit-check.sh"
+source = "{script_dir}/.claude/post-edit-check.sh"
 target = "{home}/.claude/post-edit-check.sh"
