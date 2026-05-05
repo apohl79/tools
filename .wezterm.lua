@@ -10,6 +10,10 @@ config.term = 'wezterm'
 --config.use_ime = false
 config.use_dead_keys = false
 
+-- Pass the window-focus click through to the application (Emacs)
+config.swallow_mouse_click_on_window_focus = false
+config.swallow_mouse_click_on_pane_focus = false
+
 -- Make left Option key send Meta sequences for terminal Emacs
 -- Right Option key still composes special characters (@ | [ ] { } etc.)
 config.send_composed_key_when_left_alt_is_pressed = false

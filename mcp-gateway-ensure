@@ -5,7 +5,7 @@
 # so gateway-session-end.sh never sees an empty sessions dir.
 # Safe to call from .zshrc — fast no-op when already running.
 
-SCRIPT="$HOME/workspace/code/claudes-kitchen/plugins/gateway/hooks/gateway-session-start.sh"
+SCRIPT="$HOME/.claude/plugins/marketplaces/claudes-kitchen/plugins/gateway/hooks/gateway-session-start.sh"
 
 if [ ! -x "$SCRIPT" ]; then
   echo "mcp-gateway-ensure: script not found: $SCRIPT" >&2

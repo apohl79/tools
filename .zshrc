@@ -159,8 +159,6 @@ command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure >/dev/n
 . "$HOME/.cargo/env"
 command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure 2>/dev/null
 
-# plan-executor
-command -v plan-executor >/dev/null 2>&1 && plan-executor ensure 2>/dev/null
 
 # MCP Gateway — keep running independent of Claude sessions
 (mcp-gateway-ensure 2>/dev/null &)
@@ -172,3 +170,8 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 # pnpm end
+
+
+
+# plan-executor
+command -v plan-executor >/dev/null 2>&1 && plan-executor ensure 2>/dev/null
