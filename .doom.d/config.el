@@ -31,7 +31,7 @@
                 (run-with-timer 0.5 nil
                                 (lambda ()
                                   (unless (frame-parameter nil 'projects-multi-layout)
-                                    (projects--set-multi-layout "1x1")))))))))
+                                    (projects--set-multi-layout "1x1"))))))))
 
 
 (defun my/projects-setup-client-frame ()
@@ -138,19 +138,21 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 ;; registration ping-pong. Instead save/restore only line-based window heights.
 (defvar my/projects-pre-transient-sizes nil)
 
+(defun my/projects-transient--restore-sizes-apply (saved)
+  (dolist (entry saved)
+    (let* ((w       (car entry))
+           (target  (cdr entry))
+           (delta   (- target (window-total-height w))))
+      (when (and (window-live-p w) (/= delta 0))
+        (ignore-errors (window-resize w delta))))))
+
 (defun my/projects-transient-restore-sizes ()
   (when my/projects-pre-transient-sizes
     (let ((saved my/projects-pre-transient-sizes))
       (setq my/projects-pre-transient-sizes nil)
-      (run-with-timer
-       0.1 nil
-       (lambda ()
-         (dolist (entry saved)
-           (let* ((w       (car entry))
-                  (target  (cdr entry))
-                  (delta   (- target (window-total-height w))))
-             (when (and (window-live-p w) (/= delta 0))
-               (ignore-errors (window-resize w delta))))))))))
+      (run-with-timer 0.1 nil
+                      #'my/projects-transient--restore-sizes-apply
+                      saved))))
 
 (after! transient
   (defun my/projects-transient--pre-show ()
@@ -167,12 +169,13 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 ;; Projects tab-bar integration
 ;; Uses my/workspace-tab-active / my/workspace-tab-inactive faces (defined in +functions.el)
 (after! projects
+  ;; Tab-bar disabled — per-window header-lines show project names instead.
+  ;; Keep the format function registered so tab-bar can be re-enabled if needed.
   (setq tab-bar-close-button-show nil
         tab-bar-new-button-show nil
-        tab-bar-show t
+        tab-bar-show nil
         tab-bar-format '(projects--tab-bar-format))
-  (tab-bar-mode 1)
-  (add-hook 'projects-switch-hook #'projects--tab-bar-refresh))
+  (tab-bar-mode -1))
 
 
 (setq org-directory "~/ownCloud/org"
@@ -196,28 +199,15 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
       "p" #'my/org-preview)
 
 (after! markdown-mode
-  ;; Unbind the C-x n prefix to allow using it for other-window
+  ;; Unbind the C-x n prefix to allow using it for other-window.
+  ;; C-c C-c p (markdown-preview) and the localleader p key are routed to
+  ;; my/markdown-preview, which launches the inline-discussion preview server.
   (map! :map markdown-mode-map
-        "C-x n" nil)
-
-  ;; Use pandoc with GFM for proper table rendering
-  (setq markdown-command "pandoc -f gfm -t html5")
-
-  ;; GitHub light theme for preview
-  (setq markdown-css-paths
-        '("https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"))
-  (setq markdown-xhtml-header-content
-        (concat
-         "<style>
-          body { box-sizing: border-box; min-width: 200px; max-width: 980px;
-                 margin: 0 auto; padding: 45px; }
-          .markdown-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
-                           Helvetica, Arial, sans-serif; }
-        </style>"
-         my/mermaid-head-extra))
-  (setq markdown-xhtml-body-preamble "<article class=\"markdown-body\">")
-  (setq markdown-xhtml-body-epilogue
-        (concat "</article>" my/mermaid-init-script))
+        "C-x n" nil
+        "C-c C-c p" #'my/markdown-preview
+        :localleader
+        "p" #'my/markdown-preview
+        "P" #'my/markdown-preview-stop)
 
   (add-hook! 'markdown-mode-hook
              ;; Org mode tables in markdown

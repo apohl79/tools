@@ -574,6 +574,93 @@ This is an interactive copy of the original org-msg function."
     (org-export-to-file 'html tmp-file nil nil nil nil nil)
     (browse-url (concat "file://" tmp-file))))
 
+(defvar my/markdown-preview-server-dir
+  (expand-file-name "~/tools/markdown-preview-server")
+  "Root directory of the markdown-preview-server checkout.")
+
+(defvar-local my/markdown-preview-session-dir nil
+  "Per-buffer session directory of a running preview server.")
+
+(defun my/markdown-preview--pid (session-dir)
+  "Read server PID from SESSION-DIR/server.pid, or nil if absent/stale."
+  (let ((pid-file (expand-file-name "server.pid" session-dir)))
+    (when (file-readable-p pid-file)
+      (string-trim
+       (with-temp-buffer
+         (insert-file-contents pid-file)
+         (buffer-string))))))
+
+(defun my/markdown-preview--alive-p (session-dir)
+  "Non-nil if the server tracked in SESSION-DIR is still running."
+  (let ((pid (my/markdown-preview--pid session-dir)))
+    (and pid (not (string-empty-p pid))
+         (= 0 (call-process "kill" nil nil nil "-0" pid)))))
+
+(defun my/markdown-preview-stop ()
+  "Stop the markdown preview server attached to this buffer."
+  (interactive)
+  (when (and my/markdown-preview-session-dir
+             (file-directory-p my/markdown-preview-session-dir))
+    (let ((pid (my/markdown-preview--pid my/markdown-preview-session-dir)))
+      (when (and pid (not (string-empty-p pid)))
+        (call-process "kill" nil nil nil pid)))
+    (setq my/markdown-preview-session-dir nil)))
+
+(defun my/markdown-preview ()
+  "Render the current markdown file with the inline-discussion preview server.
+
+Launches `markdown-preview-server' for the buffer's file and opens the
+served URL in the default browser. If a server is already running for
+this buffer, reuses its URL. The server is stopped when the buffer is
+killed."
+  (interactive)
+  (unless (derived-mode-p 'markdown-mode 'gfm-mode)
+    (user-error "Not a markdown buffer"))
+  (unless buffer-file-name
+    (user-error "Buffer is not visiting a file"))
+  (when (buffer-modified-p)
+    (when (y-or-n-p "Save buffer before preview? ")
+      (save-buffer)))
+  (when (and my/markdown-preview-session-dir
+             (not (my/markdown-preview--alive-p my/markdown-preview-session-dir)))
+    (setq my/markdown-preview-session-dir nil))
+  (if (and my/markdown-preview-session-dir
+           (file-readable-p (expand-file-name "url.txt" my/markdown-preview-session-dir)))
+      (let ((url (string-trim
+                  (with-temp-buffer
+                    (insert-file-contents
+                     (expand-file-name "url.txt" my/markdown-preview-session-dir))
+                    (buffer-string)))))
+        (browse-url url)
+        (message "Markdown preview: %s" url))
+    (let* ((file (file-truename buffer-file-name))
+           (script (expand-file-name "bin/launch.sh" my/markdown-preview-server-dir))
+           (session-dir (make-temp-file "markdown-preview-" t))
+           (out-buf (generate-new-buffer " *markdown-preview-launch*")))
+      (unless (file-executable-p script)
+        (kill-buffer out-buf)
+        (user-error "launch.sh not found at %s" script))
+      (let ((exit (call-process script nil out-buf nil
+                                "start"
+                                "--doc" file
+                                "--session-dir" session-dir)))
+        (if (/= 0 exit)
+            (let ((log (with-current-buffer out-buf (buffer-string))))
+              (kill-buffer out-buf)
+              (user-error "markdown-preview-server failed (%d): %s" exit log))
+          (kill-buffer out-buf)
+          (let ((url-file (expand-file-name "url.txt" session-dir)))
+            (unless (file-readable-p url-file)
+              (user-error "preview server did not write url.txt in %s" session-dir))
+            (let ((url (string-trim
+                        (with-temp-buffer
+                          (insert-file-contents url-file)
+                          (buffer-string)))))
+              (setq my/markdown-preview-session-dir session-dir)
+              (add-hook 'kill-buffer-hook #'my/markdown-preview-stop nil t)
+              (browse-url url)
+              (message "Markdown preview: %s" url))))))))
+
 (defun my/scroll-mouse-handler (&rest ev)
   "A mouse scroll event handler for vterm that enables/disables vterm-copy-mode to
 avoid auto-scrolling when scrolling up and turning it back on when scrolling down
@@ -880,9 +967,18 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
                 ((= window-count 1)
                  (message "[claude-display] CASE: 1 window, splitting 50/50")
                  (let* ((main-window (selected-window))
+                        (main-project (window-parameter main-window 'projects-project))
                         (new-window (split-window main-window nil split-direction)))
-                   (message "[claude-display] split created new-window=%s from main=%s" new-window main-window)
+                   (message "[claude-display] split created new-window=%s from main=%s (proj=%s)"
+                            new-window main-window main-project)
+                   ;; Inherit project parameter from the parent window so the
+                   ;; claude buffer registers to the correct project via hooks.
+                   (when main-project
+                     (set-window-parameter new-window 'projects-project main-project))
                    (set-window-buffer new-window buffer)
+                   ;; Register the claude buffer to the window's project
+                   (when (and main-project (fboundp 'projects-register-buffer))
+                     (projects-register-buffer buffer main-project))
                    new-window))
 
                 ;; 2+ windows - in multi-project mode use the current window (each window
@@ -900,9 +996,8 @@ Split direction is based on frame dimensions: horizontal if width > height, vert
                                           (car other-windows) current-window)
                                  (car other-windows)))))
                    (set-window-buffer win buffer)
-                   ;; Re-register to the target window's project — find-file-hook
-                   ;; may have already assigned the buffer to the window where it
-                   ;; was created, which is wrong after claude-display moves it.
+                   ;; Register to the target window's project (the guard in
+                   ;; projects-register-buffer handles buffers already assigned).
                    (when (fboundp 'projects-register-buffer)
                      (when-let ((wp (window-parameter win 'projects-project)))
                        (projects-register-buffer buffer wp)))

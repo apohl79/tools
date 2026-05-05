@@ -47,6 +47,25 @@ Each value is a plist: (:dir DIR :buffers BUFFER-LIST :files FILE-LIST :switch-t
 nil means the buffer is global (special buffer).")
 
 ;;; ---------------------------------------------------------------------------
+;;; Diagnostics
+;;; ---------------------------------------------------------------------------
+
+(defvar projects-debug t
+  "When non-nil, log diagnostic events to *Messages* as \"[projects] ...\".
+Set to nil for a quieter experience.")
+
+(defun projects--log (fmt &rest args)
+  "Log FMT/ARGS as \"[projects] ...\" when `projects-debug' is non-nil."
+  (when projects-debug
+    (apply #'message (concat "[projects] " fmt) args)))
+
+(defun projects-debug-toggle ()
+  "Toggle `projects-debug' logging on/off."
+  (interactive)
+  (setq projects-debug (not projects-debug))
+  (message "projects-debug: %s" (if projects-debug "on" "off")))
+
+;;; ---------------------------------------------------------------------------
 ;;; Accessors
 ;;; ---------------------------------------------------------------------------
 
@@ -159,7 +178,7 @@ NAME must be unique. DIR is created if it does not exist."
                       :files nil
                       :switch-time 0)
            projects--table)
-  (message "[projects] create: %s dir=%s" name dir)
+  (projects--log "create: %s dir=%s" name dir)
   (projects-switch name)
   name)
 
@@ -205,13 +224,13 @@ name registered in `projects--table'."
       (user-error "gh CLI not found — install it or use a full URL"))
     (when (file-exists-p target)
       (user-error "Directory '%s' already exists" target))
-    (message "[projects] cloning %s into %s..." repo-url target)
+    (projects--log "cloning %s into %s..." repo-url target)
     (let ((buf (get-buffer-create "*projects-clone*")))
       (with-current-buffer buf (erase-buffer))
       (let ((exit-code (apply #'call-process (car cmd) nil (list buf t) nil (cdr cmd))))
         (if (eq exit-code 0)
             (progn
-              (message "[projects] clone succeeded")
+              (projects--log "clone succeeded")
               (unless (file-directory-p target)
                 (user-error "Clone reported success but target directory '%s' was not created — see *projects-clone* buffer" target))
               (projects-create project-name target))
@@ -276,7 +295,7 @@ name registered in `projects--table'."
         (setq projects--current replacement)))
     (projects--update-frame-tab-bar)
     (projects--tab-bar-refresh)
-    (message "[projects] delete: %s" name)))
+    (projects--log "delete: %s" name)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Switching
@@ -308,7 +327,7 @@ and updates frame-level tracking. Tab-bar and header-line are refreshed."
       (user-error "Cannot switch projects from a temporary project"))
     (when (projects-hidden-p name)
       (user-error "Cannot switch to a hidden project")))
-  (message "[projects] switch: %s -> %s%s (caller: %s)"
+  (projects--log "switch: %s -> %s%s (caller: %s)"
            (projects-current-window-project) name
            (if norecord " (norecord)" "")
            (or (ignore-errors (cadr (backtrace-frame 2))) "?"))
@@ -404,10 +423,19 @@ and updates frame-level tracking. Tab-bar and header-line are refreshed."
                  (select-window c3) (split-window-below)
                  (select-window c1)))))))
 (defun projects--window-buffer-for-project (project)
-  (or (cl-find-if (lambda (buffer)
-                    (equal (buffer-local-value 'projects--buffer-project buffer) project))
-                  (buffer-list))
-      (projects--create-info-buffer project)))
+  "Return a buffer suitable for displaying PROJECT in a window.
+Prefers an existing buffer assigned to PROJECT; falls back to the info buffer."
+  (let ((found (cl-find-if (lambda (buffer)
+                             (equal (buffer-local-value 'projects--buffer-project buffer) project))
+                           (buffer-list))))
+    (if found
+        (progn
+          (projects--log "window-buffer-for-project: project=%s -> %s"
+                         project (buffer-name found))
+          found)
+      (projects--log "window-buffer-for-project: project=%s -> *info* (no matching buffer in (buffer-list) of size %d)"
+                     project (length (buffer-list)))
+      (projects--create-info-buffer project))))
 
 (defun projects--apply-multi-project-layout (layout &optional projects)
   "Split the frame into LAYOUT windows and assign projects to each.
@@ -415,6 +443,7 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   (let* ((wins nil)
          (seed (or projects (projects--window-project-seed-list)))
          (assignments (projects--fill-project-list seed (projects--layout-window-count layout))))
+    (projects--log "apply-layout: layout=%s assignments=%S" layout assignments)
     (when assignments
       (projects--split-for-layout layout)
       (setq wins (window-list nil 0))
@@ -426,15 +455,22 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
       (select-window (car wins)))))
 
 (defun projects-set-layout (layout)
-  "Change the window layout to LAYOUT, preserving project assignments where possible."
+  "Change the window layout to LAYOUT.
+The focused window's project becomes slot 1; remaining slots are filled
+MRU from visible projects (no duplicates)."
   (interactive (list (projects--read-multi-layout)))
   (unless (projects--valid-multi-layout-p layout)
     (user-error "Unsupported layout: %s" layout))
-  (projects--set-multi-layout layout)
-  (projects--apply-multi-project-layout layout)
-  (projects--refresh-window-project-headers)
-  (projects--update-frame-tab-bar)
-  (projects--tab-bar-refresh))
+  (let* ((active (projects-current-window-project))
+         (visible (projects-names-visible))
+         (rest (cl-remove active visible :test #'equal))
+         (seed (if active (cons active rest) visible)))
+    (projects--log "set-layout: layout=%s active=%s seed=%S" layout active seed)
+    (projects--set-multi-layout layout)
+    (projects--apply-multi-project-layout layout seed)
+    (projects--refresh-window-project-headers)
+    (projects--update-frame-tab-bar)
+    (projects--tab-bar-refresh)))
 
 (defun projects-switch-dispatch ()
   (interactive)
@@ -444,19 +480,72 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
 ;;; Buffer Management
 ;;; ---------------------------------------------------------------------------
 
+(defun projects--find-project-for-file (file)
+  "Return the project name whose directory contains FILE, or nil.
+Prefers the longest (most specific) match when multiple projects overlap."
+  (when file
+    (let ((best-name nil)
+          (best-len 0))
+      (maphash (lambda (name entry)
+                 (let ((dir (plist-get entry :dir)))
+                   (when (and dir (string-prefix-p (expand-file-name dir)
+                                                   (expand-file-name file)))
+                     (let ((len (length dir)))
+                       (when (> len best-len)
+                         (setq best-name name best-len len))))))
+               projects--table)
+      best-name)))
+
 (defun projects-register-buffer (buf &optional project-name)
-  "Register BUF as belonging to PROJECT-NAME or the active project scope."
+  "Register BUF as belonging to PROJECT-NAME or the active project scope.
+Validates the buffer's file path (or `default-directory' for non-file buffers)
+is under the project's directory. If not, finds the correct project by path.
+If BUF already has a project assignment, this is a no-op (use
+`projects-move-buffer' for intentional reassignment)."
   (when (buffer-live-p buf)
-    (let ((proj (or project-name
-                    (projects-current-window-project))))
-      (when (and proj (not (projects-special-buffer-p buf)))
-        (with-current-buffer buf
-          (setq-local projects--buffer-project proj))
-        (let* ((entry (gethash proj projects--table))
-               (bufs (plist-get entry :buffers)))
-          (unless (memq buf bufs)
-            (plist-put entry :buffers (cons buf bufs))
-            (puthash proj entry projects--table)))))))
+    (let ((existing (buffer-local-value 'projects--buffer-project buf)))
+      (cond
+       ;; Guard: never overwrite an existing assignment silently.
+       (existing
+        (projects--log "register-buffer: SKIP buf=%s existing-proj=%s requested=%s (already assigned)"
+                       (buffer-name buf) existing
+                       (or project-name (projects-current-window-project))))
+       ((projects-special-buffer-p buf)
+        (projects--log "register-buffer: SKIP buf=%s (special/global)" (buffer-name buf)))
+       (t
+        (let* ((requested (or project-name
+                             (projects-current-window-project)))
+               ;; Use file path if buffer visits a file, else default-directory
+               ;; (for vterm, eat, claude, dired etc).
+               (path (or (buffer-file-name buf)
+                         (with-current-buffer buf
+                           (expand-file-name default-directory))))
+               (path-corrected nil)
+               (proj (if (and path requested)
+                         (let ((dir (projects-dir requested)))
+                           (if (and dir (string-prefix-p (expand-file-name dir)
+                                                         path))
+                               requested
+                             (let ((found (projects--find-project-for-file path)))
+                               (when (and found (not (equal found requested)))
+                                 (setq path-corrected found))
+                               (or found requested))))
+                       requested)))
+          (when proj
+            (projects--log "register-buffer: buf=%s proj=%s%s path=%s caller=%s"
+                           (buffer-name buf) proj
+                           (if path-corrected
+                               (format " (path-corrected from %s)" requested)
+                             "")
+                           (or path "<none>")
+                           (or (ignore-errors (cadr (backtrace-frame 4))) "?"))
+            (with-current-buffer buf
+              (setq-local projects--buffer-project proj))
+            (let* ((entry (gethash proj projects--table))
+                   (bufs (plist-get entry :buffers)))
+              (unless (memq buf bufs)
+                (plist-put entry :buffers (cons buf bufs))
+                (puthash proj entry projects--table))))))))))
 
 (defun projects--ensure-tmp-project ()
   "Create the hidden 'tmp' project if it doesn't exist yet."
@@ -472,16 +561,21 @@ PROJECTS is an optional list of project names to assign; defaults to visible pro
   "Register newly opened files with the current project."
   (let ((buf (current-buffer))
         (win-proj (window-parameter (selected-window) 'projects-project)))
+    (projects--log "find-file-hook: buf=%s win-proj=%s frame-proj=%s existing-buf-proj=%s"
+                   (buffer-name buf) win-proj (projects-current)
+                   (bound-and-true-p projects--buffer-project))
     (cond
      ;; Fresh client frame opened with a file via emacsclient (no project yet).
      ((and (frame-parameter nil 'client)
            (null (frame-parameter nil 'projects-current)))
+      (projects--log "find-file-hook: routing to tmp (fresh client frame)")
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects--set-current "tmp" t)
       (projects--update-frame-tab-bar))
      ;; No active project at all
      ((null (projects-current))
+      (projects--log "find-file-hook: routing to tmp (no current project)")
       (projects--ensure-tmp-project)
       (projects-register-buffer buf "tmp")
       (projects-switch "tmp"))
@@ -504,6 +598,8 @@ and refresh the header-line-format."
           (when (and (not (projects-special-buffer-p buf))
                      (not (string-match-p "^\\*project: " (buffer-name buf)))
                      (null buf-proj))
+            (projects--log "window-buffer-change: registering win=%s buf=%s (unassigned) -> %s"
+                           win (buffer-name buf) win-proj)
             (projects-register-buffer buf win-proj))
           (with-current-buffer buf
             (unless (equal header-line-format '(:eval (projects--window-header-line)))
@@ -520,7 +616,7 @@ and refresh the header-line-format."
       (let* ((entry (gethash proj projects--table))
              (bufs (plist-get entry :buffers)))
         (when (memq buf bufs)
-          (message "[projects] buffer-killed: %s from project %s" (buffer-name buf) proj)
+          (projects--log "buffer-killed: %s from project %s" (buffer-name buf) proj)
           (plist-put entry :buffers (delq buf bufs))
           (puthash proj entry projects--table)
           ;; Pre-set windows showing the dying buffer to a project-local replacement
@@ -534,7 +630,7 @@ and refresh the header-line-format."
                                remaining)))
             (dolist (win (get-buffer-window-list buf nil t))
               (let ((rep (or replacement (projects--create-info-buffer proj))))
-                (message "[projects] buffer-killed: pre-setting win=%s to %s" win (buffer-name rep))
+                (projects--log "buffer-killed: pre-setting win=%s to %s" win (buffer-name rep))
                 (set-window-buffer win rep))))
           ;; Deferred safety net
           (run-with-timer 0 nil #'projects--fix-windows-after-kill))))))
@@ -549,6 +645,7 @@ Each window's assigned project is used to find a suitable replacement buffer."
     (let* ((proj (projects--window-target-project win))
            (buf (window-buffer win))
            (bname (buffer-name buf))
+           (buf-proj (buffer-local-value 'projects--buffer-project buf))
            (info-buf-name (when proj (projects--info-buffer-name proj)))
            (proj-bufs (when proj (plist-get (gethash proj projects--table) :buffers))))
       (unless (or (null proj)
@@ -557,8 +654,8 @@ Each window's assigned project is used to find a suitable replacement buffer."
                   ;; to this project — a vterm from another project must still be
                   ;; replaced (pinned protects legitimate occupants, not intruders).
                   (and (projects--pinned-buffer-p buf)
-                       (equal (buffer-local-value 'projects--buffer-project buf) proj))
-                  (equal (buffer-local-value 'projects--buffer-project buf) proj))
+                       (equal buf-proj proj))
+                  (equal buf-proj proj))
         (let ((next (cl-find-if
                      (lambda (b)
                        (and (buffer-live-p b)
@@ -566,6 +663,9 @@ Each window's assigned project is used to find a suitable replacement buffer."
                             (not (get-buffer-window b))
                             (equal (buffer-local-value 'projects--buffer-project b) proj)))
                      proj-bufs)))
+          (projects--log "fix-windows: win=%s proj=%s buf=%s(proj=%s) -> %s"
+                         win proj bname buf-proj
+                         (if next (buffer-name next) (format "*project: %s*" proj)))
           (with-selected-window win
             (switch-to-buffer (or next (projects--create-info-buffer proj)))))))))
 
@@ -577,10 +677,35 @@ Each window's assigned project is used to find a suitable replacement buffer."
   (let ((dir   (projects-dir name))
         (bufs  (projects-buffers name))
         (entry (gethash name projects--table)))
-    (message "[projects] %s  dir=%s  buffers=(%s)  hidden=%s"
+    (projects--log "%s  dir=%s  buffers=(%s)  hidden=%s"
              name dir
              (mapconcat #'buffer-name bufs " ")
              (projects-hidden-p name))))
+
+(defun projects-reassign-orphans ()
+  "Find unassigned file/vterm buffers and register them by dir prefix match.
+Use this to fix buffers that missed registration (e.g. vterm buffers created
+before project hooks were set up, or claude buffers from windows without a
+project parameter)."
+  (interactive)
+  (let ((fixed 0) (skipped 0))
+    (dolist (buf (buffer-list))
+      (with-current-buffer buf
+        (when (and (null projects--buffer-project)
+                   (not (projects-special-buffer-p buf))
+                   (not (string-match-p "^\\*project: " (buffer-name buf))))
+          (let* ((dir (expand-file-name default-directory))
+                 (found (projects--find-project-for-file dir)))
+            (if found
+                (progn
+                  (projects--log "reassign-orphans: %s -> %s (via default-directory=%s)"
+                                 (buffer-name buf) found dir)
+                  (projects-register-buffer buf found)
+                  (cl-incf fixed))
+              (projects--log "reassign-orphans: SKIP %s (no project for dir=%s)"
+                             (buffer-name buf) dir)
+              (cl-incf skipped))))))
+    (message "projects-reassign-orphans: fixed=%d skipped=%d" fixed skipped)))
 
 (defun projects-switch-buffer ()
   "Switch to a buffer belonging to the active project scope."
@@ -824,11 +949,8 @@ Reuses faces my/workspace-tab-active and my/workspace-tab-inactive from +functio
     (force-mode-line-update t)))
 
 (defun projects--update-frame-tab-bar (&optional frame)
-  "Show or hide the tab-bar for FRAME based on whether its project is hidden."
-  (let* ((f    (or frame (selected-frame)))
-         (proj (projects-current f))
-         (hide (and proj (projects-hidden-p proj))))
-    (set-frame-parameter f 'tab-bar-lines (if hide 0 1))))
+  "Hide the tab-bar — per-window header-lines show project names instead."
+  (set-frame-parameter (or frame (selected-frame)) 'tab-bar-lines 0))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Persistence
@@ -880,8 +1002,11 @@ Rotates up to `projects--backup-count' backups before writing."
                                              (window-parameter win 'projects-project))
                                            (window-list nil 0)))
             (current-buffer)))))
-  (let ((inhibit-message t))
-    (message "Projects saved")))
+  ;; Silent by default. When called interactively, surface confirmation;
+  ;; when called via timer/hook, only log if debug is on.
+  (if (called-interactively-p 'any)
+      (message "Projects saved")
+    (projects--log "save: %d projects" (hash-table-count projects--table))))
 
 (defun projects--format-relative-age (mtime)
   "Return a short relative age string for MTIME."
@@ -1031,7 +1156,9 @@ With prefix arg \\[universal-argument], prompt to choose from available backups.
                       (cl-remove nil valid-window-projects)))
                 (projects--apply-multi-project-layout saved-layout clean-window-projects)))
             (projects--refresh-window-project-headers)
-            (projects--update-frame-tab-bar))
+            (projects--update-frame-tab-bar)
+            ;; Initialize focused-window so header-line renders as active
+            (setq projects--focused-window (selected-window)))
 
           ;; Clean up and show dashboard (deferred so progress renders)
           (run-with-timer 0.2 nil
@@ -1112,6 +1239,12 @@ Idempotent: safe to call multiple times."
     ;; quit-window buries buffers (no kill-buffer-hook) — fix windows afterwards
     (advice-add 'quit-window :after (lambda (&rest _)
                                       (projects--fix-windows-after-kill)))
+    ;; NOTE: magit's `q` (magit-mode-quit-window / magit-mode-bury-buffer) buries
+    ;; the buffer and restores the window's previous buffer via its own logic.
+    ;; We deliberately do NOT advise these with fix-windows-after-kill, because
+    ;; fix-windows would then displace the legitimately restored previous buffer
+    ;; with another project buffer (e.g. magit-process). Real magit kills go
+    ;; through kill-buffer-hook → cleanup-dead-buffers, which handles things.
     ;; dirvish-quit kills dired buffers then calls quit-window, leaving windows on
     ;; scratch. Advise it to fix windows after the whole session is torn down.
     (with-eval-after-load 'dirvish
