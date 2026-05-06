@@ -138,5 +138,40 @@
     (set-frame-parameter nil 'projects-project name)
     (setq projects--current name)))
 
+;;; ---------------------------------------------------------------------------
+;;; CRUD
+;;; ---------------------------------------------------------------------------
+
+(defun projects-cmux--emacsclient-command (project)
+  "Return the shell command used to attach an emacsclient frame for PROJECT."
+  (format "emacsclient -s %s -t -F '((projects-project . %S))'"
+          (or (getenv "EMACS_DAEMON_NAME") "cmux")
+          project))
+
+(defun projects-create (name dir)
+  "Create project NAME at DIR. Mirrors to a cmux workspace."
+  (interactive
+   (let* ((dir (expand-file-name
+                (read-directory-name "Project directory: " nil nil nil)))
+          (default-name (projects--unique-project-name
+                         (file-name-nondirectory (directory-file-name dir))))
+          (name (read-string "Project name: " default-name)))
+     (list name dir)))
+  (when (gethash name projects--table)
+    (user-error "Project '%s' already exists" name))
+  (unless (file-directory-p dir)
+    (if (y-or-n-p (format "Directory '%s' does not exist. Create it? " dir))
+        (make-directory dir t)
+      (user-error "Aborted")))
+  (let ((dir (file-name-as-directory (expand-file-name dir))))
+    (puthash name (list :dir dir :buffers nil :files nil :switch-time 0)
+             projects--table)
+    (projects--log "create: %s dir=%s" name dir)
+    (projects-cmux--call "new-workspace"
+                         "--name" name
+                         "--cwd" dir
+                         "--command" (projects-cmux--emacsclient-command name))
+    name))
+
 (provide 'projects-cmux)
 ;;; projects-cmux.el ends here

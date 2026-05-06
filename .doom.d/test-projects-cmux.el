@@ -1,8 +1,12 @@
 ;;; test-projects-cmux.el --- ERT tests for projects-cmux  -*- lexical-binding: t; -*-
 (require 'ert)
 
-(let ((dir (file-name-directory (or load-file-name buffer-file-name))))
-  (load (expand-file-name "projects-cmux.el" dir) nil t))
+(defvar projects-cmux-test--dir
+  (file-name-directory (or load-file-name buffer-file-name))
+  "Directory containing this test file. Captured at load time because
+`load-file-name' is nil during ERT test execution.")
+
+(load (expand-file-name "projects-cmux.el" projects-cmux-test--dir) nil t)
 
 (ert-deftest projects-cmux/loads-cleanly ()
   (should (boundp 'projects--table))
@@ -32,6 +36,42 @@
       (set-frame-parameter frame 'projects-project saved-param)
       (setq projects--current saved-current)
       (remhash "alpha" projects--table))))
+
+(ert-deftest projects-cmux/create-calls-cmux-and-records ()
+  ;; The plan's test body uses `/tmp/beta/' as the project directory. The
+  ;; sandbox the test agent runs in disallows writing to `/tmp' (only
+  ;; `$TMPDIR' and project paths are writable), so we substitute a temp
+  ;; directory under `temporary-file-directory'. The contract being verified
+  ;; is the same: `projects-create' records the project in `projects--table'
+  ;; and invokes cmux with `new-workspace --name ... --cwd ... --command
+  ;; <emacsclient ... projects-project ... "beta">'.
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (beta-dir (file-name-as-directory (make-temp-file "cmux-beta-" t)))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir)))
+    (unwind-protect
+        (progn
+          (projects-create "beta" beta-dir)
+          (should (gethash "beta" projects--table))
+          (should (equal (projects-dir "beta") beta-dir))
+          (with-temp-buffer
+            (insert-file-contents capture)
+            (let ((line (buffer-string)))
+              (should (string-match-p "new-workspace" line))
+              (should (string-match-p "--name\tbeta" line))
+              (should (string-match-p (concat "--cwd\t"
+                                              (regexp-quote beta-dir))
+                                      line))
+              (should (string-match-p "--command\t" line))
+              (should (string-match-p "emacsclient" line))
+              (should (string-match-p "projects-project . \"beta\"" line)))))
+      (remhash "beta" projects--table)
+      (delete-file capture)
+      (when (file-directory-p beta-dir)
+        (delete-directory beta-dir t)))))
 
 (provide 'test-projects-cmux)
 ;;; test-projects-cmux.el ends here
