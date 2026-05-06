@@ -239,5 +239,43 @@
   (projects-cmux--call "rename-workspace" "--workspace" old-name new-name)
   (projects--log "rename: %s -> %s" old-name new-name))
 
+;;; ---------------------------------------------------------------------------
+;;; Layout
+;;; ---------------------------------------------------------------------------
+
+(defconst projects--multi-layouts '("1x1" "2x1" "2x2" "3x2"))
+
+(defun projects-cmux--split (direction)
+  "Split current pane in DIRECTION (\"left\"/\"right\"/\"up\"/\"down\")."
+  (projects-cmux--call "new-split" direction))
+
+(defun projects-cmux--send-emacsclient (project)
+  "Send the project-bound emacsclient command to the active surface."
+  (projects-cmux--call "send"
+                       (concat (projects-cmux--emacsclient-command project) "\n")))
+
+(defun projects-set-layout (layout)
+  "Apply LAYOUT (one of `projects--multi-layouts') in the current cmux workspace.
+Each new pane receives an emacsclient frame initially bound to the workspace
+project. Existing layout panes beyond the primary one are NOT auto-closed in
+this initial implementation."
+  (interactive (list (completing-read "Layout: " projects--multi-layouts nil t)))
+  (let ((proj (projects-current)))
+    (unless proj (user-error "No active project"))
+    (pcase layout
+      ("1x1" nil)
+      ("2x1" (projects-cmux--split "right")
+             (projects-cmux--send-emacsclient proj))
+      ("2x2" (projects-cmux--split "right")
+             (projects-cmux--send-emacsclient proj)
+             (projects-cmux--split "down")
+             (projects-cmux--send-emacsclient proj)
+             (projects-cmux--split "down")
+             (projects-cmux--send-emacsclient proj))
+      ("3x2" (dotimes (_ 5)
+               (projects-cmux--split "right")
+               (projects-cmux--send-emacsclient proj)))
+      (_ (user-error "Unknown layout: %s" layout)))))
+
 (provide 'projects-cmux)
 ;;; projects-cmux.el ends here

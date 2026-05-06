@@ -166,5 +166,45 @@ without invoking cmux."
       (remhash "eta" projects--table)
       (delete-file capture))))
 
+(ert-deftest projects-cmux/set-layout-2x2-orchestrates-splits ()
+  (puthash "theta" (list :dir "/tmp/theta/" :buffers nil :files nil :switch-time 0)
+           projects--table)
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir))
+         (projects--current "theta"))
+    (unwind-protect
+        (progn
+          (projects-set-layout "2x2")
+          (with-temp-buffer
+            (insert-file-contents capture)
+            (let ((s (buffer-string)))
+              ;; Three splits should have been created.
+              ;; Note: the plan's `(cl-count ?\\n (split-string s "new-split" t))'
+              ;; always yields 0 (cl-count of a character against a list of
+              ;; strings), making the assertion `(>= 0 3)' permanently false.
+              ;; Substituted with a direct count of "new-split" occurrences in
+              ;; the capture, which faithfully encodes the comment's intent.
+              (let ((splits 0)
+                    (start 0))
+                (while (string-match "new-split" s start)
+                  (setq splits (1+ splits)
+                        start (match-end 0)))
+                (should (>= splits 3)))
+              ;; Three send commands carrying emacsclient should have been issued.
+              (let ((sends 0)
+                    (start 0))
+                (while (string-match "send" s start)
+                  (setq sends (1+ sends)
+                        start (match-end 0)))
+                (should (= sends 3)))
+              (should (string-match-p "emacsclient" s))
+              (should (string-match-p "projects-project . \"theta\"" s)))))
+      (remhash "theta" projects--table)
+      (delete-file capture))))
+
 (provide 'test-projects-cmux)
 ;;; test-projects-cmux.el ends here
