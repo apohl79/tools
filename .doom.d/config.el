@@ -1,3 +1,13 @@
+(defvar my/projects-mode
+  (pcase (getenv "MY_PROJECTS_MODE")
+    ("cmux" 'cmux)
+    ("wezterm" 'wezterm)
+    (_ 'wezterm))
+  "Active projects backend (set once at daemon startup from MY_PROJECTS_MODE).")
+
+(when (eq my/projects-mode 'cmux)
+  (load! "projects-cmux"))
+
 (message "Loading configuration...")
 
 (load! "+functions")
