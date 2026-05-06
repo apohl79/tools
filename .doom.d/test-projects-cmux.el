@@ -224,5 +224,29 @@ without invoking cmux."
               (should (string-match-p "--url\thttps://example.com/x" s)))))
       (delete-file capture))))
 
+(ert-deftest projects-cmux/resync-creates-missing-workspaces ()
+  (puthash "iota" (list :dir "/tmp/iota/" :buffers nil :files nil :switch-time 0)
+           projects--table)
+  (puthash "kappa" (list :dir "/tmp/kappa/" :buffers nil :files nil :switch-time 0)
+           projects--table)
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir)))
+    (unwind-protect
+        (progn
+          (projects-cmux-resync)
+          (with-temp-buffer
+            (insert-file-contents capture)
+            (let ((s (buffer-string)))
+              (should (string-match-p "new-workspace" s))
+              (should (string-match-p "--name\tiota" s))
+              (should (string-match-p "--name\tkappa" s)))))
+      (remhash "iota" projects--table)
+      (remhash "kappa" projects--table)
+      (delete-file capture))))
+
 (provide 'test-projects-cmux)
 ;;; test-projects-cmux.el ends here

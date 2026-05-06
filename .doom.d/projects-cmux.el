@@ -287,5 +287,20 @@ this initial implementation."
 
 (setq browse-url-browser-function #'projects-cmux--browse-url)
 
+;;; ---------------------------------------------------------------------------
+;;; Resync
+;;; ---------------------------------------------------------------------------
+
+(defun projects-cmux-resync ()
+  "Create cmux workspaces for every project in `projects--table'.
+Idempotent: cmux returns non-zero for an existing workspace and we ignore it."
+  (interactive)
+  (dolist (name (projects-names))
+    (let ((dir (projects-dir name)))
+      (projects-cmux--call "new-workspace"
+                           "--name" name
+                           "--cwd" (or dir "")
+                           "--command" (projects-cmux--emacsclient-command name)))))
+
 (provide 'projects-cmux)
 ;;; projects-cmux.el ends here
