@@ -15,6 +15,26 @@ resolve_bin() {
 
 emacs_bin="${EMACS_BIN:-$(resolve_bin emacs)}"
 emacsclient_bin="${EMACSCLIENT_BIN:-$(resolve_bin emacsclient)}"
+
+detect_mode() {
+  if [ -n "${MY_PROJECTS_MODE:-}" ] && [ -n "${EMACS_DAEMON_NAME:-}" ]; then
+    return 0
+  fi
+  if [ -n "${CMUX_SOCKET_PATH:-}" ]; then
+    : "${MY_PROJECTS_MODE:=cmux}"
+    : "${EMACS_DAEMON_NAME:=cmux}"
+  elif [ -n "${WEZTERM_PANE:-}" ]; then
+    : "${MY_PROJECTS_MODE:=wezterm}"
+    : "${EMACS_DAEMON_NAME:=wezterm}"
+  else
+    : "${MY_PROJECTS_MODE:=wezterm}"
+    : "${EMACS_DAEMON_NAME:=default}"
+  fi
+  export MY_PROJECTS_MODE EMACS_DAEMON_NAME
+}
+
+detect_mode
+
 no_client=0
 gui_mode=0
 while [ $# -gt 0 ]; do
@@ -41,12 +61,11 @@ if [ $gui_mode -eq 1 ]; then
 else
   nw_flag="-nw"
 fi
-if [ $no_client -eq 1 ]; then
+if [ "$no_client" -eq 1 ]; then
   "$emacs_bin" $nw_flag "$@"
 else
-  # Try connecting to existing daemon, start one if needed
-  "$emacsclient_bin" -c $nw_flag "$@" 2>/dev/null || {
-    "$emacs_bin" --daemon
-    "$emacsclient_bin" -c $nw_flag "$@"
+  "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@" 2>/dev/null || {
+    "$emacs_bin" --daemon="$EMACS_DAEMON_NAME"
+    "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@"
   }
 fi

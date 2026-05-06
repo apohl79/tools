@@ -33,13 +33,33 @@ run_case() {
 
 # Baseline: with EMACS_BIN set, daemon-start path uses our fake emacs.
 run_case 'baseline emacs --daemon used' \
-  '^emacs(\t--daemon)?$' \
+  '^emacs(\t--daemon(=[a-z]+)?)?$' \
   env EMACSCLIENT_EXIT=1 "$WRAPPER" --version
 
 # Baseline: emacsclient is invoked when not -nc.
 run_case 'baseline emacsclient invoked' \
   '^emacsclient' \
   env EMACSCLIENT_EXIT=0 "$WRAPPER" --version
+
+run_case 'cmux env selects cmux daemon' \
+  '^emacs(\t--daemon=cmux)' \
+  env CMUX_SOCKET_PATH=/tmp/cmux.sock EMACSCLIENT_EXIT=1 "$WRAPPER" --version
+
+run_case 'cmux env exports MY_PROJECTS_MODE=cmux to client' \
+  $'^emacsclient(\t.+)?\t-s\tcmux(\t|$)' \
+  env CMUX_SOCKET_PATH=/tmp/cmux.sock EMACSCLIENT_EXIT=0 "$WRAPPER" --version
+
+run_case 'wezterm env selects wezterm daemon' \
+  '^emacs\t--daemon=wezterm' \
+  env -u CMUX_SOCKET_PATH WEZTERM_PANE=2 EMACSCLIENT_EXIT=1 "$WRAPPER" --version
+
+run_case 'no env selects default daemon' \
+  '^emacs\t--daemon=default' \
+  env -u CMUX_SOCKET_PATH -u WEZTERM_PANE EMACSCLIENT_EXIT=1 "$WRAPPER" --version
+
+run_case 'env override wins' \
+  '^emacs\t--daemon=cmux' \
+  env -u CMUX_SOCKET_PATH -u WEZTERM_PANE EMACS_DAEMON_NAME=cmux MY_PROJECTS_MODE=cmux EMACSCLIENT_EXIT=1 "$WRAPPER" --version
 
 if [ "$fail" -gt 0 ]; then
   printf '%d failed, %d passed\n' "$fail" "$pass"
