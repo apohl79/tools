@@ -61,6 +61,10 @@ run_case 'env override wins' \
   '^emacs\t--daemon=cmux' \
   env -u CMUX_SOCKET_PATH -u WEZTERM_PANE EMACS_DAEMON_NAME=cmux MY_PROJECTS_MODE=cmux EMACSCLIENT_EXIT=1 "$WRAPPER" --version
 
+run_case '-kill targets named daemon' \
+  $'^emacsclient\t-s\tcmux\t-e\t\\(kill-emacs\\)' \
+  env CMUX_SOCKET_PATH=/tmp/cmux.sock EMACSCLIENT_EXIT=0 "$WRAPPER" -kill
+
 if [ "$fail" -gt 0 ]; then
   printf '%d failed, %d passed\n' "$fail" "$pass"
   exit 1

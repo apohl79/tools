@@ -48,7 +48,9 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -kill)
-      "$emacsclient_bin" -e '(kill-emacs)' 2>/dev/null && echo "Emacs daemon killed." || echo "No daemon running."
+      "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -e '(kill-emacs)' 2>/dev/null \
+        && echo "Emacs daemon '$EMACS_DAEMON_NAME' killed." \
+        || echo "No daemon '$EMACS_DAEMON_NAME' running."
       exit 0
       ;;
     *)
