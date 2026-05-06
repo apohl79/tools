@@ -206,5 +206,23 @@ without invoking cmux."
       (remhash "theta" projects--table)
       (delete-file capture))))
 
+(ert-deftest projects-cmux/browse-url-opens-cmux-pane ()
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir)))
+    (unwind-protect
+        (progn
+          (projects-cmux--browse-url "https://example.com/x")
+          (with-temp-buffer
+            (insert-file-contents capture)
+            (let ((s (buffer-string)))
+              (should (string-match-p "new-pane" s))
+              (should (string-match-p "--type\tbrowser" s))
+              (should (string-match-p "--url\thttps://example.com/x" s)))))
+      (delete-file capture))))
+
 (provide 'test-projects-cmux)
 ;;; test-projects-cmux.el ends here

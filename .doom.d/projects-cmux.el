@@ -277,5 +277,15 @@ this initial implementation."
                (projects-cmux--send-emacsclient proj)))
       (_ (user-error "Unknown layout: %s" layout)))))
 
+;;; ---------------------------------------------------------------------------
+;;; Browser
+;;; ---------------------------------------------------------------------------
+
+(defun projects-cmux--browse-url (url &rest _)
+  "Open URL in a new cmux browser pane in the current workspace."
+  (projects-cmux--call "new-pane" "--type" "browser" "--url" url))
+
+(setq browse-url-browser-function #'projects-cmux--browse-url)
+
 (provide 'projects-cmux)
 ;;; projects-cmux.el ends here
