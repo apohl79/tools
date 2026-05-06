@@ -73,5 +73,48 @@
       (when (file-directory-p beta-dir)
         (delete-directory beta-dir t)))))
 
+(ert-deftest projects-cmux/switch-is-frame-local ()
+  "projects-switch updates the frame parameter and projects--current
+without invoking cmux."
+  (puthash "gamma" (list :dir "/tmp/gamma/" :buffers nil :files nil :switch-time 0)
+           projects--table)
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir)))
+    (unwind-protect
+        (progn
+          (projects-switch "gamma")
+          (should (equal (frame-parameter nil 'projects-project) "gamma"))
+          (should (equal projects--current "gamma"))
+          ;; cmux must NOT have been called.
+          (should (= 0 (nth 7 (file-attributes capture)))))
+      (remhash "gamma" projects--table)
+      (setq projects--current nil)
+      (set-frame-parameter nil 'projects-project nil)
+      (delete-file capture))))
+
+(ert-deftest projects-cmux/select-workspace-calls-cmux ()
+  (puthash "delta" (list :dir "/tmp/delta/" :buffers nil :files nil :switch-time 0)
+           projects--table)
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir)))
+    (unwind-protect
+        (progn
+          (projects-cmux-select-workspace "delta")
+          (with-temp-buffer
+            (insert-file-contents capture)
+            (let ((line (buffer-string)))
+              (should (string-match-p "select-workspace" line))
+              (should (string-match-p "--workspace\tdelta" line)))))
+      (remhash "delta" projects--table)
+      (delete-file capture))))
+
 (provide 'test-projects-cmux)
 ;;; test-projects-cmux.el ends here

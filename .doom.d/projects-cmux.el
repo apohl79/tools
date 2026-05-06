@@ -132,11 +132,37 @@
 
 (add-hook 'after-make-frame-functions #'projects-cmux--frame-init)
 
-;; Temporary stub — replaced in Task 9.
-(unless (fboundp 'projects-switch)
-  (defun projects-switch (name &optional _norecord)
-    (set-frame-parameter nil 'projects-project name)
-    (setq projects--current name)))
+;;; ---------------------------------------------------------------------------
+;;; Switching (frame-local)
+;;; ---------------------------------------------------------------------------
+
+(defvar projects-switch-hook nil
+  "Hook run after switching the current frame's project.")
+
+(defun projects-switch (name &optional norecord)
+  "Switch the SELECTED FRAME to project NAME (frame-local). Does not call cmux."
+  (interactive
+   (list (completing-read "Switch frame to project: "
+                          (projects-names-visible) nil t)))
+  (unless (gethash name projects--table)
+    (user-error "Project '%s' does not exist" name))
+  (set-frame-parameter nil 'projects-project name)
+  (setq projects--current name)
+  (unless norecord
+    (let ((proj (gethash name projects--table)))
+      (plist-put proj :switch-time (float-time))
+      (puthash name proj projects--table)))
+  (when-let ((dir (projects-dir name)))
+    (setq-default default-directory dir))
+  (projects--log "switch (frame-local): %s" name)
+  (run-hooks 'projects-switch-hook))
+
+(defun projects-cmux-select-workspace (name)
+  "Select cmux workspace NAME. Does not change any frame's project parameter."
+  (interactive
+   (list (completing-read "Select cmux workspace: "
+                          (projects-names-visible) nil t)))
+  (projects-cmux--call "select-workspace" "--workspace" name))
 
 ;;; ---------------------------------------------------------------------------
 ;;; CRUD
