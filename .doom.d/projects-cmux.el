@@ -119,5 +119,24 @@
                  (mapconcat #'identity args " ") exit))
       exit)))
 
+;;; ---------------------------------------------------------------------------
+;;; Frame-to-project binding
+;;; ---------------------------------------------------------------------------
+
+(defun projects-cmux--frame-init (frame)
+  "Bind FRAME to its `projects-project' parameter, if any."
+  (when-let ((proj (frame-parameter frame 'projects-project)))
+    (when (gethash proj projects--table)
+      (with-selected-frame frame
+        (projects-switch proj)))))
+
+(add-hook 'after-make-frame-functions #'projects-cmux--frame-init)
+
+;; Temporary stub — replaced in Task 9.
+(unless (fboundp 'projects-switch)
+  (defun projects-switch (name &optional _norecord)
+    (set-frame-parameter nil 'projects-project name)
+    (setq projects--current name)))
+
 (provide 'projects-cmux)
 ;;; projects-cmux.el ends here
