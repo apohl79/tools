@@ -116,5 +116,55 @@ without invoking cmux."
       (remhash "delta" projects--table)
       (delete-file capture))))
 
+(ert-deftest projects-cmux/delete-calls-cmux-and-removes ()
+  (puthash "epsilon" (list :dir "/tmp/epsilon/" :buffers nil :files nil :switch-time 0)
+           projects--table)
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir)))
+    (unwind-protect
+        (progn
+          (cl-letf (((symbol-function 'yes-or-no-p) (lambda (&rest _) t)))
+            (projects-delete "epsilon"))
+          (should-not (gethash "epsilon" projects--table))
+          (with-temp-buffer
+            (insert-file-contents capture)
+            (let ((line (buffer-string)))
+              (should (string-match-p "close-workspace" line))
+              (should (string-match-p "--workspace\tepsilon" line)))))
+      (remhash "epsilon" projects--table)
+      (delete-file capture))))
+
+(ert-deftest projects-cmux/rename-rewrites-frames ()
+  ;; Batch-mode adaptation: use (selected-frame) instead of (make-frame ...)
+  ;; per Task 7's deviation digest.
+  (puthash "zeta" (list :dir "/tmp/zeta/" :buffers nil :files nil :switch-time 0)
+           projects--table)
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir))
+         (frame (selected-frame))
+         (saved-param (frame-parameter frame 'projects-project)))
+    (unwind-protect
+        (progn
+          (set-frame-parameter frame 'projects-project "zeta")
+          (projects-rename "zeta" "eta")
+          (should (gethash "eta" projects--table))
+          (should-not (gethash "zeta" projects--table))
+          (should (equal (frame-parameter frame 'projects-project) "eta"))
+          (with-temp-buffer
+            (insert-file-contents capture)
+            (should (string-match-p "rename-workspace" (buffer-string)))))
+      (set-frame-parameter frame 'projects-project saved-param)
+      (remhash "zeta" projects--table)
+      (remhash "eta" projects--table)
+      (delete-file capture))))
+
 (provide 'test-projects-cmux)
 ;;; test-projects-cmux.el ends here

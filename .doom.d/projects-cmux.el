@@ -199,5 +199,45 @@
                          "--command" (projects-cmux--emacsclient-command name))
     name))
 
+(defun projects-delete (name)
+  "Delete project NAME. Closes its cmux workspace and kills its buffers."
+  (interactive
+   (list (completing-read "Delete project: " (projects-names) nil t
+                          nil nil (projects-current))))
+  (unless (gethash name projects--table)
+    (user-error "Project '%s' does not exist" name))
+  (when (yes-or-no-p (format "Delete project '%s' and kill its buffers? " name))
+    (projects-cmux--call "close-workspace" "--workspace" name)
+    (dolist (buf (projects-buffers name))
+      (kill-buffer buf))
+    (remhash name projects--table)
+    (when (equal projects--current name)
+      (setq projects--current (car (projects-names-visible))))
+    (projects--log "delete: %s" name)))
+
+(defun projects-rename (old-name new-name)
+  "Rename project OLD-NAME to NEW-NAME and the matching cmux workspace."
+  (interactive
+   (let ((old (completing-read "Rename project: " (projects-names) nil t
+                               nil nil (projects-current))))
+     (list old (read-string (format "Rename '%s' to: " old)))))
+  (unless (gethash old-name projects--table)
+    (user-error "Project '%s' does not exist" old-name))
+  (when (gethash new-name projects--table)
+    (user-error "Project '%s' already exists" new-name))
+  (puthash new-name (gethash old-name projects--table) projects--table)
+  (remhash old-name projects--table)
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when (equal projects--buffer-project old-name)
+        (setq-local projects--buffer-project new-name))))
+  (dolist (f (frame-list))
+    (when (equal (frame-parameter f 'projects-project) old-name)
+      (set-frame-parameter f 'projects-project new-name)))
+  (when (equal projects--current old-name)
+    (setq projects--current new-name))
+  (projects-cmux--call "rename-workspace" "--workspace" old-name new-name)
+  (projects--log "rename: %s -> %s" old-name new-name))
+
 (provide 'projects-cmux)
 ;;; projects-cmux.el ends here
