@@ -31,6 +31,16 @@ run_case() {
 
 # Cases will be added in later tasks.
 
+# Baseline: with EMACS_BIN set, daemon-start path uses our fake emacs.
+run_case 'baseline emacs --daemon used' \
+  '^emacs(\t--daemon)?$' \
+  env EMACSCLIENT_EXIT=1 "$WRAPPER" --version
+
+# Baseline: emacsclient is invoked when not -nc.
+run_case 'baseline emacsclient invoked' \
+  '^emacsclient' \
+  env EMACSCLIENT_EXIT=0 "$WRAPPER" --version
+
 if [ "$fail" -gt 0 ]; then
   printf '%d failed, %d passed\n' "$fail" "$pass"
   exit 1

@@ -1,11 +1,20 @@
 #!/bin/sh
-bin=/opt/homebrew/bin
-if [ ! -x $bin/emacs ]; then
-  bin=/usr/local/bin
-fi
-if [ ! -x $bin/emacs ]; then
-  bin=/bin
-fi
+
+resolve_bin() {
+  case "$1" in
+    /*) printf '%s\n' "$1"; return 0 ;;
+  esac
+  for prefix in /opt/homebrew/bin /usr/local/bin /bin; do
+    if [ -x "$prefix/$1" ]; then
+      printf '%s/%s\n' "$prefix" "$1"
+      return 0
+    fi
+  done
+  printf '%s\n' "$1"
+}
+
+emacs_bin="${EMACS_BIN:-$(resolve_bin emacs)}"
+emacsclient_bin="${EMACSCLIENT_BIN:-$(resolve_bin emacsclient)}"
 no_client=0
 gui_mode=0
 while [ $# -gt 0 ]; do
@@ -19,7 +28,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -kill)
-      $bin/emacsclient -e '(kill-emacs)' 2>/dev/null && echo "Emacs daemon killed." || echo "No daemon running."
+      "$emacsclient_bin" -e '(kill-emacs)' 2>/dev/null && echo "Emacs daemon killed." || echo "No daemon running."
       exit 0
       ;;
     *)
@@ -33,11 +42,11 @@ else
   nw_flag="-nw"
 fi
 if [ $no_client -eq 1 ]; then
-  $bin/emacs $nw_flag "$@"
+  "$emacs_bin" $nw_flag "$@"
 else
   # Try connecting to existing daemon, start one if needed
-  $bin/emacsclient -c $nw_flag "$@" 2>/dev/null || {
-    $bin/emacs --daemon
-    $bin/emacsclient -c $nw_flag "$@"
+  "$emacsclient_bin" -c $nw_flag "$@" 2>/dev/null || {
+    "$emacs_bin" --daemon
+    "$emacsclient_bin" -c $nw_flag "$@"
   }
 fi
