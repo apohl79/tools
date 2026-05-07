@@ -37,14 +37,9 @@
       (setq projects--current saved-current)
       (remhash "alpha" projects--table))))
 
-(ert-deftest projects-cmux/create-calls-cmux-and-records ()
-  ;; The plan's test body uses `/tmp/beta/' as the project directory. The
-  ;; sandbox the test agent runs in disallows writing to `/tmp' (only
-  ;; `$TMPDIR' and project paths are writable), so we substitute a temp
-  ;; directory under `temporary-file-directory'. The contract being verified
-  ;; is the same: `projects-create' records the project in `projects--table'
-  ;; and invokes cmux with `new-workspace --name ... --cwd ... --command
-  ;; <emacsclient ... projects-project ... "beta">'.
+(ert-deftest projects-cmux/create-records-without-cmux ()
+  "projects-create updates the in-memory model and does NOT call cmux —
+cmux workspaces are created manually by the user."
   (let* ((capture (make-temp-file "cmux-cap"))
          (beta-dir (file-name-as-directory (make-temp-file "cmux-beta-" t)))
          (process-environment (cons (concat "CAPTURE_FILE=" capture)
@@ -57,22 +52,8 @@
           (projects-create "beta" beta-dir)
           (should (gethash "beta" projects--table))
           (should (equal (projects-dir "beta") beta-dir))
-          (with-temp-buffer
-            (insert-file-contents capture)
-            (let ((line (buffer-string)))
-              (should (string-match-p "new-workspace" line))
-              (should (string-match-p "--name\tbeta" line))
-              (should (string-match-p (concat "--cwd\t"
-                                              (regexp-quote beta-dir))
-                                      line))
-              (should (string-match-p "--command\t" line))
-              (should (string-match-p "emacsclient" line))
-              ;; After the shell-quote-argument fix, the lisp -F payload is
-              ;; backslash-escaped on POSIX. Match either the literal or the
-              ;; escaped form so the assertion survives both quoting styles.
-              (should (string-match-p
-                       "projects-project\\(\\\\ \\| \\)\\.\\(\\\\ \\| \\)\\\\?\"beta\\\\?\""
-                       line)))))
+          ;; cmux must NOT have been called.
+          (should (= 0 (nth 7 (file-attributes capture)))))
       (remhash "beta" projects--table)
       (delete-file capture)
       (when (file-directory-p beta-dir)
@@ -121,7 +102,8 @@ without invoking cmux."
       (remhash "delta" projects--table)
       (delete-file capture))))
 
-(ert-deftest projects-cmux/delete-calls-cmux-and-removes ()
+(ert-deftest projects-cmux/delete-removes-without-cmux ()
+  "projects-delete removes the project from the model and does NOT call cmux."
   (puthash "epsilon" (list :dir "/tmp/epsilon/" :buffers nil :files nil :switch-time 0)
            projects--table)
   (let* ((capture (make-temp-file "cmux-cap"))
@@ -135,17 +117,12 @@ without invoking cmux."
           (cl-letf (((symbol-function 'yes-or-no-p) (lambda (&rest _) t)))
             (projects-delete "epsilon"))
           (should-not (gethash "epsilon" projects--table))
-          (with-temp-buffer
-            (insert-file-contents capture)
-            (let ((line (buffer-string)))
-              (should (string-match-p "close-workspace" line))
-              (should (string-match-p "--workspace\tepsilon" line)))))
+          (should (= 0 (nth 7 (file-attributes capture)))))
       (remhash "epsilon" projects--table)
       (delete-file capture))))
 
-(ert-deftest projects-cmux/rename-rewrites-frames ()
-  ;; Batch-mode adaptation: use (selected-frame) instead of (make-frame ...)
-  ;; per Task 7's deviation digest.
+(ert-deftest projects-cmux/rename-rewrites-frames-without-cmux ()
+  "projects-rename rekeys the table and rewrites frame parameters; does NOT call cmux."
   (puthash "zeta" (list :dir "/tmp/zeta/" :buffers nil :files nil :switch-time 0)
            projects--table)
   (let* ((capture (make-temp-file "cmux-cap"))
@@ -163,9 +140,7 @@ without invoking cmux."
           (should (gethash "eta" projects--table))
           (should-not (gethash "zeta" projects--table))
           (should (equal (frame-parameter frame 'projects-project) "eta"))
-          (with-temp-buffer
-            (insert-file-contents capture)
-            (should (string-match-p "rename-workspace" (buffer-string)))))
+          (should (= 0 (nth 7 (file-attributes capture)))))
       (set-frame-parameter frame 'projects-project saved-param)
       (remhash "zeta" projects--table)
       (remhash "eta" projects--table)

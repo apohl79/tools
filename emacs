@@ -101,15 +101,23 @@ if [ $gui_mode -eq 1 ]; then
 else
   nw_flag="-nw"
 fi
+  # Pass the caller's cwd as a frame parameter so the daemon's
+  # `projects-cmux--frame-init` hook can look up the matching project
+  # and open its info buffer. Quoting backslashes survive emacsclient's
+  # `-F ALIST' parser; the value is a Lisp string literal.
+_cwd="$(pwd -P)"
+_cwd_escaped=$(printf '%s' "$_cwd" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+_frame_params="((cmux-cwd . \"$_cwd_escaped\"))"
+
 if [ "$no_client" -eq 1 ]; then
   trace "$emacs_bin" $nw_flag "$@"
   "$emacs_bin" $nw_flag "$@"
 else
-  trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@"
-  "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@" 2>/dev/null || {
+  trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag -F "$_frame_params" "$@"
+  "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag -F "$_frame_params" "$@" 2>/dev/null || {
     trace "$emacs_bin" --daemon="$EMACS_DAEMON_NAME"
     "$emacs_bin" --daemon="$EMACS_DAEMON_NAME"
-    trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@"
-    "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@"
+    trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag -F "$_frame_params" "$@"
+    "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag -F "$_frame_params" "$@"
   }
 fi

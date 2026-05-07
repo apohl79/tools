@@ -157,12 +157,25 @@ known trusted prefixes."
 ;;; Frame-to-project binding
 ;;; ---------------------------------------------------------------------------
 
+(defun projects-cmux--frame-show-info (project)
+  "Switch FRAME's selected window to PROJECT's info buffer."
+  (let ((buf (projects--create-info-buffer project)))
+    (when (buffer-live-p buf)
+      (switch-to-buffer buf))))
+
 (defun projects-cmux--frame-init (frame)
-  "Bind FRAME to its `projects-project' parameter, if any."
-  (when-let ((proj (frame-parameter frame 'projects-project)))
-    (when (gethash proj projects--table)
+  "Bind FRAME to a project: prefer the explicit `projects-project' frame
+parameter, else look up a project whose `:dir' contains the frame's
+`cmux-cwd' parameter (the cwd from which `tools/emacs' was invoked).
+On match, switch the frame's project AND open the project info buffer."
+  (let* ((explicit (frame-parameter frame 'projects-project))
+         (cwd (frame-parameter frame 'cmux-cwd))
+         (proj (or (and explicit (gethash explicit projects--table) explicit)
+                   (and cwd (projects--find-project-for-file cwd)))))
+    (when proj
       (with-selected-frame frame
-        (projects-switch proj)))))
+        (projects-switch proj)
+        (projects-cmux--frame-show-info proj)))))
 
 (add-hook 'after-make-frame-functions #'projects-cmux--frame-init)
 
@@ -237,7 +250,9 @@ metacharacters in PROJECT cannot escape the surrounding quoting."
             (shell-quote-argument frame-arg))))
 
 (defun projects-create (name dir)
-  "Create project NAME at DIR. Mirrors to a cmux workspace."
+  "Create project NAME at DIR (Emacs-only — does not touch cmux).
+The user creates cmux workspaces manually; the wrapper's `tools/emacs'
+finds the matching project by cwd when invoked inside one."
   (interactive
    (let* ((dir (expand-file-name
                 (read-directory-name "Project directory: " nil nil nil)))
@@ -256,21 +271,16 @@ metacharacters in PROJECT cannot escape the surrounding quoting."
     (puthash name (list :dir dir :buffers nil :files nil :switch-time 0)
              projects--table)
     (projects--log "create: %s dir=%s" name dir)
-    (projects-cmux--call "new-workspace"
-                         "--name" name
-                         "--cwd" dir
-                         "--command" (projects-cmux--emacsclient-command name))
     name))
 
 (defun projects-delete (name)
-  "Delete project NAME. Closes its cmux workspace and kills its buffers."
+  "Delete project NAME (Emacs-only — does not touch cmux)."
   (interactive
    (list (completing-read "Delete project: " (projects-names) nil t
                           nil nil (projects-current))))
   (unless (gethash name projects--table)
     (user-error "Project '%s' does not exist" name))
   (when (yes-or-no-p (format "Delete project '%s' and kill its buffers? " name))
-    (projects-cmux--call "close-workspace" "--workspace" name)
     (dolist (buf (projects-buffers name))
       (kill-buffer buf))
     (remhash name projects--table)
@@ -279,7 +289,7 @@ metacharacters in PROJECT cannot escape the surrounding quoting."
     (projects--log "delete: %s" name)))
 
 (defun projects-rename (old-name new-name)
-  "Rename project OLD-NAME to NEW-NAME and the matching cmux workspace."
+  "Rename project OLD-NAME to NEW-NAME (Emacs-only — does not touch cmux)."
   (interactive
    (let ((old (completing-read "Rename project: " (projects-names) nil t
                                nil nil (projects-current))))
@@ -300,7 +310,6 @@ metacharacters in PROJECT cannot escape the surrounding quoting."
       (set-frame-parameter f 'projects-project new-name)))
   (when (equal projects--current old-name)
     (setq projects--current new-name))
-  (projects-cmux--call "rename-workspace" "--workspace" old-name new-name)
   (projects--log "rename: %s -> %s" old-name new-name))
 
 ;;; ---------------------------------------------------------------------------
@@ -666,11 +675,6 @@ auto-open files (cmux owns layout); does NOT call cmux. Use
           (projects--log "restore: %d projects (current=%s)"
                          (hash-table-count projects--table)
                          projects--current)
-          ;; Mirror restored projects into cmux as empty workspaces.
-          ;; Skipped silently if the cmux CLI is unavailable.
-          (when (and projects-cmux--cmux-command
-                     (executable-find projects-cmux--cmux-command))
-            (projects-cmux-resync))
           (hash-table-count projects--table))))))))
 
 (defun projects-save ()
