@@ -12,6 +12,11 @@ cursor-style = block
 cursor-style-blink = false
 shell-integration-features = no-cursor
 
+# Left Option sends Meta (M-TAB etc. for Emacs); right Option still composes
+# special chars (German tilde via opt+n, etc.). Mirrors .wezterm.lua's
+# send_composed_key_when_left/right_alt_is_pressed = false/true.
+macos-option-as-alt = left
+
 # Color scheme — doom-city-lights (matches .doom.d/config.el doom-theme)
 background = 1D252C
 foreground = A0B3C5
