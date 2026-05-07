@@ -327,3 +327,13 @@ target = "{home}/.claude/skills"
 name = "claude-post-edit-check"
 source = "{script_dir}/.claude/post-edit-check.sh"
 target = "{home}/.claude/post-edit-check.sh"
+
+[[layer5.symlinks]]
+name = "cmux"
+source = "{script_dir}/.config/cmux/cmux.json"
+target = "{home}/.config/cmux/cmux.json"
+
+[[layer5.symlinks]]
+name = "cmux-ghostty"
+source = "{script_dir}/.config/cmux/config.ghostty"
+target = "{home}/Library/Application Support/com.cmuxterm.app/config.ghostty"
