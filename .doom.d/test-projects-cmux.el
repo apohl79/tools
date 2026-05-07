@@ -280,7 +280,6 @@ without invoking cmux."
   (should (fboundp 'projects-current-window-project))
   (should (fboundp 'projects-clone-from-git))
   ;; calling no-arg stubs must not error
-  (should-not (projects-show-info))
   (should-not (projects--tab-bar-format))
   (should-not (projects--ibuffer-setup))
   (should-not (projects-multi-project-view-p))

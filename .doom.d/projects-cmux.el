@@ -596,11 +596,50 @@ Same shape as the wezterm `projects-save', but without backup rotation
   (message "[projects-cmux] saved %d projects to %s"
            (hash-table-count projects--table) projects--save-file))
 
-(defun projects-show-info ()
-  "Cmux-mode no-op stub for `projects-show-info'."
+(defun projects-info-open-directory ()
+  "Open Dired in the current project's root directory."
   (interactive)
-  (message "[projects-cmux] %s: not implemented in cmux mode" 'projects-show-info)
-  nil)
+  (dired default-directory))
+
+(defun projects-info-open-magit ()
+  "Open Magit using the existing global project shortcut."
+  (interactive)
+  (call-interactively (key-binding (kbd "C-c p v"))))
+
+(defun projects-info-open-vterm ()
+  "Open a vterm in the current project's root directory."
+  (interactive)
+  (+vterm/here nil))
+
+(defvar projects-info-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "n") #'claude-code)
+    (define-key map (kbd "c") #'claude-code-continue)
+    (define-key map (kbd "r") #'claude-code-resume)
+    (define-key map (kbd "d") #'projects-info-open-directory)
+    (define-key map (kbd "g") #'projects-info-open-magit)
+    (define-key map (kbd "v") #'projects-info-open-vterm)
+    map)
+  "Keymap for `projects-info-mode'.")
+
+(define-derived-mode projects-info-mode special-mode "Project Info"
+  "Major mode for the project info buffer.
+Provides single-key shortcuts to launch Claude Code sessions."
+  :interactive nil)
+
+(when (fboundp 'evil-set-initial-state)
+  (evil-set-initial-state 'projects-info-mode 'emacs))
+(with-eval-after-load 'evil
+  (when (fboundp 'evil-set-initial-state)
+    (evil-set-initial-state 'projects-info-mode 'emacs)))
+
+(defun projects-show-info ()
+  "Show the info buffer for the current frame's project."
+  (interactive)
+  (let ((proj (projects-current)))
+    (if proj
+        (switch-to-buffer (projects--create-info-buffer proj))
+      (user-error "No active project"))))
 
 (defun projects-switch-buffer (&optional _arg)
   "Cmux-mode no-op stub for `projects-switch-buffer'.
@@ -621,15 +660,53 @@ Accepts the optional prefix arg of the wezterm version for signature parity."
   (message "[projects-cmux] %s: not implemented in cmux mode" 'projects-move-buffer)
   nil)
 
-(defun projects--create-info-buffer (project)
-  "Cmux-mode stub for `projects--create-info-buffer'.
-Returns a temp buffer named *project: PROJECT* with a single info line."
-  (let ((buf (get-buffer-create (format "*project: %s*" project))))
+(defun projects--info-buffer-name (project-name)
+  "Return the info buffer name for PROJECT-NAME."
+  (format "*project: %s*" project-name))
+
+(defun projects--create-info-buffer (project-name)
+  "Create or refresh the read-only info buffer for PROJECT-NAME.
+Returns the buffer."
+  (let* ((buf-name (projects--info-buffer-name project-name))
+         (buf (get-buffer-create buf-name))
+         (entry (gethash project-name projects--table))
+         (dir (plist-get entry :dir)))
     (with-current-buffer buf
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert (format "[projects-cmux] info buffer for project %s: not implemented in cmux mode\n"
-                        project))))
+        (setq-local projects--buffer-project nil)
+        (setq-local default-directory (or dir "~/"))
+        (insert "\n\n")
+        (insert (propertize "  Project: " 'face '(:weight bold :height 1.4)))
+        (let ((blue (and (fboundp 'doom-color) (doom-color 'blue))))
+          (insert (propertize (format "%s\n" project-name)
+                              'face `(:weight bold :height 1.4
+                                      ,@(when blue (list :foreground blue))))))
+        (insert (propertize (format "  Directory: %s\n"
+                                    (abbreviate-file-name (or dir "~/")))
+                            'face 'font-lock-comment-face))
+        (insert "\n")
+        (insert (propertize "  Open a file with C-x C-f to get started.\n"
+                            'face 'font-lock-doc-face))
+        (insert "\n")
+        (insert (propertize "  Claude Code:\n" 'face '(:weight bold)))
+        (insert (propertize "    n" 'face 'font-lock-keyword-face))
+        (insert "  new session  ")
+        (insert (propertize "  c" 'face 'font-lock-keyword-face))
+        (insert "  continue  ")
+        (insert (propertize "  r" 'face 'font-lock-keyword-face))
+        (insert "  resume\n")
+        (insert "\n")
+        (insert (propertize "  Project:\n" 'face '(:weight bold)))
+        (insert (propertize "    d" 'face 'font-lock-keyword-face))
+        (insert "  open dir  ")
+        (insert (propertize "     g" 'face 'font-lock-keyword-face))
+        (insert "  magit  ")
+        (insert (propertize "     v" 'face 'font-lock-keyword-face))
+        (insert "  vterm\n"))
+      (unless (derived-mode-p 'projects-info-mode)
+        (projects-info-mode))
+      (goto-char (point-min)))
     buf))
 
 (defun projects--tab-bar-format ()
