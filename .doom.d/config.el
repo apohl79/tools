@@ -15,8 +15,9 @@
 (setq user-full-name "Andreas Pohl"
       user-mail-address "pohl@e47.org")
 
-;; Load custom projects system (replaces persp-mode/workspaces)
-(load! "projects")
+;; Load custom projects system (replaces persp-mode/workspaces) — wezterm backend only
+(unless (eq my/projects-mode 'cmux)
+  (load! "projects"))
 
 ;; Restore frame geometry and font size from last session
 (add-hook 'doom-init-ui-hook #'my/restore-frame-geometry)
