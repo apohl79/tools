@@ -450,16 +450,34 @@ javascript:/file://data:/custom-scheme URLs to cmux."
 ;;; Resync
 ;;; ---------------------------------------------------------------------------
 
-(defun projects-cmux-resync ()
+(defun projects-cmux-resync (&optional eager)
   "Create cmux workspaces for every project in `projects--table'.
-Idempotent: cmux returns non-zero for an existing workspace and we ignore it."
-  (interactive)
-  (dolist (name (projects-names))
-    (let ((dir (projects-dir name)))
-      (projects-cmux--call "new-workspace"
-                           "--name" name
-                           "--cwd" (or dir "")
-                           "--command" (projects-cmux--emacsclient-command name)))))
+Each workspace's first pane gets the project's :dir as cwd and a default
+shell — NO emacsclient is spawned, so importing N projects does not
+create N attached frames. The user runs `tools/emacs' (which dispatches
+to `emacsclient -s cmux -t -F ...') from inside the workspace when they
+want a frame.
+
+With prefix EAGER, the workspace's startup command IS the emacsclient
+attach (the same as `projects-create'). Use sparingly — every workspace
+starts with a live frame.
+
+Idempotent: cmux returns non-zero for an existing workspace and we
+ignore it."
+  (interactive "P")
+  (let ((count 0))
+    (dolist (name (projects-names))
+      (let* ((dir (projects-dir name))
+             (args (list "new-workspace" "--name" name "--cwd" (or dir ""))))
+        (when eager
+          (setq args (append args
+                             (list "--command"
+                                   (projects-cmux--emacsclient-command name)))))
+        (apply #'projects-cmux--call args)
+        (cl-incf count)))
+    (message "[projects-cmux] resync: %d workspaces%s"
+             count (if eager " (eager: emacsclient frames spawned)" ""))
+    count))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Git clone (ported from projects.el)
@@ -571,6 +589,11 @@ auto-open files (cmux owns layout); does NOT call cmux. Use
           (projects--log "restore: %d projects (current=%s)"
                          (hash-table-count projects--table)
                          projects--current)
+          ;; Mirror restored projects into cmux as empty workspaces.
+          ;; Skipped silently if the cmux CLI is unavailable.
+          (when (and projects-cmux--cmux-command
+                     (executable-find projects-cmux--cmux-command))
+            (projects-cmux-resync))
           (hash-table-count projects--table))))))))
 
 (defun projects-save ()
