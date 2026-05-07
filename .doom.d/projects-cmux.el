@@ -158,26 +158,40 @@ known trusted prefixes."
 ;;; ---------------------------------------------------------------------------
 
 (defun projects-cmux--frame-show-info (project)
-  "Switch FRAME's selected window to PROJECT's info buffer."
+  "Switch the selected frame's window to PROJECT's info buffer."
   (let ((buf (projects--create-info-buffer project)))
     (when (buffer-live-p buf)
       (switch-to-buffer buf))))
 
+(defun projects-cmux--frame-resolve-project (frame)
+  "Return the project for FRAME based on `projects-project' or `cmux-cwd'."
+  (let ((explicit (frame-parameter frame 'projects-project))
+        (cwd (frame-parameter frame 'cmux-cwd)))
+    (or (and explicit (gethash explicit projects--table) explicit)
+        (and cwd (projects--find-project-for-file cwd)))))
+
 (defun projects-cmux--frame-init (frame)
-  "Bind FRAME to a project: prefer the explicit `projects-project' frame
-parameter, else look up a project whose `:dir' contains the frame's
-`cmux-cwd' parameter (the cwd from which `tools/emacs' was invoked).
-On match, switch the frame's project AND open the project info buffer."
-  (let* ((explicit (frame-parameter frame 'projects-project))
-         (cwd (frame-parameter frame 'cmux-cwd))
-         (proj (or (and explicit (gethash explicit projects--table) explicit)
-                   (and cwd (projects--find-project-for-file cwd)))))
-    (when proj
-      (with-selected-frame frame
-        (projects-switch proj)
-        (projects-cmux--frame-show-info proj)))))
+  "after-make-frame-functions: switch FRAME's project frame-parameter
+based on `projects-project' or `cmux-cwd'. Does NOT change the buffer
+displayed (the server's buffer-display step runs later and would
+overwrite it). Use `projects-cmux--server-after-make-frame' for that."
+  (when-let ((proj (projects-cmux--frame-resolve-project frame)))
+    (with-selected-frame frame
+      (projects-switch proj))))
+
+(defun projects-cmux--server-after-make-frame ()
+  "server-after-make-frame-hook: called once the server has finished
+setting up the new client frame, INCLUDING buffer display. Overrides
+the server's chosen buffer with the project info buffer if a project
+is resolvable from this frame's parameters."
+  (let ((frame (selected-frame)))
+    (when-let ((proj (projects-cmux--frame-resolve-project frame)))
+      (projects--log "frame-attached: project=%s cwd=%s"
+                     proj (or (frame-parameter frame 'cmux-cwd) "<none>"))
+      (projects-cmux--frame-show-info proj))))
 
 (add-hook 'after-make-frame-functions #'projects-cmux--frame-init)
+(add-hook 'server-after-make-frame-hook #'projects-cmux--server-after-make-frame)
 
 ;;; ---------------------------------------------------------------------------
 ;;; Switching (frame-local)
