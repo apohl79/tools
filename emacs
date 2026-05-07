@@ -4,17 +4,26 @@ resolve_bin() {
   case "$1" in
     /*) printf '%s\n' "$1"; return 0 ;;
   esac
-  for prefix in /opt/homebrew/bin /usr/local/bin /bin; do
+  for prefix in /opt/homebrew/bin /usr/local/bin /usr/bin /bin; do
     if [ -x "$prefix/$1" ]; then
       printf '%s/%s\n' "$prefix" "$1"
       return 0
     fi
   done
-  printf '%s\n' "$1"
+  printf 'emacs wrapper: cannot find %s in /opt/homebrew/bin /usr/local/bin /usr/bin /bin (set EMACS_BIN to override)\n' "$1" >&2
+  exit 127
 }
 
-emacs_bin="${EMACS_BIN:-$(resolve_bin emacs)}"
-emacsclient_bin="${EMACSCLIENT_BIN:-$(resolve_bin emacsclient)}"
+if [ -n "${EMACS_BIN:-}" ]; then
+  emacs_bin="$EMACS_BIN"
+else
+  emacs_bin="$(resolve_bin emacs)" || exit $?
+fi
+if [ -n "${EMACSCLIENT_BIN:-}" ]; then
+  emacsclient_bin="$EMACSCLIENT_BIN"
+else
+  emacsclient_bin="$(resolve_bin emacsclient)" || exit $?
+fi
 
 detect_mode() {
   if [ -n "${MY_PROJECTS_MODE:-}" ] && [ -n "${EMACS_DAEMON_NAME:-}" ]; then
@@ -33,7 +42,24 @@ detect_mode() {
   export MY_PROJECTS_MODE EMACS_DAEMON_NAME
 }
 
+_user_daemon_set="${EMACS_DAEMON_NAME+set}"
+_user_daemon_value="${EMACS_DAEMON_NAME-}"
+
 detect_mode
+
+if [ "$_user_daemon_set" = "set" ]; then
+  _validate_target="$_user_daemon_value"
+else
+  _validate_target="$EMACS_DAEMON_NAME"
+fi
+
+case "$_validate_target" in
+  *[!A-Za-z0-9._-]*|'')
+    printf 'emacs wrapper: invalid EMACS_DAEMON_NAME=%s (must match [A-Za-z0-9._-]+)\n' "$_validate_target" >&2
+    exit 64
+    ;;
+esac
+unset _user_daemon_set _user_daemon_value _validate_target
 
 no_client=0
 gui_mode=0
