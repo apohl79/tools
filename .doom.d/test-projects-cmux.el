@@ -67,7 +67,12 @@
                                       line))
               (should (string-match-p "--command\t" line))
               (should (string-match-p "emacsclient" line))
-              (should (string-match-p "projects-project . \"beta\"" line)))))
+              ;; After the shell-quote-argument fix, the lisp -F payload is
+              ;; backslash-escaped on POSIX. Match either the literal or the
+              ;; escaped form so the assertion survives both quoting styles.
+              (should (string-match-p
+                       "projects-project\\(\\\\ \\| \\)\\.\\(\\\\ \\| \\)\\\\?\"beta\\\\?\""
+                       line)))))
       (remhash "beta" projects--table)
       (delete-file capture)
       (when (file-directory-p beta-dir)
@@ -205,7 +210,11 @@ without invoking cmux."
               ;; Per F5: panes are bound to the WORKSPACE project, not the
               ;; frame-local one. The cmux mock's `current-workspace' returns
               ;; `name=foo' so the emacsclient command must reference "foo".
-              (should (string-match-p "projects-project . \"foo\"" s)))))
+              ;; After the shell-quote-argument fix, the lisp form is
+              ;; backslash-escaped on POSIX. Accept either quoting form.
+              (should (string-match-p
+                       "projects-project\\(\\\\ \\| \\)\\.\\(\\\\ \\| \\)\\\\?\"foo\\\\?\""
+                       s)))))
       (remhash "theta" projects--table)
       (delete-file capture))))
 
@@ -307,6 +316,51 @@ without invoking cmux."
       (remhash "iota" projects--table)
       (remhash "kappa" projects--table)
       (delete-file capture))))
+
+(ert-deftest projects-cmux/create-rejects-shell-metacharacters ()
+  "projects-create must reject names containing shell metacharacters
+and must NOT invoke cmux for any rejected name."
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir))
+         (good-dir (file-name-as-directory (make-temp-file "cmux-bad-" t))))
+    (unwind-protect
+        (dolist (bad '("bad';rm -rf /"
+                       "bad;ls"
+                       "bad$(whoami)"
+                       "bad`id`"
+                       "bad|cat"
+                       "bad&echo"
+                       "bad\nname"))
+          (should-error (projects-create bad good-dir) :type 'user-error)
+          (should-not (gethash bad projects--table))
+          ;; capture must remain empty across all rejections
+          (should (= 0 (nth 7 (file-attributes capture)))))
+      (when (file-directory-p good-dir)
+        (delete-directory good-dir t))
+      (delete-file capture))))
+
+(ert-deftest projects-cmux/emacsclient-command-shell-quotes-name ()
+  "projects-cmux--emacsclient-command must wrap the -F payload in shell
+quoting so embedded shell metacharacters cannot escape. Verifies via a
+round-trip through the shell that the quoted argv parses back to the
+original lisp form."
+  (let* ((cmd (projects-cmux--emacsclient-command "benign"))
+         ;; The captured output of `set -- <quoted args>; printf ...` should
+         ;; round-trip the original lisp payload.
+         (rt (with-temp-buffer
+               (let ((exit (call-process
+                            "/bin/sh" nil (current-buffer) nil
+                            "-c"
+                            (format "set -- %s; printf '%%s' \"$6\""
+                                    cmd))))
+                 (and (zerop exit) (buffer-string))))))
+    (should (stringp cmd))
+    (should (string-prefix-p "emacsclient" cmd))
+    (should (equal rt "((projects-project . \"benign\"))"))))
 
 (provide 'test-projects-cmux)
 ;;; test-projects-cmux.el ends here

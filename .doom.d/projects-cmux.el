@@ -202,11 +202,39 @@ known trusted prefixes."
 ;;; CRUD
 ;;; ---------------------------------------------------------------------------
 
+(defconst projects-cmux--valid-name-regexp
+  "\\`[A-Za-z0-9._ -]+\\'"
+  "Regexp matching project names safe to embed in shell commands.")
+
+(defconst projects-cmux--valid-daemon-regexp
+  "\\`[A-Za-z0-9._-]+\\'"
+  "Regexp matching daemon names safe to embed in shell commands.")
+
+(defun projects-cmux--validate-name (name)
+  "Reject NAME if it contains characters unsafe for shell embedding.
+Signal `user-error' on rejection."
+  (unless (and (stringp name)
+               (string-match-p projects-cmux--valid-name-regexp name))
+    (user-error "Invalid project name: %s" name)))
+
 (defun projects-cmux--emacsclient-command (project)
-  "Return the shell command used to attach an emacsclient frame for PROJECT."
-  (format "emacsclient -s %s -t -F '((projects-project . %S))'"
-          (or (getenv "EMACS_DAEMON_NAME") "cmux")
-          project))
+  "Return the shell command used to attach an emacsclient frame for PROJECT.
+The daemon name and the `-F' payload are shell-quoted so embedded shell
+metacharacters in PROJECT cannot escape the surrounding quoting."
+  (let* ((raw-daemon (getenv "EMACS_DAEMON_NAME"))
+         (daemon (cond
+                  ((null raw-daemon) "cmux")
+                  ((string-match-p projects-cmux--valid-daemon-regexp raw-daemon)
+                   raw-daemon)
+                  (t
+                   (projects--log
+                    "EMACS_DAEMON_NAME %S failed validation; falling back to \"cmux\""
+                    raw-daemon)
+                   "cmux")))
+         (frame-arg (format "((projects-project . %S))" project)))
+    (format "emacsclient -s %s -t -F %s"
+            (shell-quote-argument daemon)
+            (shell-quote-argument frame-arg))))
 
 (defun projects-create (name dir)
   "Create project NAME at DIR. Mirrors to a cmux workspace."
@@ -219,6 +247,7 @@ known trusted prefixes."
      (list name dir)))
   (when (gethash name projects--table)
     (user-error "Project '%s' already exists" name))
+  (projects-cmux--validate-name name)
   (unless (file-directory-p dir)
     (if (y-or-n-p (format "Directory '%s' does not exist. Create it? " dir))
         (make-directory dir t)
@@ -259,6 +288,7 @@ known trusted prefixes."
     (user-error "Project '%s' does not exist" old-name))
   (when (gethash new-name projects--table)
     (user-error "Project '%s' already exists" new-name))
+  (projects-cmux--validate-name new-name)
   (puthash new-name (gethash old-name projects--table) projects--table)
   (remhash old-name projects--table)
   (dolist (buf (buffer-list))
@@ -282,6 +312,41 @@ known trusted prefixes."
 (defun projects-cmux--split (direction)
   "Split current pane in DIRECTION (\"left\"/\"right\"/\"up\"/\"down\")."
   (projects-cmux--call "new-split" direction))
+
+(defun projects-cmux--new-split-with-ref (direction)
+  "Run `cmux new-split DIRECTION' and return the new surface ref.
+The ref is the first whitespace-delimited token of stdout's first line,
+or nil if cmux failed or produced no output."
+  (with-temp-buffer
+    (let ((exit (condition-case _
+                    (call-process projects-cmux--cmux-command nil
+                                  (current-buffer) nil
+                                  "new-split" direction)
+                  (error 127))))
+      (when (and (integerp exit) (zerop exit))
+        (goto-char (point-min))
+        (let ((line (buffer-substring-no-properties
+                     (point-min) (line-end-position))))
+          (car (split-string line "[ \t]+" t)))))))
+
+(defun projects-cmux--current-pane-ref ()
+  "Return the current cmux pane reference, or nil on failure.
+Parses the first whitespace-delimited token of `cmux current-workspace'."
+  (with-temp-buffer
+    (let ((exit (condition-case _
+                    (call-process projects-cmux--cmux-command nil
+                                  (current-buffer) nil
+                                  "current-workspace")
+                  (error 127))))
+      (when (and (integerp exit) (zerop exit))
+        (goto-char (point-min))
+        (let ((line (buffer-substring-no-properties
+                     (point-min) (line-end-position))))
+          (car (split-string line "[ \t]+" t)))))))
+
+(defun projects-cmux--focus-pane (ref)
+  "Focus cmux pane REF if non-nil."
+  (when ref (projects-cmux--call "focus-pane" "--pane" ref)))
 
 (defun projects-cmux--current-workspace-project ()
   "Return the workspace project name reported by `cmux current-workspace'.
@@ -342,13 +407,26 @@ this initial implementation."
       ("3x2"
        ;; Build three columns by splitting right twice, then split each
        ;; column down once for two rows. Five new panes total.
-       (projects-cmux--split "right")
-       (projects-cmux--send-emacsclient proj)
-       (projects-cmux--split "right")
-       (projects-cmux--send-emacsclient proj)
-       (dotimes (_ 3)
-         (projects-cmux--split "down")
-         (projects-cmux--send-emacsclient proj)))
+       ;; Capture each column's pane ref so the second-row splits target
+       ;; the correct column instead of cascading on the most-recent pane.
+       (let ((c1 (projects-cmux--current-pane-ref))
+             c2 c3)
+         (setq c2 (projects-cmux--new-split-with-ref "right"))
+         (projects-cmux--send-emacsclient proj)
+         (setq c3 (projects-cmux--new-split-with-ref "right"))
+         (projects-cmux--send-emacsclient proj)
+         (when c1
+           (projects-cmux--focus-pane c1)
+           (projects-cmux--split "down")
+           (projects-cmux--send-emacsclient proj))
+         (when c2
+           (projects-cmux--focus-pane c2)
+           (projects-cmux--split "down")
+           (projects-cmux--send-emacsclient proj))
+         (when c3
+           (projects-cmux--focus-pane c3)
+           (projects-cmux--split "down")
+           (projects-cmux--send-emacsclient proj))))
       (_ (user-error "Unknown layout: %s" layout)))))
 
 ;;; ---------------------------------------------------------------------------
