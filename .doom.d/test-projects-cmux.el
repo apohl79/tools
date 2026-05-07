@@ -202,7 +202,10 @@ without invoking cmux."
                         start (match-end 0)))
                 (should (= sends 3)))
               (should (string-match-p "emacsclient" s))
-              (should (string-match-p "projects-project . \"theta\"" s)))))
+              ;; Per F5: panes are bound to the WORKSPACE project, not the
+              ;; frame-local one. The cmux mock's `current-workspace' returns
+              ;; `name=foo' so the emacsclient command must reference "foo".
+              (should (string-match-p "projects-project . \"foo\"" s)))))
       (remhash "theta" projects--table)
       (delete-file capture))))
 
@@ -223,6 +226,63 @@ without invoking cmux."
               (should (string-match-p "--type\tbrowser" s))
               (should (string-match-p "--url\thttps://example.com/x" s)))))
       (delete-file capture))))
+
+(ert-deftest projects-cmux/browse-url-rejects-unsupported-schemes ()
+  "Non-http(s)/mailto URLs must NOT be passed to cmux."
+  (let* ((capture (make-temp-file "cmux-cap"))
+         (process-environment (cons (concat "CAPTURE_FILE=" capture)
+                                    process-environment))
+         (projects-cmux--cmux-command (expand-file-name
+                                       "../tests/fixtures/cmux-mock.sh"
+                                       projects-cmux-test--dir)))
+    (unwind-protect
+        (progn
+          (projects-cmux--browse-url "javascript:alert(1)")
+          (projects-cmux--browse-url "file:///etc/passwd")
+          (projects-cmux--browse-url "data:text/html,<h1>x</h1>")
+          (should (= 0 (nth 7 (file-attributes capture))))
+          ;; allowed schemes still call cmux
+          (projects-cmux--browse-url "mailto:foo@example.com")
+          (with-temp-buffer
+            (insert-file-contents capture)
+            (should (string-match-p "mailto:foo@example.com" (buffer-string)))))
+      (delete-file capture))))
+
+(ert-deftest projects-cmux/call-survives-missing-cmux ()
+  "When cmux is absent, projects-cmux--call must return non-zero, not error."
+  (let* ((projects-cmux--cmux-command "/definitely/not/a/real/cmux/binary"))
+    (let ((exit (projects-cmux--call "new-workspace" "--name" "x")))
+      (should (integerp exit))
+      (should (not (zerop exit))))))
+
+(ert-deftest projects-cmux/stubs-are-defined ()
+  "Public surface stubs must exist and be callable as no-ops."
+  (should (fboundp 'projects-restore))
+  (should (fboundp 'projects-save))
+  (should (fboundp 'projects-show-info))
+  (should (fboundp 'projects-switch-buffer))
+  (should (fboundp 'projects-switch-dispatch))
+  (should (fboundp 'projects-move-buffer))
+  (should (fboundp 'projects--create-info-buffer))
+  (should (fboundp 'projects--tab-bar-format))
+  (should (fboundp 'projects--ibuffer-setup))
+  (should (fboundp 'projects-register-buffer))
+  (should (fboundp 'projects-multi-project-view-p))
+  (should (fboundp 'projects-current-window-project))
+  (should (fboundp 'projects-clone-from-git))
+  ;; calling no-arg stubs must not error
+  (should-not (projects-restore))
+  (should-not (projects-save))
+  (should-not (projects-show-info))
+  (should-not (projects--tab-bar-format))
+  (should-not (projects--ibuffer-setup))
+  (should-not (projects-multi-project-view-p))
+  (should-not (projects-register-buffer (current-buffer)))
+  ;; info buffer returns a live buffer named with the project
+  (let ((buf (projects--create-info-buffer "ws-test")))
+    (should (bufferp buf))
+    (should (equal (buffer-name buf) "*project: ws-test*"))
+    (kill-buffer buf)))
 
 (ert-deftest projects-cmux/resync-creates-missing-workspaces ()
   (puthash "iota" (list :dir "/tmp/iota/" :buffers nil :files nil :switch-time 0)
