@@ -450,40 +450,44 @@ javascript:/file://data:/custom-scheme URLs to cmux."
 ;;; Resync
 ;;; ---------------------------------------------------------------------------
 
-(defun projects-cmux-resync (&optional eager)
-  "Create cmux workspaces for every project in `projects--table'.
-Each workspace's first pane gets the project's :dir as cwd and a default
-shell — NO emacsclient is spawned, so importing N projects does not
-create N attached frames. The user runs `tools/emacs' (which dispatches
-to `emacsclient -s cmux -t -F ...') from inside the workspace when they
-want a frame.
+(defun projects-cmux-resync (&optional lazy)
+  "Sync every project to a cmux workspace with an attached emacsclient frame.
 
-With prefix EAGER, the workspace's startup command IS the emacsclient
-attach (the same as `projects-create'). Use sparingly — every workspace
-starts with a live frame.
+For each project: create the workspace with `--command \"emacsclient
+-s cmux -t -F ...\"'. If the workspace already exists (cmux returns
+non-zero), fall back to `cmux send' so the existing workspace's shell
+runs the emacsclient command anyway. Result: every project's
+workspace ends up with at least one emacsclient frame attached.
 
-Reports success and failure counts. cmux returns non-zero for an
-existing workspace (idempotent retries) AND for any socket-level error
-(e.g. socketControlMode=cmuxOnly rejecting external sockets); see
-*projects-cmux* for the underlying error lines. Returns the success
-count."
+With LAZY prefix, only create empty workspaces (no emacsclient
+command) — useful when the user prefers to attach frames manually.
+
+Reports counts: NEW (workspace created with emacsclient), ATTACHED
+(workspace already existed; emacsclient command sent to its shell),
+FAILED. Failure rows are visible in *projects-cmux*. Returns the
+NEW + ATTACHED total."
   (interactive "P")
-  (let ((ok 0) (fail 0))
+  (let ((new 0) (attached 0) (failed 0))
     (dolist (name (projects-names))
       (let* ((dir (projects-dir name))
-             (args (list "new-workspace" "--name" name "--cwd" (or dir ""))))
-        (when eager
-          (setq args (append args
-                             (list "--command"
-                                   (projects-cmux--emacsclient-command name)))))
-        (if (zerop (apply #'projects-cmux--call args))
-            (cl-incf ok)
-          (cl-incf fail))))
-    (message "[projects-cmux] resync: %d ok, %d failed%s%s"
-             ok fail
-             (if eager " (eager: emacsclient frames spawned)" "")
-             (if (> fail 0) " — see *projects-cmux*" ""))
-    ok))
+             (cmd (unless lazy (projects-cmux--emacsclient-command name)))
+             (args `("new-workspace" "--name" ,name "--cwd" ,(or dir "")
+                     ,@(when cmd (list "--command" cmd))))
+             (rc (apply #'projects-cmux--call args)))
+        (cond
+         ((zerop rc)
+          (cl-incf new))
+         ((and cmd (zerop (projects-cmux--call
+                           "send" "--workspace" name
+                           (concat cmd "\n"))))
+          (cl-incf attached))
+         (t
+          (cl-incf failed)))))
+    (message "[projects-cmux] resync: %d new, %d attached, %d failed%s%s"
+             new attached failed
+             (if lazy " (lazy: no emacsclient)" "")
+             (if (> failed 0) " — see *projects-cmux*" ""))
+    (+ new attached)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Git clone (ported from projects.el)
