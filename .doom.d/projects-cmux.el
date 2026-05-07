@@ -462,10 +462,13 @@ With prefix EAGER, the workspace's startup command IS the emacsclient
 attach (the same as `projects-create'). Use sparingly — every workspace
 starts with a live frame.
 
-Idempotent: cmux returns non-zero for an existing workspace and we
-ignore it."
+Reports success and failure counts. cmux returns non-zero for an
+existing workspace (idempotent retries) AND for any socket-level error
+(e.g. socketControlMode=cmuxOnly rejecting external sockets); see
+*projects-cmux* for the underlying error lines. Returns the success
+count."
   (interactive "P")
-  (let ((count 0))
+  (let ((ok 0) (fail 0))
     (dolist (name (projects-names))
       (let* ((dir (projects-dir name))
              (args (list "new-workspace" "--name" name "--cwd" (or dir ""))))
@@ -473,11 +476,14 @@ ignore it."
           (setq args (append args
                              (list "--command"
                                    (projects-cmux--emacsclient-command name)))))
-        (apply #'projects-cmux--call args)
-        (cl-incf count)))
-    (message "[projects-cmux] resync: %d workspaces%s"
-             count (if eager " (eager: emacsclient frames spawned)" ""))
-    count))
+        (if (zerop (apply #'projects-cmux--call args))
+            (cl-incf ok)
+          (cl-incf fail))))
+    (message "[projects-cmux] resync: %d ok, %d failed%s%s"
+             ok fail
+             (if eager " (eager: emacsclient frames spawned)" "")
+             (if (> fail 0) " — see *projects-cmux*" ""))
+    ok))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Git clone (ported from projects.el)

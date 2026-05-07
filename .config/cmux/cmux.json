@@ -126,6 +126,12 @@
       "nextSidebarTab": "cmd+→"
     }
   },
+
+  // Allow the cmux CLI to drive workspaces from Emacs / scripts.
+  // Default "cmuxOnly" rejects external sockets with "Broken pipe".
+  "automation": {
+    "socketControlMode": "automation"
+  },
   // --- end overrides ---
 
   //   "shortcuts" : {
