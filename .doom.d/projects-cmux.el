@@ -450,44 +450,111 @@ javascript:/file://data:/custom-scheme URLs to cmux."
 ;;; Resync
 ;;; ---------------------------------------------------------------------------
 
+(defun projects-cmux--list-workspaces ()
+  "Parse `cmux list-workspaces' into a list of (NAME . REF) cons cells.
+NAME is the trimmed workspace name; REF is the `workspace:N' identifier.
+A given NAME may appear multiple times if cmux has duplicates."
+  (with-temp-buffer
+    (let ((rc (call-process projects-cmux--cmux-command nil (current-buffer) nil
+                            "list-workspaces"))
+          result)
+      (when (zerop rc)
+        (goto-char (point-min))
+        (while (not (eobp))
+          ;; Strip optional leading "* " (selected marker).
+          (when (looking-at "\\s-*\\*?\\s-*\\(workspace:[0-9]+\\)\\s-+\\(.*\\)\\s-*$")
+            (let ((ref (match-string 1))
+                  (rest (string-trim (match-string 2))))
+              ;; Drop any " [foo]" trailing annotations the user likely doesn't
+              ;; want as part of the name (e.g. "[selected]", "[color]").
+              (when (string-match "\\`\\(.*?\\)\\(\\s-+\\[[^]]*\\]\\)*\\s-*\\'" rest)
+                (setq rest (string-trim (match-string 1 rest))))
+              (push (cons rest ref) result)))
+          (forward-line 1)))
+      (nreverse result))))
+
+(defun projects-cmux--workspace-names ()
+  "Set of cmux workspace names (as a hash-table)."
+  (let ((set (make-hash-table :test #'equal)))
+    (dolist (entry (projects-cmux--list-workspaces))
+      (puthash (car entry) t set))
+    set))
+
 (defun projects-cmux-resync (&optional lazy)
   "Sync every project to a cmux workspace with an attached emacsclient frame.
 
-For each project: create the workspace with `--command \"emacsclient
--s cmux -t -F ...\"'. If the workspace already exists (cmux returns
-non-zero), fall back to `cmux send' so the existing workspace's shell
-runs the emacsclient command anyway. Result: every project's
-workspace ends up with at least one emacsclient frame attached.
+For each project:
+- if a cmux workspace with that name already exists, send the
+  emacsclient command to its shell (existing workspace stays put);
+- else create a new workspace with `--command \"emacsclient ...\"'.
+
+Idempotent: re-running does NOT create duplicate workspaces.
 
 With LAZY prefix, only create empty workspaces (no emacsclient
 command) — useful when the user prefers to attach frames manually.
 
-Reports counts: NEW (workspace created with emacsclient), ATTACHED
-(workspace already existed; emacsclient command sent to its shell),
-FAILED. Failure rows are visible in *projects-cmux*. Returns the
-NEW + ATTACHED total."
+Reports counts: NEW, ATTACHED (existing workspace; emacsclient
+sent), SKIPPED (existing and lazy), FAILED. Returns NEW + ATTACHED."
   (interactive "P")
-  (let ((new 0) (attached 0) (failed 0))
+  (let ((existing (projects-cmux--workspace-names))
+        (new 0) (attached 0) (skipped 0) (failed 0))
     (dolist (name (projects-names))
       (let* ((dir (projects-dir name))
-             (cmd (unless lazy (projects-cmux--emacsclient-command name)))
-             (args `("new-workspace" "--name" ,name "--cwd" ,(or dir "")
-                     ,@(when cmd (list "--command" cmd))))
-             (rc (apply #'projects-cmux--call args)))
+             (cmd (unless lazy (projects-cmux--emacsclient-command name))))
         (cond
-         ((zerop rc)
-          (cl-incf new))
-         ((and cmd (zerop (projects-cmux--call
-                           "send" "--workspace" name
-                           (concat cmd "\n"))))
-          (cl-incf attached))
+         ;; Already in cmux.
+         ((gethash name existing)
+          (cond
+           ((null cmd) (cl-incf skipped))
+           ((zerop (projects-cmux--call "send" "--workspace" name
+                                        (concat cmd "\n")))
+            (cl-incf attached))
+           (t (cl-incf failed))))
+         ;; Missing — create.
          (t
-          (cl-incf failed)))))
-    (message "[projects-cmux] resync: %d new, %d attached, %d failed%s%s"
-             new attached failed
+          (let* ((args `("new-workspace" "--name" ,name "--cwd" ,(or dir "")
+                         ,@(when cmd (list "--command" cmd))))
+                 (rc (apply #'projects-cmux--call args)))
+            (if (zerop rc) (cl-incf new) (cl-incf failed)))))))
+    (message "[projects-cmux] resync: %d new, %d attached, %d skipped, %d failed%s%s"
+             new attached skipped failed
              (if lazy " (lazy: no emacsclient)" "")
              (if (> failed 0) " — see *projects-cmux*" ""))
     (+ new attached)))
+
+(defun projects-cmux-cleanup-duplicates (&optional dry-run)
+  "Close cmux workspaces whose name appears more than once.
+For each duplicate-name group, keep the FIRST occurrence reported by
+`cmux list-workspaces' and close the rest by ref. With DRY-RUN prefix,
+print what would be closed without acting."
+  (interactive "P")
+  (let ((seen (make-hash-table :test #'equal))
+        (closed 0) (kept 0) (failed 0)
+        (dups nil))
+    (dolist (entry (projects-cmux--list-workspaces))
+      (let ((name (car entry))
+            (ref (cdr entry)))
+        (cond
+         ((gethash name seen)
+          (push (cons name ref) dups))
+         (t
+          (puthash name t seen)
+          (cl-incf kept)))))
+    (cond
+     (dry-run
+      (message "[projects-cmux] would close %d duplicate workspaces (keeping %d unique): %s"
+               (length dups) kept
+               (mapconcat (lambda (e) (format "%s/%s" (car e) (cdr e)))
+                          dups ", ")))
+     (t
+      (dolist (e dups)
+        (if (zerop (projects-cmux--call "close-workspace" "--workspace" (cdr e)))
+            (cl-incf closed)
+          (cl-incf failed)))
+      (message "[projects-cmux] cleanup: closed %d, kept %d unique, %d failed%s"
+               closed kept failed
+               (if (> failed 0) " — see *projects-cmux*" ""))))
+    (length dups)))
 
 ;;; ---------------------------------------------------------------------------
 ;;; Git clone (ported from projects.el)
