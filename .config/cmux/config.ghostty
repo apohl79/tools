@@ -6,8 +6,10 @@ font-family = Apple Symbols
 font-family = Menlo
 font-size = 13
 
-# Cursor
+# Cursor — pin to block; disable shell-integration cursor auto-switching
+# (otherwise the shell's vi/insert mode hooks flip it back to a line bar).
 cursor-style = block
+shell-integration-features = no-cursor
 
 # Color scheme — doom-city-lights (matches .doom.d/config.el doom-theme)
 background = 1D252C
