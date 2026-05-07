@@ -641,24 +641,47 @@ Provides single-key shortcuts to launch Claude Code sessions."
         (switch-to-buffer (projects--create-info-buffer proj))
       (user-error "No active project"))))
 
-(defun projects-switch-buffer (&optional _arg)
-  "Cmux-mode no-op stub for `projects-switch-buffer'.
-Accepts the optional prefix arg of the wezterm version for signature parity."
-  (interactive "P")
-  (message "[projects-cmux] %s: not implemented in cmux mode" 'projects-switch-buffer)
-  nil)
+(defun projects-switch-buffer ()
+  "Switch to a buffer belonging to the current frame's project.
+Falls back to special/global buffers."
+  (interactive)
+  (let* ((proj (projects-current))
+         (project-bufs (when proj
+                         (cl-remove-if-not
+                          #'buffer-live-p
+                          (plist-get (gethash proj projects--table) :buffers))))
+         (special-bufs (cl-remove-if-not
+                        (lambda (b)
+                          (and (projects-special-buffer-p b)
+                               (not (string-prefix-p " " (buffer-name b)))))
+                        (buffer-list)))
+         (ordered (append project-bufs special-bufs))
+         (names (mapcar #'buffer-name ordered)))
+    (switch-to-buffer
+     (completing-read (format "Buffer [%s]: " (or proj "global"))
+                      names nil t))))
 
 (defun projects-switch-dispatch ()
-  "Cmux-mode no-op stub for `projects-switch-dispatch'."
+  "Switch the current frame to another project (interactive)."
   (interactive)
-  (message "[projects-cmux] %s: not implemented in cmux mode" 'projects-switch-dispatch)
-  nil)
+  (call-interactively #'projects-switch))
 
-(defun projects-move-buffer ()
-  "Cmux-mode no-op stub for `projects-move-buffer'."
-  (interactive)
-  (message "[projects-cmux] %s: not implemented in cmux mode" 'projects-move-buffer)
-  nil)
+(defun projects-move-buffer (buffer target-project)
+  "Move BUFFER to TARGET-PROJECT."
+  (interactive
+   (list (current-buffer)
+         (completing-read "Move buffer to project: " (projects-names) nil t)))
+  (when (projects-special-buffer-p buffer)
+    (user-error "Cannot move a global/special buffer to a project"))
+  (let ((old-proj (with-current-buffer buffer projects--buffer-project)))
+    (when old-proj
+      (let* ((entry (gethash old-proj projects--table))
+             (bufs (plist-get entry :buffers)))
+        (plist-put entry :buffers (delq buffer bufs))
+        (puthash old-proj entry projects--table)))
+    (projects-register-buffer buffer target-project)
+    (message "Buffer '%s' moved to project '%s'"
+             (buffer-name buffer) target-project)))
 
 (defun projects--info-buffer-name (project-name)
   "Return the info buffer name for PROJECT-NAME."
@@ -714,13 +737,121 @@ Returns the buffer."
 Returns nil so `tab-bar-format' shows nothing extra."
   nil)
 
-(defun projects--ibuffer-setup ()
-  "Cmux-mode no-op stub for `projects--ibuffer-setup'."
-  nil)
+(defun projects-ibuffer-groups ()
+  "Return ibuffer filter groups for current projects, with 'Other' fallback."
+  (append
+   (mapcar (lambda (name)
+             (let* ((dir (projects-dir name))
+                    (info-name (regexp-quote (projects--info-buffer-name name)))
+                    (reg-names (mapcar (lambda (b) (regexp-quote (buffer-name b)))
+                                       (projects-buffers name)))
+                    (name-rx (mapconcat #'identity
+                                        (cons info-name reg-names) "\\|")))
+               (list name `(or (filename . ,(expand-file-name (or dir "")))
+                               (name . ,name-rx)))))
+           (projects-names-mru))
+   '(("Other" (name . ".*")))))
 
-(defun projects-register-buffer (_buffer &optional _project-name)
-  "Cmux-mode no-op stub for `projects-register-buffer'."
-  nil)
+(defun projects--ibuffer-setup ()
+  "Set up ibuffer to use project filter groups."
+  (when (boundp 'ibuffer-filter-groups)
+    (setq ibuffer-filter-groups (projects-ibuffer-groups))
+    (when (fboundp 'ibuffer-update)
+      (ibuffer-update nil t))))
+
+(defun projects--find-project-for-file (file)
+  "Return the project whose directory contains FILE, longest-prefix wins."
+  (when file
+    (let ((best-name nil)
+          (best-len 0))
+      (maphash (lambda (name entry)
+                 (let ((dir (plist-get entry :dir)))
+                   (when (and dir (string-prefix-p (expand-file-name dir)
+                                                   (expand-file-name file)))
+                     (let ((len (length dir)))
+                       (when (> len best-len)
+                         (setq best-name name best-len len))))))
+               projects--table)
+      best-name)))
+
+(defun projects-register-buffer (buf &optional project-name)
+  "Tag BUF as belonging to PROJECT-NAME (or current frame's project).
+Validates the buffer's path against the project's directory; on mismatch
+re-routes to the project that actually owns the path. Skips special
+buffers and buffers already tagged."
+  (when (buffer-live-p buf)
+    (let ((existing (buffer-local-value 'projects--buffer-project buf)))
+      (cond
+       (existing
+        (projects--log "register-buffer: SKIP buf=%s existing-proj=%s requested=%s"
+                       (buffer-name buf) existing
+                       (or project-name (projects-current))))
+       ((projects-special-buffer-p buf)
+        (projects--log "register-buffer: SKIP buf=%s (special/global)"
+                       (buffer-name buf)))
+       (t
+        (let* ((requested (or project-name (projects-current)))
+               (path (or (buffer-file-name buf)
+                         (with-current-buffer buf
+                           (expand-file-name default-directory))))
+               (path-corrected nil)
+               (proj (if (and path requested)
+                         (let ((dir (projects-dir requested)))
+                           (if (and dir (string-prefix-p (expand-file-name dir)
+                                                         path))
+                               requested
+                             (let ((found (projects--find-project-for-file path)))
+                               (when (and found (not (equal found requested)))
+                                 (setq path-corrected found))
+                               (or found requested))))
+                       requested)))
+          (when proj
+            (projects--log "register-buffer: buf=%s proj=%s%s path=%s"
+                           (buffer-name buf) proj
+                           (if path-corrected
+                               (format " (path-corrected from %s)" requested)
+                             "")
+                           (or path "<none>"))
+            (with-current-buffer buf
+              (setq-local projects--buffer-project proj))
+            (let* ((entry (gethash proj projects--table))
+                   (bufs (plist-get entry :buffers)))
+              (unless (memq buf bufs)
+                (plist-put entry :buffers (cons buf bufs))
+                (puthash proj entry projects--table))))))))))
+
+(defun projects--cleanup-dead-buffers ()
+  "kill-buffer-hook: drop the dying buffer from its project's :buffers list."
+  (let ((proj projects--buffer-project)
+        (buf (current-buffer)))
+    (when proj
+      (let* ((entry (gethash proj projects--table))
+             (bufs (plist-get entry :buffers)))
+        (when (memq buf bufs)
+          (projects--log "buffer-killed: %s from project %s" (buffer-name buf) proj)
+          (plist-put entry :buffers (delq buf bufs))
+          (puthash proj entry projects--table))))))
+
+(defun projects--find-file-hook ()
+  "find-file-hook: register the new buffer with the current frame's project."
+  (let ((buf (current-buffer))
+        (proj (projects-current)))
+    (when proj
+      (projects-register-buffer buf proj))))
+
+(defvar projects-cmux--hooks-installed-p nil
+  "Idempotency guard for hook installation on file reload.")
+
+(unless projects-cmux--hooks-installed-p
+  (setq projects-cmux--hooks-installed-p t)
+  (add-hook 'find-file-hook #'projects--find-file-hook)
+  (add-hook 'kill-buffer-hook #'projects--cleanup-dead-buffers)
+  (with-eval-after-load 'vterm
+    (add-hook 'vterm-mode-hook #'projects--find-file-hook))
+  (with-eval-after-load 'eat
+    (add-hook 'eat-mode-hook #'projects--find-file-hook))
+  (with-eval-after-load 'dired
+    (add-hook 'dired-mode-hook #'projects--find-file-hook)))
 
 (defun projects-multi-project-view-p ()
   "Cmux-mode stub: always nil — no multi-project view in cmux mode."
