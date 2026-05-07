@@ -1,7 +1,51 @@
+# Font (matches .wezterm.lua)
 font-family = IosevkaTerm Nerd Font Mono
 font-style = Medium
 font-family = Symbols Nerd Font
 font-family = Apple Symbols
 font-family = Menlo
 font-size = 13
-theme = Andromeda
+
+# Cursor
+cursor-style = block
+
+# Color scheme — doom-city-lights (matches .doom.d/config.el doom-theme)
+background = 1D252C
+foreground = A0B3C5
+cursor-color = 5EC4FF
+selection-background = 718CA1
+selection-foreground = 1D252C
+
+# ANSI palette
+# 0 black / base0
+palette = 0=#10151C
+# 1 red
+palette = 1=#D95468
+# 2 green
+palette = 2=#8BD49C
+# 3 yellow
+palette = 3=#EBBF83
+# 4 blue (doom maps "blue" identifier to bright-blue 16-color)
+palette = 4=#539AFC
+# 5 magenta
+palette = 5=#E27E8D
+# 6 cyan (dark-cyan)
+palette = 6=#008B94
+# 7 white / fg
+palette = 7=#A0B3C5
+# 8 bright black / base5 (grey)
+palette = 8=#56697A
+# 9 bright red / orange
+palette = 9=#D98E48
+# 10 bright green / teal
+palette = 10=#33CED8
+# 11 bright yellow (reuse yellow — doom has no brighter yellow)
+palette = 11=#EBBF83
+# 12 bright blue
+palette = 12=#5EC4FF
+# 13 bright magenta / violet
+palette = 13=#B62D65
+# 14 bright cyan
+palette = 14=#70E1E8
+# 15 bright white / base8
+palette = 15=#9CAABB
