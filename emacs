@@ -61,6 +61,17 @@ case "$_validate_target" in
 esac
 unset _user_daemon_set _user_daemon_value _validate_target
 
+trace() {
+  [ -n "${EMACS_WRAPPER_DEBUG:-}" ] || return 0
+  {
+    printf '[emacs wrapper] +'
+    for arg in "$@"; do
+      printf ' %s' "$arg"
+    done
+    printf '\n'
+  } >&2
+}
+
 no_client=0
 gui_mode=0
 while [ $# -gt 0 ]; do
@@ -74,6 +85,7 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     -kill)
+      trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -e '(kill-emacs)'
       "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -e '(kill-emacs)' 2>/dev/null \
         && echo "Emacs daemon '$EMACS_DAEMON_NAME' killed." \
         || echo "No daemon '$EMACS_DAEMON_NAME' running."
@@ -90,10 +102,14 @@ else
   nw_flag="-nw"
 fi
 if [ "$no_client" -eq 1 ]; then
+  trace "$emacs_bin" $nw_flag "$@"
   "$emacs_bin" $nw_flag "$@"
 else
+  trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@"
   "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@" 2>/dev/null || {
+    trace "$emacs_bin" --daemon="$EMACS_DAEMON_NAME"
     "$emacs_bin" --daemon="$EMACS_DAEMON_NAME"
+    trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@"
     "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag "$@"
   }
 fi

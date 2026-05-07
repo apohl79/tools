@@ -529,18 +529,72 @@ name registered in `projects--table'."
 ;;; never reach the user; the cmux backend is intentionally minimal.
 ;;; ---------------------------------------------------------------------------
 
-(defun projects-restore ()
-  "Cmux-mode no-op stub for `projects-restore'.
-Called from a startup `run-with-timer'; must never error."
+(defun projects-restore (&optional file)
+  "Restore project metadata from FILE (default `projects--save-file').
+Reads the same on-disk format produced by the wezterm `projects-save'
+\(plist `(:version 1|2 :current NAME :projects ((NAME :dir :files :switch-time)…))').
+Repopulates `projects--table' and sets `projects--current'. Does NOT
+auto-open files (cmux owns layout); does NOT call cmux. Use
+`projects-cmux-resync' afterwards to mirror to cmux workspaces."
   (interactive)
-  (message "[projects-cmux] %s: not implemented in cmux mode" 'projects-restore)
-  nil)
+  (let ((file (or file projects--save-file)))
+    (cond
+     ((not (file-exists-p file))
+      (message "[projects-cmux] no saved session at %s" file)
+      nil)
+     (t
+      (let* ((data (with-temp-buffer
+                     (insert-file-contents file)
+                     (read (current-buffer))))
+             (version (plist-get data :version))
+             (saved-current (plist-get data :current))
+             (project-list (plist-get data :projects)))
+        (cond
+         ((not (member version '(1 2)))
+          (message "[projects-cmux] unknown session version: %s" version)
+          nil)
+         (t
+          (clrhash projects--table)
+          (dolist (entry project-list)
+            (let ((name (car entry))
+                  (pdata (cdr entry)))
+              (puthash name
+                       (list :dir (plist-get pdata :dir)
+                             :buffers nil
+                             :files (plist-get pdata :files)
+                             :switch-time (or (plist-get pdata :switch-time) 0))
+                       projects--table)))
+          (setq projects--current
+                (or (and saved-current (gethash saved-current projects--table)
+                         saved-current)
+                    (car (projects-names-mru))))
+          (projects--log "restore: %d projects (current=%s)"
+                         (hash-table-count projects--table)
+                         projects--current)
+          (hash-table-count projects--table))))))))
 
 (defun projects-save ()
-  "Cmux-mode no-op stub for `projects-save'."
+  "Persist `projects--table' to `projects--save-file' in version-2 format.
+Same shape as the wezterm `projects-save', but without backup rotation
+\(cmux mode is initial; revisit if backups become valuable)."
   (interactive)
-  (message "[projects-cmux] %s: not implemented in cmux mode" 'projects-save)
-  nil)
+  (make-directory (file-name-directory projects--save-file) t)
+  (let ((entries (mapcar (lambda (name)
+                           (let ((p (gethash name projects--table)))
+                             (cons name
+                                   (list :dir (plist-get p :dir)
+                                         :files (plist-get p :files)
+                                         :switch-time (plist-get p :switch-time)))))
+                         (projects-names))))
+    (with-temp-file projects--save-file
+      (let ((print-length nil)
+            (print-level nil))
+        (pp (list :version 2
+                  :current projects--current
+                  :projects entries)
+            (current-buffer)))))
+  (message "[projects-cmux] saved %d projects to %s"
+           (hash-table-count projects--table) projects--save-file))
 
 (defun projects-show-info ()
   "Cmux-mode no-op stub for `projects-show-info'."

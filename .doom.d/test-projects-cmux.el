@@ -280,8 +280,6 @@ without invoking cmux."
   (should (fboundp 'projects-current-window-project))
   (should (fboundp 'projects-clone-from-git))
   ;; calling no-arg stubs must not error
-  (should-not (projects-restore))
-  (should-not (projects-save))
   (should-not (projects-show-info))
   (should-not (projects--tab-bar-format))
   (should-not (projects--ibuffer-setup))
@@ -292,6 +290,32 @@ without invoking cmux."
     (should (bufferp buf))
     (should (equal (buffer-name buf) "*project: ws-test*"))
     (kill-buffer buf)))
+
+(ert-deftest projects-cmux/save-restore-round-trip ()
+  "projects-save writes the table; projects-restore reads it back."
+  (let* ((tmp (make-temp-file "cmux-session-" nil ".el"))
+         (projects--save-file tmp))
+    (unwind-protect
+        (progn
+          (clrhash projects--table)
+          (puthash "alpha" (list :dir "/tmp/alpha/" :buffers nil
+                                 :files nil :switch-time 1.0)
+                   projects--table)
+          (puthash "beta" (list :dir "/tmp/beta/" :buffers nil
+                                :files nil :switch-time 2.0)
+                   projects--table)
+          (setq projects--current "beta")
+          (projects-save)
+          (should (file-exists-p tmp))
+          (clrhash projects--table)
+          (setq projects--current nil)
+          (should (= 2 (projects-restore tmp)))
+          (should (gethash "alpha" projects--table))
+          (should (gethash "beta" projects--table))
+          (should (equal projects--current "beta")))
+      (clrhash projects--table)
+      (setq projects--current nil)
+      (delete-file tmp))))
 
 (ert-deftest projects-cmux/resync-creates-missing-workspaces ()
   (puthash "iota" (list :dir "/tmp/iota/" :buffers nil :files nil :switch-time 0)
