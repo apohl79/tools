@@ -132,6 +132,28 @@
   "automation": {
     "socketControlMode": "automation"
   },
+
+  // Default startup command for new cmux workspaces.
+  //
+  // Goal: every new workspace runs `tools/emacs`, which dispatches to
+  // `emacsclient -s cmux -t -F '((cmux-cwd . "$PWD"))'` so the running
+  // daemon's `projects-cmux--frame-init` opens the project info buffer
+  // for the workspace's cwd.
+  //
+  // The cmux schema is opaque here (`additionalProperties: true` for
+  // `commands` / `ui`), so the exact runtime-supported shape isn't
+  // documented. The two structures below are speculative — they cover
+  // the legacy `newWorkspaceCommand` field (string) AND the `commands`
+  // registry. If cmux ignores both, set the default via cmux Settings
+  // UI (Settings → New Workspace → default command = `tools/emacs`)
+  // and remove these blocks.
+  "commands": [
+    {
+      "name": "emacs-attach",
+      "command": "tools/emacs"
+    }
+  ],
+  "newWorkspaceCommand": "emacs-attach",
   // --- end overrides ---
 
   //   "shortcuts" : {
