@@ -18,11 +18,11 @@ shell-integration-features = no-cursor
 macos-option-as-alt = left
 
 # Color scheme — doom-city-lights (matches .doom.d/config.el doom-theme)
-background = 1D252C
+background = 1A2128
 foreground = A0B3C5
 cursor-color = 5EC4FF
 selection-background = 718CA1
-selection-foreground = 1D252C
+selection-foreground = 1A2128
 
 # ANSI palette
 # 0 black / base0

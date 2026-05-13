@@ -206,13 +206,14 @@ without invoking cmux."
           (with-temp-buffer
             (insert-file-contents capture)
             (let ((s (buffer-string)))
-              (should (string-match-p "new-pane" s))
+              (should (string-match-p "new-surface" s))
               (should (string-match-p "--type\tbrowser" s))
               (should (string-match-p "--url\thttps://example.com/x" s)))))
       (delete-file capture))))
 
 (ert-deftest projects-cmux/browse-url-rejects-unsupported-schemes ()
-  "Non-http(s)/mailto URLs must NOT be passed to cmux."
+  "javascript:/data:/custom URLs must NOT be passed to cmux.
+file:/// IS allowed (markdown-preview export uses it)."
   (let* ((capture (make-temp-file "cmux-cap"))
          (process-environment (cons (concat "CAPTURE_FILE=" capture)
                                     process-environment))
@@ -222,14 +223,16 @@ without invoking cmux."
     (unwind-protect
         (progn
           (projects-cmux--browse-url "javascript:alert(1)")
-          (projects-cmux--browse-url "file:///etc/passwd")
           (projects-cmux--browse-url "data:text/html,<h1>x</h1>")
           (should (= 0 (nth 7 (file-attributes capture))))
-          ;; allowed schemes still call cmux
+          ;; allowed schemes call cmux: mailto and file:///
           (projects-cmux--browse-url "mailto:foo@example.com")
+          (projects-cmux--browse-url "file:///tmp/preview.html")
           (with-temp-buffer
             (insert-file-contents capture)
-            (should (string-match-p "mailto:foo@example.com" (buffer-string)))))
+            (let ((s (buffer-string)))
+              (should (string-match-p "mailto:foo@example.com" s))
+              (should (string-match-p "file:///tmp/preview.html" s)))))
       (delete-file capture))))
 
 (ert-deftest projects-cmux/call-survives-missing-cmux ()

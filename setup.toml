@@ -56,11 +56,13 @@ brew_taps = [
 # All brew packages (formulae and casks) to install
 brew_packages = [
     "1password-cli",
+    "alerter",
     "arc",
     "base64",
     "basedpyright",
     "bentobox",
     "blackhole-64ch",
+    "brave-browser",
     "clang-format",
     "claude",
     "cliclick",
@@ -85,7 +87,6 @@ brew_packages = [
     "font-symbols-only-nerd-font",
     "gemini-cli",
     "gh",
-    "gimp",
     "git",
     "glslang",
     "google-java-format",
@@ -93,6 +94,7 @@ brew_packages = [
     "gotests",
     "grpcurl",
     "hammerspoon",
+    "hl",
     "htop",
     "hunspell",
     "iftop",
@@ -138,7 +140,6 @@ brew_packages = [
     "rectangle",
     "rsync",
     "ruff",
-    "shellcheck",
     "signal",
     "slack",
     "spotify",
@@ -150,12 +151,15 @@ brew_packages = [
     "uv",
     "virtualenv",
     "vlc",
+    "vnc-viewer",
     "watch",
     "wezterm",
     "wget",
     "whatsapp",
     "wireshark",
     "wireshark-app",
+    "xcodegen",
+    "zig@0.15",
 ]
 
 # NPM global packages
@@ -164,6 +168,7 @@ npm_packages = [
     "@tailwindcss/language-server",
     "@vtsls/language-server",
     "bash-language-server",
+    "pnpm",
     "typescript-language-server",
     "vscode-langservers-extracted",
     "yaml-language-server",
@@ -172,39 +177,48 @@ npm_packages = [
 
 # Python packages
 pip_packages = [
+    "anyio",
+    "attrs",
+    "bottle",
+    "chardet",
+    "charset-normalizer",
+    "click",
+    "colorama",
+    "fastapi",
+    "h11",
+    "httpcore",
+    "httpx",
+    "idna",
+    "iniconfig",
+    "jinja2",
+    "jsonschema",
+    "jsonschema-specifications",
+    "markupsafe",
+    "marshmallow",
+    "paho-mqtt",
+    "platformio",
+    "pluggy",
+    "pydantic",
+    "pydantic_core",
+    "pyelftools",
+    "pygments",
+    "pyserial",
+    "pytest",
+    "pytest-asyncio",
+    "pyyaml",
+    "redis",
+    "referencing",
+    "requests",
+    "rpds-py",
+    "semantic-version",
+    "starlette",
+    "tabulate",
+    "typing-inspection",
     "typing_extensions",
+    "urllib3",
+    "uvicorn",
     "websockets",
-]
-
-# Claude Code CLI (installed via official curl script)
-[layer2.claude_code]
-install_url = "https://claude.ai/install.sh"
-marketplace_path = "{script_dir}/.claude/my-plugin"
-plugin = "my@my-tools"
-
-# Settings to patch into ~/.claude/settings.json after install
-[layer2.claude_code.settings]
-model = "opus[1m]"
-spinnerTipsEnabled = false
-alwaysThinkingEnabled = true
-promptSuggestionEnabled = false
-autoUpdatesChannel = "latest"
-skipDangerousModePermissionPrompt = true
-
-[layer2.claude_code.settings.statusLine]
-type = "command"
-command = "~/.claude/statusline.sh"
-
-[layer2.claude_code.settings.hooks.Notification]
-matcher = ""
-command = "~/.claude/notify"
-
-[layer2.claude_code.settings.hooks.PostToolUse]
-matcher = "Edit|Write"
-command = "~/.claude/post-edit-check.sh"
-
-# Post-install commands to run after packages are installed
-post_install_commands = [
+    "wsproto",
 ]
 
 # Layer 3: Emacs installation
@@ -327,6 +341,11 @@ target = "{home}/.claude/skills"
 name = "claude-post-edit-check"
 source = "{script_dir}/.claude/post-edit-check.sh"
 target = "{home}/.claude/post-edit-check.sh"
+
+[[layer5.symlinks]]
+name = "claude-hook-cmux-tab-title"
+source = "{script_dir}/.claude/hooks/cmux-tab-title.sh"
+target = "{home}/.claude/hooks/cmux-tab-title.sh"
 
 [[layer5.symlinks]]
 name = "cmux"

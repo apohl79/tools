@@ -109,14 +109,28 @@ _cwd="$(pwd -P)"
 _cwd_escaped=$(printf '%s' "$_cwd" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
 _frame_params="((cmux-cwd . \"$_cwd_escaped\"))"
 
+ensure_cmux_project_for_cwd() {
+  # If the cmux daemon socket is reachable, ensure a project exists for
+  # the cwd so the daemon's `projects-cmux--frame-init` hook can switch
+  # the new frame to it. Probing the socket directly is more robust
+  # than gating on MY_PROJECTS_MODE (which can be unset in nested
+  # shells) — the call is a no-op when the helper isn't bound.
+  "$emacsclient_bin" -s cmux -e t >/dev/null 2>&1 || return 0
+  _ensure_form="(when (fboundp 'projects-cmux-ensure-project-for-cwd) (projects-cmux-ensure-project-for-cwd \"$_cwd_escaped\"))"
+  trace "$emacsclient_bin" -s cmux -e "$_ensure_form"
+  "$emacsclient_bin" -s cmux -e "$_ensure_form" >/dev/null 2>&1 || true
+}
+
 if [ "$no_client" -eq 1 ]; then
   trace "$emacs_bin" $nw_flag "$@"
   "$emacs_bin" $nw_flag "$@"
 else
+  ensure_cmux_project_for_cwd
   trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag -F "$_frame_params" "$@"
   "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag -F "$_frame_params" "$@" 2>/dev/null || {
     trace "$emacs_bin" --daemon="$EMACS_DAEMON_NAME"
     "$emacs_bin" --daemon="$EMACS_DAEMON_NAME"
+    ensure_cmux_project_for_cwd
     trace "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag -F "$_frame_params" "$@"
     "$emacsclient_bin" -s "$EMACS_DAEMON_NAME" -c $nw_flag -F "$_frame_params" "$@"
   }

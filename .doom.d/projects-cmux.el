@@ -131,9 +131,25 @@ known trusted prefixes."
 (defvar projects-cmux--cmux-command (projects-cmux--resolve-cmux)
   "Path to the cmux CLI. Resolved at load time. Overridable for tests.")
 
+(defun projects-cmux--clean-env ()
+  "Return `process-environment' with stale cmux context env vars removed.
+The long-running emacs daemon inherits CMUX_WORKSPACE_ID /
+CMUX_TAB_ID / CMUX_SURFACE_ID from whatever surface launched it.
+Those UUIDs go stale within seconds. cmux's resolution order
+checks the env BEFORE the focused-context fallback, so leaving
+them in causes spurious `not_found' errors. Strip them so every
+cmux call falls through to the live focused context."
+  (cl-remove-if (lambda (s)
+                  (or (string-prefix-p "CMUX_WORKSPACE_ID=" s)
+                      (string-prefix-p "CMUX_TAB_ID=" s)
+                      (string-prefix-p "CMUX_SURFACE_ID=" s)
+                      (string-prefix-p "CMUX_PANE_ID=" s)))
+                process-environment))
+
 (defun projects-cmux--call (&rest args)
   "Run cmux with ARGS. Return exit code; log stderr/stdout to *projects-cmux*."
-  (let ((buf (get-buffer-create "*projects-cmux*")))
+  (let ((buf (get-buffer-create "*projects-cmux*"))
+        (process-environment (projects-cmux--clean-env)))
     (with-current-buffer buf (goto-char (point-max)))
     (condition-case err
         (let ((exit (apply #'call-process projects-cmux--cmux-command
@@ -163,12 +179,28 @@ known trusted prefixes."
     (when (buffer-live-p buf)
       (switch-to-buffer buf))))
 
+(defun projects-cmux--canonical-path (path)
+  "Return PATH canonicalized: file-truename + file-name-as-directory.
+On case-insensitive filesystems (default APFS/HFS+ on macOS),
+`file-truename' returns the actual on-disk casing, so prefix
+comparisons stay case-correct."
+  (when (and (stringp path) (not (string-empty-p path)))
+    (file-name-as-directory (file-truename (expand-file-name path)))))
+
 (defun projects-cmux--frame-resolve-project (frame)
-  "Return the project for FRAME based on `projects-project' or `cmux-cwd'."
-  (let ((explicit (frame-parameter frame 'projects-project))
-        (cwd (frame-parameter frame 'cmux-cwd)))
-    (or (and explicit (gethash explicit projects--table) explicit)
-        (and cwd (projects--find-project-for-file cwd)))))
+  "Return the project for FRAME based on `projects-project' or `cmux-cwd'.
+The frame's `cmux-cwd' parameter is canonicalized via
+`projects-cmux--canonical-path' before lookup so case-insensitive
+filesystems don't break prefix matching."
+  (let* ((explicit (frame-parameter frame 'projects-project))
+         (raw-cwd (frame-parameter frame 'cmux-cwd))
+         (cwd (and raw-cwd (projects-cmux--canonical-path raw-cwd)))
+         (resolved (or (and explicit (gethash explicit projects--table) explicit)
+                       (and cwd (projects--find-project-for-file cwd)))))
+    (projects--log "frame-resolve: explicit=%s cwd=%s -> %s"
+                   (or explicit "<none>") (or cwd "<none>")
+                   (or resolved "<unresolved>"))
+    resolved))
 
 (defun projects-cmux--frame-init (frame)
   "after-make-frame-functions: switch FRAME's project frame-parameter
@@ -341,11 +373,12 @@ finds the matching project by cwd when invoked inside one."
 The ref is the first whitespace-delimited token of stdout's first line,
 or nil if cmux failed or produced no output."
   (with-temp-buffer
-    (let ((exit (condition-case _
-                    (call-process projects-cmux--cmux-command nil
-                                  (current-buffer) nil
-                                  "new-split" direction)
-                  (error 127))))
+    (let* ((process-environment (projects-cmux--clean-env))
+           (exit (condition-case _
+                     (call-process projects-cmux--cmux-command nil
+                                   (current-buffer) nil
+                                   "new-split" direction)
+                   (error 127))))
       (when (and (integerp exit) (zerop exit))
         (goto-char (point-min))
         (let ((line (buffer-substring-no-properties
@@ -356,11 +389,12 @@ or nil if cmux failed or produced no output."
   "Return the current cmux pane reference, or nil on failure.
 Parses the first whitespace-delimited token of `cmux current-workspace'."
   (with-temp-buffer
-    (let ((exit (condition-case _
-                    (call-process projects-cmux--cmux-command nil
-                                  (current-buffer) nil
-                                  "current-workspace")
-                  (error 127))))
+    (let* ((process-environment (projects-cmux--clean-env))
+           (exit (condition-case _
+                     (call-process projects-cmux--cmux-command nil
+                                   (current-buffer) nil
+                                   "current-workspace")
+                   (error 127))))
       (when (and (integerp exit) (zerop exit))
         (goto-char (point-min))
         (let ((line (buffer-substring-no-properties
@@ -377,6 +411,7 @@ Parses output of the form `<ref>\\tname=<name>\\n' (case-insensitive,
 tab-separated key=value pairs after the ref). On parse failure or cmux
 error, falls back to `(projects-current)' and logs a warning."
   (let* ((buf (get-buffer-create " *projects-cmux-ws*"))
+         (process-environment (projects-cmux--clean-env))
          (exit (with-current-buffer buf
                  (erase-buffer)
                  (condition-case err
@@ -456,14 +491,81 @@ this initial implementation."
 ;;; Browser
 ;;; ---------------------------------------------------------------------------
 
+(defun projects-cmux--git-root (dir)
+  "Return DIR's git toplevel via `git rev-parse --show-toplevel', or nil.
+The result is canonicalized via `projects-cmux--canonical-path'."
+  (when (and (stringp dir) (file-directory-p dir))
+    (let ((default-directory (file-name-as-directory (expand-file-name dir))))
+      (with-temp-buffer
+        (when (zerop (call-process "git" nil t nil
+                                   "rev-parse" "--show-toplevel"))
+          (let ((s (string-trim (buffer-string))))
+            (and (not (string-empty-p s))
+                 (projects-cmux--canonical-path s))))))))
+
+(defun projects-cmux--find-project-by-dir (dir)
+  "Return the project name whose :dir equals DIR (canonicalized via
+`projects-cmux--canonical-path'), or nil. Case-insensitive on macOS by
+virtue of `file-truename' resolving to the on-disk casing."
+  (let ((target (projects-cmux--canonical-path dir))
+        match)
+    (when target
+      (maphash (lambda (name entry)
+                 (let* ((d (plist-get entry :dir))
+                        (cd (and d (projects-cmux--canonical-path d))))
+                   (when (and cd (string-equal target cd))
+                     (setq match name))))
+               projects--table))
+    match))
+
+(defun projects-cmux-ensure-project-for-cwd (cwd)
+  "Ensure a project exists for CWD and return its name (or nil).
+
+The project root is the git toplevel of CWD when CWD is inside a git
+repository, otherwise CWD itself. If a project already has its :dir
+equal to that root, reuse it; otherwise register a new in-memory
+project at the root (named after the root's basename, sanitized and
+made unique). Does NOT call cmux.
+
+This intentionally ignores ANCESTOR-prefix matches: a broad project
+(e.g. one whose :dir is `~/workspace/') must not capture a more
+specific cwd like `~/workspace/code/CycleMaps'. The wrapper-invoked
+ensure-step is meant to make the cwd's own project exist, leaving
+`projects-cmux--frame-init' to pick the most-specific project via
+its longest-prefix lookup.
+
+Intended to be invoked from the `tools/emacs' wrapper before frame
+creation so `projects-cmux--frame-init' can switch the new frame to
+the resulting project."
+  (when (and (stringp cwd) (file-directory-p cwd))
+    (let* ((cwd (projects-cmux--canonical-path cwd))
+           (git-root (projects-cmux--git-root cwd))
+           (root (or git-root cwd)))
+      (or (projects-cmux--find-project-by-dir root)
+          (let* ((base (file-name-nondirectory (directory-file-name root)))
+                 (clean (replace-regexp-in-string
+                         "[^A-Za-z0-9._ -]" "_" base))
+                 (name (projects--unique-project-name
+                        (if (string-empty-p clean) "project" clean))))
+            (puthash name (list :dir root :buffers nil :files nil :switch-time 0)
+                     projects--table)
+            (projects--log "auto-create (wrapper): %s dir=%s" name root)
+            name)))))
+
 (defun projects-cmux--browse-url (url &rest _)
-  "Open URL in a new cmux browser pane in the current workspace.
-Only http://, https://, and mailto: URLs are allowed; all other
-schemes are refused with a warning to avoid passing
-javascript:/file://data:/custom-scheme URLs to cmux."
+  "Open URL as a new browser TAB (surface) in the current cmux pane.
+Uses `cmux new-surface --type browser --url' so the browser appears
+as a sibling tab in the focused pane rather than as a separate
+split/pane. Allows http://, https://, mailto:, and file:/// URLs
+(the last so markdown-preview / org export to a temp HTML file
+works). Refuses javascript:, data:, and any other custom scheme
+to avoid passing script-injection URLs to cmux."
   (if (and (stringp url)
-           (string-match-p "\\`\\(?:https?://\\|mailto:\\)" url))
-      (projects-cmux--call "new-pane" "--type" "browser" "--url" url)
+           (string-match-p "\\`\\(?:https?://\\|mailto:\\|file:///\\)" url))
+      (projects-cmux--call "new-surface"
+                           "--type" "browser"
+                           "--url" url
+                           "--focus" "true")
     (message "[projects-cmux] refusing browse-url: %s (unsupported scheme)" url)
     nil))
 
@@ -478,9 +580,10 @@ javascript:/file://data:/custom-scheme URLs to cmux."
 NAME is the trimmed workspace name; REF is the `workspace:N' identifier.
 A given NAME may appear multiple times if cmux has duplicates."
   (with-temp-buffer
-    (let ((rc (call-process projects-cmux--cmux-command nil (current-buffer) nil
-                            "list-workspaces"))
-          result)
+    (let* ((process-environment (projects-cmux--clean-env))
+           (rc (call-process projects-cmux--cmux-command nil (current-buffer) nil
+                             "list-workspaces"))
+           result)
       (when (zerop rc)
         (goto-char (point-min))
         (while (not (eobp))
@@ -714,31 +817,162 @@ Same shape as the wezterm `projects-save', but without backup rotation
   (message "[projects-cmux] saved %d projects to %s"
            (hash-table-count projects--table) projects--save-file))
 
-(defun projects-info-open-directory ()
-  "Open Dired in the current project's root directory."
+(defvar-local projects-info--return-to nil
+  "Buffer-local: the projects-info buffer to return to when this
+buffer (launched from projects-info via the dashboard shortcuts)
+is quit. Set by `projects-info--in-current-window' on the launched
+buffer; consumed by `projects-info--launched-quit' bound to `q'
+through `projects-info-launched-mode' AND by
+`projects-info--kill-buffer-hook' for buffers that die via
+`kill-buffer' (vterm shell exit, claude session end).")
+
+(defun projects-info--kill-buffer-hook ()
+  "Buffer-local `kill-buffer-hook': swap every window currently showing
+this buffer to the originating projects-info buffer, BEFORE the
+default `replace-buffer-in-windows' picks an unrelated buffer
+like *scratch*."
+  (let ((info-buf projects-info--return-to)
+        (dying (current-buffer)))
+    (when (buffer-live-p info-buf)
+      (dolist (win (get-buffer-window-list dying nil t))
+        (when (window-live-p win)
+          (set-window-buffer win info-buf))))))
+
+(defun projects-info--launched-quit ()
+  "Quit the current buffer and return to its originating projects-info
+buffer. Tolerates dirvish's own quit logic (which may consume `q'
+first) by performing the projects-info return as a fallback."
   (interactive)
-  (dired default-directory))
+  (let ((target projects-info--return-to))
+    (cond
+     ((not (and target (buffer-live-p target)))
+      (call-interactively #'quit-window))
+     ((eq major-mode 'dired-mode)
+      ;; Let dirvish/dired tear down their session, then jump back.
+      (ignore-errors
+        (cond ((fboundp 'dirvish-quit) (dirvish-quit))
+              (t (quit-window))))
+      (when (window-live-p (selected-window))
+        (switch-to-buffer target)))
+     (t
+      (switch-to-buffer target)))))
+
+(defvar projects-info-launched-mode-map
+  (let ((m (make-sparse-keymap)))
+    (define-key m (kbd "q") #'projects-info--launched-quit)
+    m)
+  "Keymap installed on buffers launched from the projects-info dashboard.")
+
+(define-minor-mode projects-info-launched-mode
+  "Minor mode marking a buffer as launched from projects-info.
+Rebinds `q' to `projects-info--launched-quit' so quitting returns
+to the originating projects-info buffer regardless of whether the
+underlying mode (dired/dirvish/magit) has its own quit logic that
+otherwise lands the user on *scratch*."
+  :lighter nil
+  :keymap projects-info-launched-mode-map)
+
+(defun projects-info--mark-launched (buf info-buf)
+  "Mark BUF as launched-from INFO-BUF: install minor mode + kill hook."
+  (when (and (buffer-live-p buf)
+             (not (eq buf info-buf))
+             (not (string-prefix-p " " (buffer-name buf))))
+    (with-current-buffer buf
+      (setq-local projects-info--return-to info-buf)
+      (projects-info-launched-mode 1)
+      (add-hook 'kill-buffer-hook
+                #'projects-info--kill-buffer-hook
+                nil t))))
+
+(defmacro projects-info--in-current-window (&rest body)
+  "Evaluate BODY and route quitting/killing of any resulting buffer back
+to the originating projects-info buffer.
+
+- Forces same-window display via `display-buffer-overriding-action'.
+- Snapshots `default-directory' so the project root is preserved.
+- Snapshots the buffer list before BODY; afterwards installs
+  `projects-info-launched-mode' + a kill-buffer-hook on every NEW
+  buffer that became visible (claude/vterm spawn fresh buffers,
+  often in their own windows; dirvish/magit too). Also installs on
+  whatever ended up in the original window for launchers that
+  reuse a buffer.
+- Clears bogus `quit-restore' on the original window."
+  (declare (indent 0) (debug t))
+  (let ((info-sym  (make-symbol "info-buf"))
+        (win-sym   (make-symbol "target-window"))
+        (pre-sym   (make-symbol "pre-buffers")))
+    `(let* ((,info-sym (when (derived-mode-p 'projects-info-mode)
+                         (current-buffer)))
+            (,win-sym  (selected-window))
+            (,pre-sym  (buffer-list))
+            (display-buffer-overriding-action
+             '((display-buffer-same-window)))
+            ;; Force claude-code to use the selected window instead of
+            ;; the global default (`my/claude-display-buffer' splits).
+            (claude-code-display-window-fn
+             (lambda (buf)
+               (switch-to-buffer buf)
+               (selected-window)))
+            (default-directory default-directory))
+       (prog1 (progn ,@body)
+         (when ,info-sym
+           (when (window-live-p ,win-sym)
+             (set-window-parameter ,win-sym 'quit-restore nil)
+             (let ((wb (window-buffer ,win-sym)))
+               (when (buffer-live-p wb)
+                 (projects-info--mark-launched wb ,info-sym))))
+           (dolist (b (cl-set-difference (buffer-list) ,pre-sym))
+             (when (or (get-buffer-window b 'visible)
+                       (eq b (current-buffer)))
+               (projects-info--mark-launched b ,info-sym))))))))
+
+(defun projects-info--launch-claude-new ()
+  (interactive)
+  (projects-info--in-current-window (call-interactively #'claude-code)))
+
+(defun projects-info--launch-claude-continue ()
+  (interactive)
+  (projects-info--in-current-window (call-interactively #'claude-code-continue)))
+
+(defun projects-info--launch-claude-resume ()
+  (interactive)
+  (projects-info--in-current-window (call-interactively #'claude-code-resume)))
+
+(defun projects-info-open-directory ()
+  "Open Dired in the current project's root directory (current window)."
+  (interactive)
+  (projects-info--in-current-window (dired default-directory)))
 
 (defun projects-info-open-magit ()
-  "Open Magit using the existing global project shortcut."
+  "Open Magit (current window)."
   (interactive)
-  (call-interactively (key-binding (kbd "C-c p v"))))
+  (let ((magit-display-buffer-function
+         (lambda (buffer) (switch-to-buffer buffer) (selected-window))))
+    (projects-info--in-current-window
+      (call-interactively (key-binding (kbd "C-c p v"))))))
 
 (defun projects-info-open-vterm ()
-  "Open a vterm in the current project's root directory."
+  "Open a vterm in the current project's root directory (current window)."
   (interactive)
-  (+vterm/here nil))
+  (projects-info--in-current-window (+vterm/here nil)))
 
-(defvar projects-info-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "n") #'claude-code)
-    (define-key map (kbd "c") #'claude-code-continue)
-    (define-key map (kbd "r") #'claude-code-resume)
-    (define-key map (kbd "d") #'projects-info-open-directory)
-    (define-key map (kbd "g") #'projects-info-open-magit)
-    (define-key map (kbd "v") #'projects-info-open-vterm)
-    map)
+(defvar projects-info-mode-map (make-sparse-keymap)
   "Keymap for `projects-info-mode'.")
+
+;; Reapply on every load so edits take effect on `load-file' reload
+;; (defvar would skip the body when the var is already bound).
+(let ((map projects-info-mode-map))
+  (define-key map (kbd "n") #'projects-info--launch-claude-new)
+  (define-key map (kbd "c") #'projects-info--launch-claude-continue)
+  (define-key map (kbd "r") #'projects-info--launch-claude-resume)
+  (define-key map (kbd "d") #'projects-info-open-directory)
+  (define-key map (kbd "g") #'projects-info-open-magit)
+  (define-key map (kbd "v") #'projects-info-open-vterm)
+  ;; Disable `q' / `Q' so the dashboard isn't quit/buried by accident
+  ;; (special-mode binds `q' to `quit-window' by default).
+  (define-key map (kbd "q") #'ignore)
+  (define-key map (kbd "Q") #'ignore)
+  (define-key map [remap quit-window] #'ignore))
 
 (define-derived-mode projects-info-mode special-mode "Project Info"
   "Major mode for the project info buffer.
@@ -957,6 +1191,12 @@ buffers and buffers already tagged."
     (when proj
       (projects-register-buffer buf proj))))
 
+(defun projects-cmux--vterm-disable-nobreak-display ()
+  "Disable `nobreak-char-display' buffer-locally so the underlined
+nobreak-space face does not render the `_>_' artifact around the
+shell/claude prompt."
+  (setq-local nobreak-char-display nil))
+
 (defvar projects-cmux--hooks-installed-p nil
   "Idempotency guard for hook installation on file reload.")
 
@@ -965,9 +1205,11 @@ buffers and buffers already tagged."
   (add-hook 'find-file-hook #'projects--find-file-hook)
   (add-hook 'kill-buffer-hook #'projects--cleanup-dead-buffers)
   (with-eval-after-load 'vterm
-    (add-hook 'vterm-mode-hook #'projects--find-file-hook))
+    (add-hook 'vterm-mode-hook #'projects--find-file-hook)
+    (add-hook 'vterm-mode-hook #'projects-cmux--vterm-disable-nobreak-display))
   (with-eval-after-load 'eat
-    (add-hook 'eat-mode-hook #'projects--find-file-hook))
+    (add-hook 'eat-mode-hook #'projects--find-file-hook)
+    (add-hook 'eat-mode-hook #'projects-cmux--vterm-disable-nobreak-display))
   (with-eval-after-load 'dired
     (add-hook 'dired-mode-hook #'projects--find-file-hook)))
 

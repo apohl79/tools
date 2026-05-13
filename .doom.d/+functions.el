@@ -626,11 +626,16 @@ killed."
     (setq my/markdown-preview-session-dir nil))
   (if (and my/markdown-preview-session-dir
            (file-readable-p (expand-file-name "url.txt" my/markdown-preview-session-dir)))
-      (let ((url (string-trim
-                  (with-temp-buffer
-                    (insert-file-contents
-                     (expand-file-name "url.txt" my/markdown-preview-session-dir))
-                    (buffer-string)))))
+      ;; Capture the absolute path BEFORE entering `with-temp-buffer'.
+      ;; `my/markdown-preview-session-dir' is buffer-local; inside the
+      ;; temp buffer it reads as nil and `expand-file-name' silently
+      ;; falls back to the temp buffer's default-directory (= the
+      ;; markdown file's directory), producing a wrong url.txt path.
+      (let* ((url-file (expand-file-name "url.txt" my/markdown-preview-session-dir))
+             (url (string-trim
+                   (with-temp-buffer
+                     (insert-file-contents url-file)
+                     (buffer-string)))))
         (browse-url url)
         (message "Markdown preview: %s" url))
     (let* ((file (file-truename buffer-file-name))

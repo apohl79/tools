@@ -38,25 +38,27 @@
 }
 
 :root[data-theme="dark"] {
-  --bg:         #0b1120;
-  --bg-elev:    #111a2e;
-  --bg-chip:    #182439;
-  --fg:         #e2e8f0;
-  --fg-soft:    #cbd5e1;
-  --muted:      #94a3b8;
-  --border:     #1e2a44;
-  --border-strong: #334155;
-  --accent:     #60a5fa;
-  --accent-fg:  #0b1120;
-  --accent-soft: rgba(96, 165, 250, 0.15);
-  --success:    #34d399;
-  --success-soft: rgba(52, 211, 153, 0.15);
-  --danger:     #f87171;
-  --warning:    #fbbf24;
-  --warning-soft: rgba(251, 191, 36, 0.18);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow:    0 4px 14px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.55);
+  /* Aligned with doom-city-lights (doom-theme in ~/tools/.doom.d/config.el,
+     also the active ghostty/cmux palette in config.ghostty). */
+  --bg:            #1A2128;             /* doom bg                  */
+  --bg-elev:       #222B33;             /* one notch above bg        */
+  --bg-chip:       #2D3946;             /* card hover / chip surface */
+  --fg:            #A0B3C5;             /* doom fg                  */
+  --fg-soft:       #9CAABB;             /* base8                    */
+  --muted:         #718CA1;             /* selection-bg / muted     */
+  --border:        #2D3946;             /* matches chip — quiet      */
+  --border-strong: #56697A;             /* base5 grey                */
+  --accent:        #5EC4FF;             /* doom bright blue (cursor) */
+  --accent-fg:     #1A2128;
+  --accent-soft:   rgba(94, 196, 255, 0.18);
+  --success:       #8BD49C;             /* doom green                */
+  --success-soft:  rgba(139, 212, 156, 0.18);
+  --danger:        #D95468;             /* doom red                  */
+  --warning:       #EBBF83;             /* doom yellow               */
+  --warning-soft:  rgba(235, 191, 131, 0.20);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow:    0 4px 14px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.6);
 }
 
 :root[data-width="full"] {
@@ -554,8 +556,9 @@ button.primary:hover {
 }
 :root { --quote-highlight-thread-bg: #fde68a; --quote-highlight-note-bg: #bae6fd; }
 :root[data-theme="dark"] {
-  --quote-highlight-thread-bg: rgba(251, 191, 36, 0.32);
-  --quote-highlight-note-bg:   rgba(96, 165, 250, 0.32);
+  /* Doom yellow + bright blue, tuned for the city-lights bg. */
+  --quote-highlight-thread-bg: rgba(235, 191, 131, 0.30);
+  --quote-highlight-note-bg:   rgba(94, 196, 255, 0.30);
 }
 
 /* Brief flash applied to a thread card when its highlight is clicked. */

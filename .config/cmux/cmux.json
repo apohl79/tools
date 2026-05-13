@@ -81,6 +81,14 @@
   //     "tintOpacity" : 0.17999999999999999
   //   },
 
+  "sidebarAppearance": {
+    "darkModeTintColor": "#0C151C",
+    "lightModeTintColor": null,
+    "matchTerminalBackground": false,
+    "tintColor": "#000000",
+    "tintOpacity": 1.0
+  },
+
   //   "automation" : {
   //     "claudeBinaryPath" : "",
   //     "claudeCodeIntegration" : true,
@@ -123,7 +131,11 @@
   "shortcuts": {
     "bindings": {
       "prevSidebarTab": "cmd+←",
-      "nextSidebarTab": "cmd+→"
+      "nextSidebarTab": "cmd+→",
+      "prevSurface": "opt+←",
+      "nextSurface": "opt+→",
+      "browserZoomOut": "cmd+-",
+      "browserZoomReset": "cmd+0"
     }
   },
 
@@ -131,6 +143,12 @@
   // Default "cmuxOnly" rejects external sockets with "Broken pipe".
   "automation": {
     "socketControlMode": "automation"
+  },
+
+  // Mute notification sounds (other notification UI — dock badge, pane
+  // flash, menu bar extra — stays on at defaults).
+  "notifications": {
+    "sound": "none"
   },
 
   // Default startup command for new cmux workspaces.

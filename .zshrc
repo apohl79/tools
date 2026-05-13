@@ -105,6 +105,12 @@ fi
 export PATH=$HOME/bin:$HOME/bin/tools/ccscript:$HOME/bin/tools:$HOME/.local/bin:$HOME/.config/emacs/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/local/sbin:$HOME/.claude/local:$PATH
 
 alias ll='ls -la --color=auto'
+c() {
+    if [ -n "$CMUX_SURFACE_ID" ]; then
+        cmux rename-tab --surface "$CMUX_SURFACE_ID" --title "$(basename "$PWD")"
+    fi
+    claude "$@"
+}
 
 zstyle ':completion:*' rehash true
 
@@ -152,6 +158,10 @@ stty -ixon 2>/dev/null
 
 [ -n "$EAT_SHELL_INTEGRATION_DIR" ] && source "$EAT_SHELL_INTEGRATION_DIR/zsh"
 
+# Local-only overrides (secrets, machine-specific config) live outside
+# git in ~/.zshrc.local. Sourced last so it can override anything above.
+[ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
+
 # Claude Code Proxy
 export ANTHROPIC_BASE_URL="http://localhost:9000"
 export ENABLE_TOOL_SEARCH=true
@@ -170,8 +180,6 @@ case ":$PATH:" in
   *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 # pnpm end
-
-
 
 # plan-executor
 command -v plan-executor >/dev/null 2>&1 && plan-executor ensure 2>/dev/null
