@@ -501,31 +501,54 @@ def install_claude_code(claude_code_config, script_dir, home, check_only=False):
         run_command(f'curl -fsSL {install_url} | bash')
         progress.complete_task()
 
-    # Add marketplace if configured and claude is available
-    marketplace_path = claude_code_config.get('marketplace_path')
-    if marketplace_path and command_exists("claude"):
-        marketplace_path = marketplace_path.format(script_dir=script_dir)
-        # Check if marketplace is already added by listing current marketplaces
+    # Add marketplaces if configured and claude is available.
+    # Both singular `marketplace_path` and list `marketplaces` are accepted;
+    # entries are deduplicated by string identity.
+    marketplaces = []
+    singular_marketplace = claude_code_config.get('marketplace_path')
+    if singular_marketplace:
+        marketplaces.append(singular_marketplace)
+    marketplaces.extend(claude_code_config.get('marketplaces', []))
+
+    if marketplaces and command_exists("claude"):
         result = subprocess.run(['claude', 'plugin', 'marketplace', 'list'],
                                 capture_output=True, text=True)
-        if result.returncode == 0 and marketplace_path in result.stdout:
-            print(f"✓ marketplace already configured")
-        elif check_only:
-            print(f"would add marketplace from {marketplace_path}")
-        else:
-            run_command(f'claude plugin marketplace add {marketplace_path}')
+        marketplace_list_output = result.stdout if result.returncode == 0 else ''
+        seen = set()
+        for mp in marketplaces:
+            mp = mp.format(script_dir=script_dir) if isinstance(mp, str) else mp
+            if mp in seen:
+                continue
+            seen.add(mp)
+            if mp in marketplace_list_output:
+                print(f"✓ marketplace already configured: {mp}")
+            elif check_only:
+                print(f"would add marketplace from {mp}")
+            else:
+                run_command(f'claude plugin marketplace add {mp}')
 
-    # Install plugin if configured
-    plugin_name = claude_code_config.get('plugin')
-    if plugin_name and command_exists("claude"):
+    # Install plugins if configured. Same singular/list pattern.
+    plugins = []
+    singular_plugin = claude_code_config.get('plugin')
+    if singular_plugin:
+        plugins.append(singular_plugin)
+    plugins.extend(claude_code_config.get('plugins', []))
+
+    if plugins and command_exists("claude"):
         result = subprocess.run(['claude', 'plugin', 'list'],
                                 capture_output=True, text=True)
-        if result.returncode == 0 and plugin_name.split('@')[0] in result.stdout:
-            print(f"✓ plugin {plugin_name} already installed")
-        elif check_only:
-            print(f"would install plugin {plugin_name}")
-        else:
-            run_command(f'claude plugin install {plugin_name}')
+        plugin_list_output = result.stdout if result.returncode == 0 else ''
+        seen = set()
+        for plugin_name in plugins:
+            if plugin_name in seen:
+                continue
+            seen.add(plugin_name)
+            if plugin_name in plugin_list_output:
+                print(f"✓ plugin already installed: {plugin_name}")
+            elif check_only:
+                print(f"would install plugin {plugin_name}")
+            else:
+                run_command(f'claude plugin install {plugin_name}')
 
     # Patch settings
     patch_claude_settings(claude_code_config, home, check_only)
@@ -1225,6 +1248,86 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
                 highest = max(added_versions)
                 print(f"setting java {highest} as global...")
                 run_command(f"jenv global {highest}")
+
+
+def layer6_cmux_fork(config, script_dir, home, check_only=False):
+    """Layer 6: Clone and install personal cmux fork."""
+    layer_name = config.get('layer6', {}).get('name', 'Cmux Fork')
+    print(f"\n{GREEN}=== Layer 6: {layer_name} ==={RESET}\n")
+
+    layer6 = config.get('layer6')
+    if not layer6:
+        print("✗ layer6 not configured in setup.toml")
+        return
+
+    repo = layer6['repo']
+    clone_path = layer6['clone_path'].format(home=home)
+    branch = layer6['branch']
+    install_target = layer6['install_target']
+    install_script_rel = layer6['install_script']
+    install_script = os.path.join(clone_path, install_script_rel)
+
+    # Determine clone-or-update state
+    repo_present = os.path.isdir(os.path.join(clone_path, '.git'))
+
+    if repo_present:
+        # Verify origin matches; warn but do not overwrite if it diverges.
+        result = subprocess.run(['git', '-C', clone_path, 'remote', 'get-url', 'origin'],
+                                capture_output=True, text=True)
+        current_origin = result.stdout.strip() if result.returncode == 0 else ''
+        if current_origin and current_origin != repo:
+            print(f"⚠ existing origin at {clone_path}: {current_origin}")
+            print(f"  expected: {repo}")
+            print(f"  leaving remote untouched; pulling current branch only")
+        else:
+            print(f"✓ repo exists at {clone_path}")
+    else:
+        print(f"✗ repo missing at {clone_path}")
+        if check_only:
+            print(f"  would clone {repo} → {clone_path} (branch: {branch})")
+        else:
+            parent = os.path.dirname(clone_path)
+            os.makedirs(parent, exist_ok=True)
+            set_terminal_title("cmux clone")
+            run_command(f"git clone --recurse-submodules {repo} {clone_path}")
+
+    # Checkout the requested branch + update.
+    if os.path.isdir(os.path.join(clone_path, '.git')):
+        if check_only:
+            current_branch = subprocess.run(
+                ['git', '-C', clone_path, 'branch', '--show-current'],
+                capture_output=True, text=True).stdout.strip()
+            print(f"  would checkout/pull branch: {branch} (currently: {current_branch or 'detached'})")
+        else:
+            set_terminal_title(f"cmux checkout {branch}")
+            # Fetch latest refs, then checkout/track the requested branch.
+            run_command(f"git -C {clone_path} fetch origin")
+            # If the local branch already exists, just checkout; otherwise create tracking.
+            branch_check = subprocess.run(
+                ['git', '-C', clone_path, 'rev-parse', '--verify', '--quiet', f'refs/heads/{branch}'],
+                capture_output=True, text=True)
+            if branch_check.returncode == 0:
+                run_command(f"git -C {clone_path} checkout {branch}")
+            else:
+                run_command(f"git -C {clone_path} checkout -B {branch} origin/{branch}")
+            # Update submodules to match the working tree.
+            run_command(f"git -C {clone_path} submodule update --init --recursive")
+
+    # Build + install via the fork's installer script.
+    if not os.path.isfile(install_script):
+        print(f"✗ install script not found at {install_script}")
+        return
+
+    if check_only:
+        print(f"  would run: {install_script_rel} --target {install_target}")
+        return
+
+    if not os.access(install_script, os.X_OK):
+        os.chmod(install_script, 0o755)
+
+    set_terminal_title("cmux build+install")
+    print(f"\nrunning {install_script_rel} (target: {install_target})...")
+    run_command(f"{install_script} --target {install_target}")
 
 
 def enable_touchid_sudo(touchid_config):
@@ -2234,7 +2337,7 @@ def install_command_line_tools(check_only=False):
 def main():
     parser = argparse.ArgumentParser(description='setup development environment in layers')
     parser.add_argument('-c', '--check', action='store_true', help='only check what would be installed')
-    parser.add_argument('-l', '--layer', type=int, choices=[0, 1, 2, 3, 4, 5], help='run specific layer only')
+    parser.add_argument('-l', '--layer', type=int, choices=[0, 1, 2, 3, 4, 5, 6], help='run specific layer only')
     parser.add_argument('-s', '--sync', action='store_true', help='sync installed packages with setup.toml')
     parser.add_argument('-m', '--manage-ignored', action='store_true', help='manage ignored and kept packages')
     parser.add_argument('-d', '--describe-layers', action='store_true', help='list all layers with their names')
@@ -2275,6 +2378,7 @@ def main():
             (3, config.get('layer3', {}).get('name', 'Emacs Installation')),
             (4, config.get('layer4', {}).get('name', 'Doom Emacs')),
             (5, config.get('layer5', {}).get('name', 'Symlinks')),
+            (6, config.get('layer6', {}).get('name', 'Cmux Fork')),
         ]
         print(f"{GREEN}Available layers:{RESET}\n")
         for layer_num, layer_name in layers:
@@ -2367,6 +2471,9 @@ def main():
 
     if args.layer is None or args.layer == 5:
         layer5_symlinks(config, script_dir, home, args.check)
+
+    if args.layer is None or args.layer == 6:
+        layer6_cmux_fork(config, script_dir, home, args.check)
 
     # Finish progress bar
     progress.finish()

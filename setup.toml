@@ -221,6 +221,19 @@ pip_packages = [
     "wsproto",
 ]
 
+# Claude Code marketplaces and plugins.
+# Requires the `claude` brew package above; install_claude_code() will
+# add each marketplace and install each plugin, skipping any already present.
+[layer2.claude_code]
+marketplaces = [
+    "andreas-pohl-parloa/my-coding",
+    "andreas-pohl-parloa/plan-executor-plugin",
+]
+plugins = [
+    "my@my-coding",
+    "plan-executor@plan-executor",
+]
+
 # Layer 3: Emacs installation
 [layer3]
 name = "Emacs Installation"
@@ -356,3 +369,13 @@ target = "{home}/.config/cmux/cmux.json"
 name = "cmux-ghostty"
 source = "{script_dir}/.config/cmux/config.ghostty"
 target = "{home}/Library/Application Support/com.cmuxterm.app/config.ghostty"
+
+# Layer 6: Cmux Fork (personal cmux build)
+[layer6]
+name = "Cmux Fork"
+repo = "git@github.com:apohl79/cmux.git"
+clone_path = "{home}/workspace/code/cmux"
+branch = "local/all-features"
+install_target = "/Applications/cmux.app"
+# Script inside the cloned repo that builds + installs cmux.app.
+install_script = "scripts/install-fork.sh"

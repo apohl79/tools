@@ -5,7 +5,7 @@ A comprehensive setup script for provisioning a macOS Emacs based development en
 ## Quick Install
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/apohl79/tools/master/install.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/apohl79/tools/main/install.sh)"
 ```
 
 ## Manual Installation
