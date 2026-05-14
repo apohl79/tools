@@ -190,7 +190,8 @@ that opening a terminal (vterm/eat/claude) collapses it to fullscreen."
 
 
 (setq org-directory "~/ownCloud/org"
-      org-agenda-files (directory-files-recursively org-directory "\\.org$")
+      org-agenda-files (when (file-directory-p org-directory)
+                         (directory-files-recursively org-directory "\\.org$"))
       org-support-shift-select t
       org-replace-disputed-keys t
       org-startup-indented t
