@@ -826,13 +826,13 @@ def layer2_base_packages(config, script_dir, home, check_only=False):
             run_command(cmd_formatted)
 
 
-def layer3_emacs(config, home, check_only=False):
-    """Layer 3: Install Emacs."""
-    layer_name = config['layer3'].get('name', 'Emacs Installation')
-    print(f"\n{GREEN}=== Layer 3: {layer_name} ==={RESET}\n")
+def layer4_emacs(config, home, check_only=False):
+    """Layer 4: Install Emacs."""
+    layer_name = config['layer4'].get('name', 'Emacs Installation')
+    print(f"\n{GREEN}=== Layer 4: {layer_name} ==={RESET}\n")
 
     # Check if Emacs is installed via Homebrew
-    emacs_formula = config['layer3']['formula']
+    emacs_formula = config['layer4']['formula']
     formula_name = emacs_formula.split('/')[-1] if '/' in emacs_formula else emacs_formula
 
     result = subprocess.run(['brew', 'list', '--formula', formula_name], capture_output=True, text=True)
@@ -841,7 +841,7 @@ def layer3_emacs(config, home, check_only=False):
     if needs_emacs:
         print("✗ Emacs not found")
         if not check_only:
-            emacs_formula = config['layer3']['formula']
+            emacs_formula = config['layer4']['formula']
 
             # Get Emacs version from brew info
             print("checking emacs version...")
@@ -904,7 +904,7 @@ def layer3_emacs(config, home, check_only=False):
                     print(f"✗ failed to parse brew info: {e}")
 
             # Install Emacs (will use cached file if available)
-            options = ' '.join(config['layer3']['options'])
+            options = ' '.join(config['layer4']['options'])
             install_cmd = f"brew install {options} {emacs_formula}"
             print(f"installing {emacs_formula}...")
             set_terminal_title(f"brew / {emacs_formula}")
@@ -919,7 +919,7 @@ def layer3_emacs(config, home, check_only=False):
     os.makedirs(spelling_dir, exist_ok=True)
 
     missing_dicts = []
-    for dict_entry in config['layer3']['dictionaries']:
+    for dict_entry in config['layer4']['dictionaries']:
         dict_path = os.path.join(spelling_dir, dict_entry['filename'])
         if not os.path.exists(dict_path):
             missing_dicts.append(dict_entry)
@@ -935,7 +935,7 @@ def layer3_emacs(config, home, check_only=False):
         print("✓ all dictionaries installed")
 
     # Run post-install commands
-    post_install_commands = config['layer3'].get('post_install_commands', [])
+    post_install_commands = config['layer4'].get('post_install_commands', [])
     if post_install_commands and not check_only:
         # Get brew prefix for variable substitution
         brew_prefix_result = subprocess.run(['brew', '--prefix'], capture_output=True, text=True)
@@ -950,10 +950,10 @@ def layer3_emacs(config, home, check_only=False):
         print("skipping post-install commands (check mode)")
 
 
-def layer4_doom(config, script_dir, home, check_only=False):
-    """Layer 4: Install Doom Emacs and setup config."""
-    layer_name = config['layer4'].get('name', 'Doom Emacs')
-    print(f"\n{GREEN}=== Layer 4: {layer_name} ==={RESET}\n")
+def layer5_doom(config, script_dir, home, check_only=False):
+    """Layer 5: Install Doom Emacs and setup config."""
+    layer_name = config['layer5'].get('name', 'Doom Emacs')
+    print(f"\n{GREEN}=== Layer 5: {layer_name} ==={RESET}\n")
 
     # First, determine and setup emacs config symlink
     existing_doom = os.path.exists(os.path.join(home, ".config/doom"))
@@ -989,7 +989,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
 
     # Apply emacs config symlink if chosen
     if emacs_choice:
-        emacs_link = config['layer4']['emacs_symlinks'][emacs_choice]
+        emacs_link = config['layer5']['emacs_symlinks'][emacs_choice]
         source = emacs_link['source'].format(script_dir=script_dir, home=home)
         target = emacs_link['target'].format(script_dir=script_dir, home=home)
 
@@ -1012,7 +1012,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
         return
 
     # Now install Doom Emacs
-    emacs_config_path = config['layer4']['install_path'].format(home=home)
+    emacs_config_path = config['layer5']['install_path'].format(home=home)
     doom_bin = os.path.join(emacs_config_path, "bin/doom")
 
     # Get brew prefix for PATH
@@ -1037,7 +1037,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
         if not check_only:
             print("installing Doom Emacs...")
             set_terminal_title("doom clone")
-            run_command(f"git clone --depth 1 {config['layer4']['repo']} {emacs_config_path}")
+            run_command(f"git clone --depth 1 {config['layer5']['repo']} {emacs_config_path}")
 
             env = os.environ.copy()
             env["PATH"] = f"{brew_bin}:" + env.get("PATH", "")
@@ -1048,7 +1048,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
             run_command(f"{doom_bin} sync", env=env)
 
     # Run post-install commands if configured
-    post_commands = config['layer4'].get('post_install_commands', [])
+    post_commands = config['layer5'].get('post_install_commands', [])
     if post_commands and not check_only:
         print("\nrunning post-install commands...")
         env = os.environ.copy()
@@ -1058,7 +1058,7 @@ def layer4_doom(config, script_dir, home, check_only=False):
 
         for cmd in post_commands:
             if cmd.strip():  # Skip empty/comment-only entries
-                # Substitute variables in command (consistent with layer3)
+                # Substitute variables in command (consistent with layer4)
                 cmd_formatted = cmd.format(home=home, brew_prefix=brew_prefix, script_dir=script_dir)
                 print(f"  executing: {cmd_formatted}")
                 set_terminal_title(f"post: {cmd_formatted[:20]}")
@@ -1151,13 +1151,13 @@ def setup_python_symlinks(check_only=False):
             print(f"created pip3 -> {pip_target}")
 
 
-def layer5_symlinks(config, script_dir, home, check_only=False):
-    """Layer 5: Setup general symlinks."""
-    layer_name = config['layer5'].get('name', 'Symlinks')
-    print(f"\n{GREEN}=== Layer 5: {layer_name} ==={RESET}\n")
+def layer6_symlinks(config, script_dir, home, check_only=False):
+    """Layer 6: Setup general symlinks."""
+    layer_name = config['layer6'].get('name', 'Symlinks')
+    print(f"\n{GREEN}=== Layer 6: {layer_name} ==={RESET}\n")
 
     # Apply all general symlinks (zsh, p10k, editorconfig, etc.)
-    apply_symlinks(config['layer5']['symlinks'], script_dir, home, check_only)
+    apply_symlinks(config['layer6']['symlinks'], script_dir, home, check_only)
 
     # Setup Python symlinks (python3 -> python3.X, pip3 -> pip3.X)
     print("\npython symlinks:")
@@ -1250,21 +1250,21 @@ def layer5_symlinks(config, script_dir, home, check_only=False):
                 run_command(f"jenv global {highest}")
 
 
-def layer6_cmux_fork(config, script_dir, home, check_only=False):
-    """Layer 6: Clone and install personal cmux fork."""
-    layer_name = config.get('layer6', {}).get('name', 'Cmux Fork')
-    print(f"\n{GREEN}=== Layer 6: {layer_name} ==={RESET}\n")
+def layer7_cmux_fork(config, script_dir, home, check_only=False):
+    """Layer 7: Clone and install personal cmux fork."""
+    layer_name = config.get('layer7', {}).get('name', 'Cmux Fork')
+    print(f"\n{GREEN}=== Layer 7: {layer_name} ==={RESET}\n")
 
-    layer6 = config.get('layer6')
-    if not layer6:
-        print("✗ layer6 not configured in setup.toml")
+    layer7 = config.get('layer7')
+    if not layer7:
+        print("✗ layer7 not configured in setup.toml")
         return
 
-    repo = layer6['repo']
-    clone_path = layer6['clone_path'].format(home=home)
-    branch = layer6['branch']
-    install_target = layer6['install_target']
-    install_script_rel = layer6['install_script']
+    repo = layer7['repo']
+    clone_path = layer7['clone_path'].format(home=home)
+    branch = layer7['branch']
+    install_target = layer7['install_target']
+    install_script_rel = layer7['install_script']
     install_script = os.path.join(clone_path, install_script_rel)
 
     # Determine clone-or-update state
@@ -1328,6 +1328,40 @@ def layer6_cmux_fork(config, script_dir, home, check_only=False):
     set_terminal_title("cmux build+install")
     print(f"\nrunning {install_script_rel} (target: {install_target})...")
     run_command(f"{install_script} --target {install_target}")
+
+
+def layer3_github_auth(config, check_only=False):
+    """Layer 3: GitHub CLI authentication (interactive loop)."""
+    layer_name = config.get('layer3', {}).get('name', 'GitHub Authentication')
+    print(f"\n{GREEN}=== Layer 3: {layer_name} ==={RESET}\n")
+
+    if not command_exists("gh"):
+        print("✗ gh command not found - run Layer 2 first")
+        return
+
+    if check_only:
+        print("  would prompt for gh auth login (interactive loop)")
+        return
+
+    while True:
+        status = subprocess.run(['gh', 'auth', 'status'], capture_output=True, text=True)
+        print(f"\n{CYAN}Current gh auth status:{RESET}")
+        if status.returncode == 0 and status.stdout.strip():
+            print(status.stdout, end='' if status.stdout.endswith('\n') else '\n')
+        else:
+            combined = (status.stdout or '') + (status.stderr or '')
+            if combined.strip():
+                print(combined, end='' if combined.endswith('\n') else '\n')
+            else:
+                print("no accounts authenticated\n")
+
+        response = input("Login another account? [y/N]: ").strip().lower()
+        if response not in ['y', 'yes']:
+            print("continuing...")
+            break
+
+        set_terminal_title("gh auth login")
+        run_command("gh auth login", prompt_on_error=False)
 
 
 def enable_touchid_sudo(touchid_config):
@@ -1662,7 +1696,7 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
             content.append(f'    "{escaped_cmd}",\n')
         content.append("]\n\n")
 
-    # Copy layer3, layer4, and layer5 sections from original
+    # Copy layer3+ sections (non-package layers) from original
     in_layer3_or_later = False
     for line in lines:
         if line.startswith("# Layer 3:") or line.startswith("[layer3]"):
@@ -1975,9 +2009,9 @@ def sync_packages(config_path, config):
     # These are handled specially and shouldn't be in layer 2
     layer_specific_packages = set()
 
-    # Layer 3: Emacs formula
-    if 'layer3' in config:
-        emacs_formula = config['layer3'].get('formula', '')
+    # Layer 4: Emacs formula
+    if 'layer4' in config:
+        emacs_formula = config['layer4'].get('formula', '')
         if emacs_formula:
             # Normalize emacs formula name (strip tap prefix and options)
             emacs_name = emacs_formula.split('/')[-1] if '/' in emacs_formula else emacs_formula
@@ -2337,7 +2371,7 @@ def install_command_line_tools(check_only=False):
 def main():
     parser = argparse.ArgumentParser(description='setup development environment in layers')
     parser.add_argument('-c', '--check', action='store_true', help='only check what would be installed')
-    parser.add_argument('-l', '--layer', type=int, choices=[0, 1, 2, 3, 4, 5, 6], help='run specific layer only')
+    parser.add_argument('-l', '--layer', type=int, choices=[0, 1, 2, 3, 4, 5, 6, 7], help='run specific layer only')
     parser.add_argument('-s', '--sync', action='store_true', help='sync installed packages with setup.toml')
     parser.add_argument('-m', '--manage-ignored', action='store_true', help='manage ignored and kept packages')
     parser.add_argument('-d', '--describe-layers', action='store_true', help='list all layers with their names')
@@ -2375,10 +2409,11 @@ def main():
             (0, config.get('layer0', {}).get('name', 'Shell Setup')),
             (1, config.get('layer1', {}).get('name', 'Sudo Configuration')),
             (2, config.get('layer2', {}).get('name', 'Base System Packages')),
-            (3, config.get('layer3', {}).get('name', 'Emacs Installation')),
-            (4, config.get('layer4', {}).get('name', 'Doom Emacs')),
-            (5, config.get('layer5', {}).get('name', 'Symlinks')),
-            (6, config.get('layer6', {}).get('name', 'Cmux Fork')),
+            (3, config.get('layer3', {}).get('name', 'GitHub Authentication')),
+            (4, config.get('layer4', {}).get('name', 'Emacs Installation')),
+            (5, config.get('layer5', {}).get('name', 'Doom Emacs')),
+            (6, config.get('layer6', {}).get('name', 'Symlinks')),
+            (7, config.get('layer7', {}).get('name', 'Cmux Fork')),
         ]
         print(f"{GREEN}Available layers:{RESET}\n")
         for layer_num, layer_name in layers:
@@ -2464,16 +2499,19 @@ def main():
         layer2_base_packages(config, script_dir, home, args.check)
 
     if args.layer is None or args.layer == 3:
-        layer3_emacs(config, home, args.check)
+        layer3_github_auth(config, args.check)
 
     if args.layer is None or args.layer == 4:
-        layer4_doom(config, script_dir, home, args.check)
+        layer4_emacs(config, home, args.check)
 
     if args.layer is None or args.layer == 5:
-        layer5_symlinks(config, script_dir, home, args.check)
+        layer5_doom(config, script_dir, home, args.check)
 
     if args.layer is None or args.layer == 6:
-        layer6_cmux_fork(config, script_dir, home, args.check)
+        layer6_symlinks(config, script_dir, home, args.check)
+
+    if args.layer is None or args.layer == 7:
+        layer7_cmux_fork(config, script_dir, home, args.check)
 
     # Finish progress bar
     progress.finish()

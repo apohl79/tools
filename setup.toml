@@ -234,8 +234,12 @@ plugins = [
     "plan-executor@plan-executor",
 ]
 
-# Layer 3: Emacs installation
+# Layer 3: GitHub CLI authentication
 [layer3]
+name = "GitHub Authentication"
+
+# Layer 4: Emacs installation
+[layer4]
 name = "Emacs Installation"
 formula = "emacs-plus@31"
 options = [
@@ -250,24 +254,24 @@ post_install_commands = [
 ]
 
 # Spelling dictionaries to download
-[[layer3.dictionaries]]
+[[layer4.dictionaries]]
 filename = "de_DE_frami.aff"
 url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/de/de_DE_frami.aff"
 
-[[layer3.dictionaries]]
+[[layer4.dictionaries]]
 filename = "de_DE_frami.dic"
 url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/de/de_DE_frami.dic"
 
-[[layer3.dictionaries]]
+[[layer4.dictionaries]]
 filename = "en_US.aff"
 url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/en/en_US.aff"
 
-[[layer3.dictionaries]]
+[[layer4.dictionaries]]
 filename = "en_US.dic"
 url = "https://github.com/LibreOffice/dictionaries/raw/refs/heads/master/en/en_US.dic"
 
-# Layer 4: Doom Emacs
-[layer4]
+# Layer 5: Doom Emacs
+[layer5]
 name = "Emacs Setup"
 repo = "https://github.com/doomemacs/doomemacs"
 install_path = "{home}/.config/emacs"
@@ -278,100 +282,100 @@ post_install_commands = [
 ]
 
 # Emacs configuration symlinks (chosen during setup)
-[layer4.emacs_symlinks.doom]
+[layer5.emacs_symlinks.doom]
 name = "doom"
 source = "{script_dir}/.doom.d"
 target = "{home}/.config/doom"
 
-[layer4.emacs_symlinks.light]
+[layer5.emacs_symlinks.light]
 name = "emacs"
 source = "{script_dir}/.emacs"
 target = "{home}/.emacs"
 
-# Layer 5: Symlinks and Shell
-[layer5]
+# Layer 6: Symlinks and Shell
+[layer6]
 name = "Symlinks"
 
 # {script_dir} = directory containing setup.py
 # {home} = user's home directory
 # {brew_prefix} = homebrew prefix (/opt/homebrew or /usr/local)
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "tools"
 source = "{script_dir}"
 target = "{home}/bin/tools"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "clang-format"
 source = "{script_dir}/.clang-format"
 target = "{home}/.clang-format"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "editorconfig"
 source = "{script_dir}/.editorconfig"
 target = "{home}/.editorconfig"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "hammerspoon"
 source = "{script_dir}/.hammerspoon"
 target = "{home}/.hammerspoon"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "wezterm"
 source = "{script_dir}/.wezterm.lua"
 target = "{home}/.wezterm.lua"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "wezterm-terminfo"
 source = "{script_dir}/.terminfo"
 target = "{home}/.terminfo"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "claude-statusline"
 source = "{script_dir}/.claude/statusline.sh"
 target = "{home}/.claude/statusline.sh"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "claude-supervisor"
 source = "{script_dir}/.claude/supervisor"
 target = "{home}/.claude/supervisor"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "claude-notify"
 source = "{script_dir}/.claude/notify"
 target = "{home}/.claude/notify"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "claude-commands"
 source = "{script_dir}/.claude/commands"
 target = "{home}/.claude/commands"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "claude-skills"
 source = "{script_dir}/.claude/skills"
 target = "{home}/.claude/skills"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "claude-post-edit-check"
 source = "{script_dir}/.claude/post-edit-check.sh"
 target = "{home}/.claude/post-edit-check.sh"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "claude-hook-cmux-tab-title"
 source = "{script_dir}/.claude/hooks/cmux-tab-title.sh"
 target = "{home}/.claude/hooks/cmux-tab-title.sh"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "cmux"
 source = "{script_dir}/.config/cmux/cmux.json"
 target = "{home}/.config/cmux/cmux.json"
 
-[[layer5.symlinks]]
+[[layer6.symlinks]]
 name = "cmux-ghostty"
 source = "{script_dir}/.config/cmux/config.ghostty"
 target = "{home}/Library/Application Support/com.cmuxterm.app/config.ghostty"
 
-# Layer 6: Cmux Fork (personal cmux build)
-[layer6]
+# Layer 7: Cmux Fork (personal cmux build)
+[layer7]
 name = "Cmux Fork"
 repo = "git@github.com:apohl79/cmux.git"
 clone_path = "{home}/workspace/code/cmux"
