@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF' >&2
+Usage: mdpv <markdown-file>
+
+Starts the markdown-preview server for the given file and opens it in
+the default browser. The server runs in the foreground until Ctrl+C.
+EOF
+  exit 1
+}
+
+[[ $# -ge 1 ]] || usage
+case "$1" in -h|--help) usage ;; esac
+
+doc="$1"
+[[ -f "$doc" ]] || { echo "mdpv: file not found: $doc" >&2; exit 2; }
+
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd -P )"
+LAUNCH="$SCRIPT_DIR/markdown-preview-server/bin/launch.sh"
+[[ -x "$LAUNCH" ]] || { echo "mdpv: launcher missing at $LAUNCH" >&2; exit 3; }
+
+session_dir="$(mktemp -d "${TMPDIR:-/tmp}/mdpv.XXXXXX")"
+
+cleanup() {
+  if [[ -f "$session_dir/server.pid" ]]; then
+    local pid
+    pid="$(cat "$session_dir/server.pid" 2>/dev/null || true)"
+    [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+  fi
+  rm -rf "$session_dir"
+}
+trap cleanup INT TERM EXIT
+
+url="$("$LAUNCH" start --doc "$doc" --session-dir "$session_dir")"
+[[ -n "$url" ]] || { echo "mdpv: no URL emitted by server" >&2; exit 4; }
+
+echo "$url"
+open "$url" >/dev/null 2>&1 || true
+
+"$LAUNCH" wait --session-dir "$session_dir"
