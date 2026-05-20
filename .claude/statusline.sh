@@ -73,27 +73,37 @@ if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.session' >/dev/null 2>&1
 
     if [ "$proxy_model" = "default" ]; then
         # Passthrough mode: use Claude Code's model name (includes suffixes like [1m])
+        # and its stdin-reported context window — the proxy's snapshot is only
+        # accurate for proxy-routed (non-default) models.
         if [ "$MODEL_DISPLAY" = "display_name" ]; then
             model=$(echo "$input" | jq -r '(.model.display_name // .model.id // "unknown") | sub("^claude-"; "")')
         else
             model=$(echo "$input" | jq -r '(.model.id // "unknown") | sub("^claude-"; "")')
         fi
+        context_info=$(echo "$input" | jq -r '
+          if .context_window.used_percentage != null then
+            "\(.context_window.used_percentage)%"
+          elif .context_window.remaining_percentage != null then
+            "\(100 - .context_window.remaining_percentage)%"
+          else
+            "0%"
+          end
+        ')
     else
         model=$(echo "$proxy_model" | sed 's/^claude-//')
+        # Context remaining: use the model_usage entry with the highest lastInputSnapshot
+        context_info=$(echo "$proxy_info" | jq -r '
+            .session |
+            ([.modelUsage[].lastInputSnapshot // 0] | max // 0) as $fill_tokens |
+            if .contextWindowSize > 0 and $fill_tokens > 0 then
+                (($fill_tokens / .contextWindowSize * 100)
+                 | round | [., 100] | min | [., 0] | max) as $fill |
+                "\($fill)%"
+            else
+                "0%"
+            end
+        ')
     fi
-
-    # Context remaining: use the model_usage entry with the highest lastInputSnapshot
-    context_info=$(echo "$proxy_info" | jq -r '
-        .session |
-        ([.modelUsage[].lastInputSnapshot // 0] | max // 0) as $fill_tokens |
-        if .contextWindowSize > 0 and $fill_tokens > 0 then
-            (($fill_tokens / .contextWindowSize * 100)
-             | round | [., 100] | min | [., 0] | max) as $fill |
-            "\($fill)%"
-        else
-            "0%"
-        end
-    ')
 
     # Cost from the computed field
     proxy_cost=$(echo "$proxy_info" | jq -r '.sessionCostUsd // empty')
