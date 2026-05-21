@@ -1,0 +1,22 @@
+#!/bin/bash
+if [ -z "$1" ]; then
+    echo "usage: $0 [-SIGNAL] procname"
+    exit 1
+fi
+
+if [ -n "$2" ]; then
+    signal=$1
+    name=$2
+else
+    signal=""
+    name=$1
+fi
+pids=$(ps xa|grep "$name"|grep -v grep|grep -v killall|awk '{print $1}')
+
+if [ -n "$pids" ]; then
+    echo "killing: $pids"
+    kill $signal $pids
+else
+    echo "No matching process"
+    exit 1
+fi

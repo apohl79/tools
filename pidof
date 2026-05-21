@@ -1,0 +1,27 @@
+#!/bin/bash
+name=$1
+long=0
+if [ "$name" == "-l" ]; then
+    long=1
+    name=$2
+fi
+
+pids=$(ps xa|grep "$name"|grep -v grep|grep -v killall|grep -v pidof|awk '{print $1}')
+
+if [ "$opt" == "-h" ]; then
+    echo "Usage: $0 [-l] <name>"
+    echo ""
+    echo "  -l  More info"
+    exit
+fi
+
+if [ -n "$pids" ]; then
+    if [ $long -eq 1 ]; then
+        ps xau|head -1
+        ps xau|grep "$name"|grep -v grep|grep -v killall|grep -v pidof
+    else
+        echo "$pids"
+    fi
+else
+    echo "No matching process"
+fi
