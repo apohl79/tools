@@ -163,11 +163,10 @@ stty -ixon 2>/dev/null
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 
 # Claude Code Proxy
-export ANTHROPIC_BASE_URL="http://localhost:9000"
-export ENABLE_TOOL_SEARCH=true
+#export ANTHROPIC_BASE_URL="http://localhost:9000"
+#export ENABLE_TOOL_SEARCH=true
 command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure >/dev/null 2>&1
-. "$HOME/.cargo/env"
-command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure 2>/dev/null
+[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 
 
 # MCP Gateway — keep running independent of Claude sessions
