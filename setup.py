@@ -1696,6 +1696,35 @@ def write_toml_config(config_path, config, package_updates, ignored_updates, kee
             content.append(f'    "{escaped_cmd}",\n')
         content.append("]\n\n")
 
+    # Preserve any [layer2.*] subtables (e.g. [layer2.claude_code]) that live
+    # between the package arrays and Layer 3. The rebuild above only re-emits
+    # the package arrays, so without this these subtables would be silently
+    # dropped on every sync.
+    layer2_sub_start = next(
+        (i for i, line in enumerate(lines) if line.startswith("[layer2.")),
+        None,
+    )
+    if layer2_sub_start is not None:
+        # Walk back over the contiguous comment/blank lines introducing it.
+        start = layer2_sub_start
+        while start > 0 and (lines[start - 1].lstrip().startswith("#")
+                             or lines[start - 1].strip() == ""):
+            start -= 1
+        preserved = []
+        for line in lines[start:]:
+            if line.startswith("# Layer 3:") or line.startswith("[layer3]"):
+                break
+            preserved.append(line)
+        # content already ends with a blank line after pip_packages; trim the
+        # captured block's own framing blanks and re-add a single trailing one.
+        while preserved and preserved[0].strip() == "":
+            preserved.pop(0)
+        while preserved and preserved[-1].strip() == "":
+            preserved.pop()
+        if preserved:
+            content.extend(preserved)
+            content.append("\n")
+
     # Copy layer3+ sections (non-package layers) from original
     in_layer3_or_later = False
     for line in lines:
