@@ -30,7 +30,7 @@ ENABLE_AGENT=${ENABLE_AGENT:-0}
 # Model display: "id" (default) or "display_name"
 MODEL_DISPLAY=${MODEL_DISPLAY:-id}
 # Cost source: "claude" (client-side), "proxy" (server-side), or "both"
-COST_SOURCE=${COST_SOURCE:-proxy}
+COST_SOURCE=${COST_SOURCE:-claude}
 
 input=$(cat)
 cwd=$(echo "$input" | jq -r '.workspace.current_dir')
