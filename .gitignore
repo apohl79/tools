@@ -3,3 +3,4 @@ dbadmin
 dbgui
 dbnative
 setup.toml.bak
+__pycache__/
