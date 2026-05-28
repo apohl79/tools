@@ -160,6 +160,24 @@ def command_exists(cmd):
     return shutil.which(cmd) is not None
 
 
+def ensure_brew_on_path():
+    """Ensure the Homebrew bin dir is on PATH for this process.
+
+    setup.py may be launched from a non-interactive shell that never sourced
+    ~/.zshrc (where `brew shellenv` lives), so Homebrew can be installed yet
+    absent from PATH. Locate brew at the standard locations and prepend its
+    bin dir so every subsequent subprocess (including shell=True) finds it.
+    """
+    if shutil.which("brew"):
+        return True
+    for brew_bin in ("/opt/homebrew/bin/brew", "/usr/local/bin/brew"):
+        if os.path.exists(brew_bin):
+            bin_dir = os.path.dirname(brew_bin)
+            os.environ["PATH"] = bin_dir + os.pathsep + os.environ.get("PATH", "")
+            return True
+    return False
+
+
 def get_all_brew_packages():
     """get list of all installed brew packages (including dependencies)."""
     try:
@@ -2474,19 +2492,19 @@ def main():
         else:
             print("homebrew would be installed")
 
-    # After Homebrew installation, apply shell symlinks so PATH is correct
-    # If symlinks were created, restart in a new shell to pick up the environment
+    # After Homebrew installation, apply shell symlinks so future interactive
+    # shells get the right environment.
     if homebrew_installed and not args.check:
         print(f"\n{GREEN}=== Setting up shell environment ==={RESET}\n")
-        if apply_shell_symlinks(config, script_dir, home):
-            print("\nShell configuration linked. Restarting setup in new shell...")
-            # Re-run setup.py in a new zsh shell to pick up the new environment
-            setup_script = os.path.join(script_dir, 'setup.py')
-            # Preserve any command-line arguments
-            args_str = ' '.join(sys.argv[1:]) if len(sys.argv) > 1 else ''
-            cmd = f'python3 {setup_script} {args_str}'.strip()
-            os.execv('/bin/zsh', ['/bin/zsh', '-l', '-c', cmd])
-            # Note: os.execv never returns
+        apply_shell_symlinks(config, script_dir, home)
+
+    # Ensure brew is on PATH for the remainder of this process, regardless of
+    # how setup.py was launched. A non-interactive shell never sources ~/.zshrc
+    # (where `brew shellenv` lives), so brew can be installed yet missing from
+    # PATH — which previously broke `brew tap`/`brew install` in Layer 2.
+    if not args.check and not ensure_brew_on_path():
+        print(f"{RED}✗ brew not found on PATH and not at a standard location{RESET}")
+        sys.exit(1)
 
     # Count total packages to install (for progress bar)
     if not args.check and not args.sync and not args.manage_ignored:
