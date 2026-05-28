@@ -234,6 +234,12 @@ plugins = [
     "plan-executor@plan-executor",
 ]
 
+# Claude Code settings.json patches (deep-merged into ~/.claude/settings.json)
+[layer2.claude_code.settings.statusLine]
+type = "command"
+command = "~/.claude/statusline.sh"
+padding = 0
+
 # Layer 3: GitHub CLI authentication
 [layer3]
 name = "GitHub Authentication"

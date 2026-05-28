@@ -1043,7 +1043,7 @@ def layer5_doom(config, script_dir, home, check_only=False):
             env["PATH"] = f"{brew_bin}:" + env.get("PATH", "")
 
             set_terminal_title("doom install")
-            run_command(f"{doom_bin} install --force --env --install --fonts --hooks", env=env)
+            run_command(f"{doom_bin} install --force --env --install --hooks", env=env)
             set_terminal_title("doom sync")
             run_command(f"{doom_bin} sync", env=env)
 
