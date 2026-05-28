@@ -270,8 +270,6 @@ options = [
 
 # Post-install commands to run after Emacs is installed
 post_install_commands = [
-    "rm -rf /Applications/Emacs.app",
-    "osascript -e 'tell application \"Finder\" to make alias file to posix file \"{brew_prefix}/Cellar/emacs-plus@31/31.0.5/Emacs.app\" at posix file \"/Applications\" with properties {{name:\"Emacs.app\"}}'",
 ]
 
 # Spelling dictionaries to download
