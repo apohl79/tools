@@ -88,17 +88,30 @@ Always use worktrees when implementing a task. Before changing the main reposito
 
 **Exception — specs and plans:** Design specs (e.g. `docs/superpowers/specs/*.md`) and implementation plans (e.g. `docs/superpowers/plans/*.md`, `.planning/**`) MAY be written and committed directly to `main` without a worktree and without asking. The worktree requirement only applies to source code, tests, and configuration changes that constitute the actual implementation.
 
-## MCP Server Failures (npm/npx-based)
+## MCP Servers
 
-When an npm/npx-based MCP server fails to start, check for JFrog auth issues before investigating other causes:
+Use the `mcpc` CLI as the default tool for MCP server work.
 
-1. Run `npx <package> --help` to reproduce the error.
-2. If the error is `E401` (Incorrect or missing password), decode the JFrog JWT from `~/.npmrc` and check expiry:
+1. List active sessions and OAuth profiles with `mcpc` or `mcpc --json`.
+2. Connect to servers with `mcpc connect <server> @<name>`. For local config discovery, use `mcpc connect --stdio` only for trusted configs because stdio entries execute local commands.
+3. Restart or close stale sessions with `mcpc restart @<name>` or `mcpc close @<name>`.
+4. Inspect capabilities before using a server:
+   - `mcpc @<name>` for server info and tool overview.
+   - `mcpc @<name> grep <pattern>` to search tools and instructions.
+   - `mcpc @<name> tools-list` and `mcpc @<name> tools-get <tool>` for schemas.
+   - `mcpc @<name> resources-list`, `resources-read <uri>`, `prompts-list`, and `prompts-get <name>` as needed.
+5. Call tools through `mcpc @<name> tools-call <tool> key:=value`, inline JSON, or stdin. Use `--json` for scriptable output.
+6. Use `mcpc login <server>` and `mcpc logout <server>` for OAuth-backed MCP servers.
+7. For command-backed servers, inspect stderr logs in `~/.mcpc/logs/bridge-<session>.log`.
+
+When an npm/npx-based MCP server still fails under `mcpc` with `E401` (Incorrect or missing password), decode the JFrog JWT from `~/.npmrc` and check expiry:
+
    ```bash
    # Extract the base64 payload (second segment) from the _authToken in ~/.npmrc
    awk -F'.' '/authToken/{print $2}' ~/.npmrc | base64 -d 2>/dev/null | python3 -c "import json,sys,datetime; d=json.loads(sys.stdin.read()); print(f'Expires: {datetime.datetime.fromtimestamp(d[\"exp\"])}'); print(f'Expired: {datetime.datetime.now() > datetime.datetime.fromtimestamp(d[\"exp\"])}')"
    ```
-3. If expired, inform the user: "JFrog token in `~/.npmrc` expired on {date}. Refresh with `npm login --registry=https://parloa.jfrog.io/artifactory/api/npm/parloa-npm/`."
+
+If expired, inform the user: "JFrog token in `~/.npmrc` expired on {date}. Refresh with `npm login --registry=https://parloa.jfrog.io/artifactory/api/npm/parloa-npm/`."
 
 ## GPG Agent
 

@@ -354,14 +354,14 @@ source = "{script_dir}/CLAUDE.global.md"
 target = "{home}/CLAUDE.md"
 
 [[layer6.symlinks]]
+name = "codex-global-agents"
+source = "{script_dir}/AGENTS.global.md"
+target = "{home}/.codex/AGENTS.md"
+
+[[layer6.symlinks]]
 name = "claude-statusline"
 source = "{script_dir}/.claude/statusline.sh"
 target = "{home}/.claude/statusline.sh"
-
-[[layer6.symlinks]]
-name = "claude-supervisor"
-source = "{script_dir}/.claude/supervisor"
-target = "{home}/.claude/supervisor"
 
 [[layer6.symlinks]]
 name = "claude-notify"
@@ -369,24 +369,9 @@ source = "{script_dir}/.claude/notify"
 target = "{home}/.claude/notify"
 
 [[layer6.symlinks]]
-name = "claude-commands"
-source = "{script_dir}/.claude/commands"
-target = "{home}/.claude/commands"
-
-[[layer6.symlinks]]
-name = "claude-skills"
-source = "{script_dir}/.claude/skills"
-target = "{home}/.claude/skills"
-
-[[layer6.symlinks]]
 name = "claude-post-edit-check"
 source = "{script_dir}/.claude/post-edit-check.sh"
 target = "{home}/.claude/post-edit-check.sh"
-
-[[layer6.symlinks]]
-name = "claude-hook-cmux-tab-title"
-source = "{script_dir}/.claude/hooks/cmux-tab-title.sh"
-target = "{home}/.claude/hooks/cmux-tab-title.sh"
 
 [[layer6.symlinks]]
 name = "cmux"
