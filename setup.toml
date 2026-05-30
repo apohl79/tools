@@ -349,6 +349,11 @@ source = "{script_dir}/.terminfo"
 target = "{home}/.terminfo"
 
 [[layer6.symlinks]]
+name = "claude-global-md"
+source = "{script_dir}/CLAUDE.global.md"
+target = "{home}/CLAUDE.md"
+
+[[layer6.symlinks]]
 name = "claude-statusline"
 source = "{script_dir}/.claude/statusline.sh"
 target = "{home}/.claude/statusline.sh"
