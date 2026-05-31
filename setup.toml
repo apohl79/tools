@@ -374,6 +374,11 @@ source = "{script_dir}/.claude/post-edit-check.sh"
 target = "{home}/.claude/post-edit-check.sh"
 
 [[layer6.symlinks]]
+name = "claude-cmux-tab-title"
+source = "{script_dir}/.claude/hooks/cmux-tab-title.sh"
+target = "{home}/.claude/hooks/cmux-tab-title.sh"
+
+[[layer6.symlinks]]
 name = "cmux"
 source = "{script_dir}/.config/cmux/cmux.json"
 target = "{home}/.config/cmux/cmux.json"
