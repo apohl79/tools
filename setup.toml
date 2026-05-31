@@ -255,6 +255,14 @@ type = "command"
 command = "~/.claude/statusline.sh"
 padding = 0
 
+# cmux tab-title hook: renames the cmux tab on session start and each prompt.
+# The script itself is symlinked via layer6 (claude-cmux-tab-title).
+[layer2.claude_code.settings.hooks.SessionStart]
+command = "~/.claude/hooks/cmux-tab-title.sh"
+
+[layer2.claude_code.settings.hooks.UserPromptSubmit]
+command = "~/.claude/hooks/cmux-tab-title.sh"
+
 # Layer 3: GitHub CLI authentication
 [layer3]
 name = "GitHub Authentication"
