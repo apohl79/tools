@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/cmux-tab-title.sh",
+            "statusMessage": "Naming cmux tab"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.codex/hooks/cmux-tab-title.sh",
+            "statusMessage": "Naming cmux tab"
+          }
+        ]
+      }
+    ]
+  }
+}

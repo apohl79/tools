@@ -366,6 +366,16 @@ source = "{script_dir}/AGENTS.global.md"
 target = "{home}/.codex/AGENTS.md"
 
 [[layer6.symlinks]]
+name = "codex-hooks"
+source = "{script_dir}/.codex/hooks/hooks.json"
+target = "{home}/.codex/hooks.json"
+
+[[layer6.symlinks]]
+name = "codex-cmux-tab-title"
+source = "{script_dir}/.codex/hooks/cmux-tab-title.sh"
+target = "{home}/.codex/hooks/cmux-tab-title.sh"
+
+[[layer6.symlinks]]
 name = "claude-statusline"
 source = "{script_dir}/.claude/statusline.sh"
 target = "{home}/.claude/statusline.sh"
