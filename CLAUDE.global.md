@@ -90,6 +90,8 @@ Always use worktrees when implementing a task. Before changing the main reposito
 
 ## MCP Servers
 
+**ALWAYS check for available MCP tools via `mcpc` before concluding a capability is unavailable.** When a task needs external access (Google Docs/Drive/Calendar/Gmail, Datadog, Rootly, GitHub, etc.) and a direct tool (WebFetch, curl) fails with auth errors (401/403) or is missing, do NOT ask the user or declare a limitation until you have run `mcpc @gateway tools-list` and `mcpc @gateway grep <keyword>` to confirm no MCP tool covers it. The gateway aggregates hundreds of tools (e.g. `google_workspace__*`, `datadog__*`, `rootly__*`); `grep` matches tool names/descriptions and can miss namespaced prefixes, so also scan the full `tools-list` output.
+
 Use the `mcpc` CLI as the default tool for MCP server work.
 
 1. List active sessions and OAuth profiles with `mcpc` or `mcpc --json`.
