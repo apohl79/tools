@@ -120,6 +120,8 @@ Exception: specs and plans may be written and committed directly to main without
 
 Use the `mcpc` CLI as the default tool for MCP server work.
 
+When access to an external resource is blocked or incomplete, check available MCP/app tools before asking the user for manual access or alternate input. This includes cases like private Google Docs, Drive files, issue trackers, tickets, or other linked resources where a connector may already have authenticated access.
+
 1. List active sessions and OAuth profiles with `mcpc` or `mcpc --json`.
 2. Connect to servers with `mcpc connect <server> @<name>`. For local config discovery, use `mcpc connect --stdio` only for trusted configs because stdio entries execute local commands.
 3. Restart or close stale sessions with `mcpc restart @<name>` or `mcpc close @<name>`.
