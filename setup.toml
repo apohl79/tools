@@ -105,7 +105,6 @@ brew_packages = [
     "isort",
     "isync",
     "jansson",
-    "jdtls",
     "jenv",
     "jq",
     "keepassxc",

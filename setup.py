@@ -1181,23 +1181,6 @@ def layer6_symlinks(config, script_dir, home, check_only=False):
     print("\npython symlinks:")
     setup_python_symlinks(check_only)
 
-    # Setup jdtls links if present
-    # Use link_force to update symlinks when jdtls version changes
-    if not check_only and command_exists("jenv"):
-        # Get brew prefix for jdtls path
-        brew_prefix_result = subprocess.run(['brew', '--prefix'], capture_output=True, text=True)
-        brew_prefix = brew_prefix_result.stdout.strip() if brew_prefix_result.returncode == 0 else '/usr/local'
-
-        jdtls_patterns = glob.glob(f"{brew_prefix}/Cellar/jdtls/*/libexec/config_mac")
-        if jdtls_patterns:
-            jdtls_dir = os.path.join(home, "tools/jdtls")
-            os.makedirs(jdtls_dir, exist_ok=True)
-            link_force("jdtls/config_mac", jdtls_patterns[0], os.path.join(jdtls_dir, "config_mac"))
-
-        jdtls_plugin_patterns = glob.glob(f"{brew_prefix}/Cellar/jdtls/*/libexec/plugins")
-        if jdtls_plugin_patterns:
-            link_force("jdtls/plugins", jdtls_plugin_patterns[0], os.path.join(home, "tools/jdtls/plugins"))
-
     # Configure Java if jenv is installed
     if command_exists("jenv") and not check_only:
         # Find all openjdk packages from brew packages
