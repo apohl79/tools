@@ -102,6 +102,14 @@ Treat any open task at handoff as a failure unless one of the explicit exception
 
 ## Implementation
 
+### Directional Check-In Before Implementation
+
+Before touching code, tests, or configuration, do a quick directional check-in:
+
+- Briefly analyze the likely implementation options and name the intended direction.
+- Ask concise clarifying questions if the request is ambiguous, risky, or could reasonably be implemented in materially different ways.
+- Get at least one user-facing directional confirmation or provide a short "I am going to..." check-in before editing files, so the implementation does not run ahead of the user's intent.
+
 Use worktrees for implementation tasks unless a higher-priority instruction or explicit user request says to edit the current checkout. Before changing the main repository, ask whether editing main is allowed or whether a worktree is needed.
 
 Create worktrees in `../.my/worktrees/[repo]-[short-title]-[JIRA-if-exists]`.
