@@ -162,16 +162,6 @@ stty -ixon 2>/dev/null
 # git in ~/.zshrc.local. Sourced last so it can override anything above.
 [ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 
-# Claude Code Proxy
-#export ANTHROPIC_BASE_URL="http://localhost:9000"
-#export ENABLE_TOOL_SEARCH=true
-command -v claude-code-proxy >/dev/null 2>&1 && claude-code-proxy ensure >/dev/null 2>&1
-[ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
-
-
-# MCP Gateway — keep running independent of Claude sessions
-(mcp-gateway-ensure 2>/dev/null &)
-
 # pnpm
 export PNPM_HOME="/tmp/pnpm-latest"
 case ":$PATH:" in
