@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.2.0",
+    "@anthropic-ai/claude-agent-sdk": "0.2.139",
     "marked": "12.0.2",
     "highlight.js": "11.9.0",
     "isomorphic-dompurify": "2.9.0",
@@ -18,9 +18,9 @@
   },
   "devDependencies": {
     "@types/jsdom": "21.1.6",
-    "@types/node": "20.11.30",
+    "@types/node": "20.19.41",
     "dompurify": "3.0.9",
-    "esbuild": "0.21.4",
+    "esbuild": "0.28.0",
     "tsx": "4.7.2",
     "typescript": "5.4.5"
   }

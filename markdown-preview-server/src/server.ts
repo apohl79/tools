@@ -1,16 +1,16 @@
 // src/server.ts
 import { createServer as httpCreateServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { mkdirSync, readFileSync, writeFileSync, chmodSync, realpathSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, chmodSync, realpathSync, existsSync, unlinkSync, statSync, watch, type FSWatcher } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { renderDoc } from './markdown.ts';
 import { parseArchivedThreads } from './archive.ts';
 import { readJsonl, trimTranscript } from './transcript.ts';
-import { appendThreadDetails, removeArchivedBlockByIndex, replaceThreadDetails } from './doc-writer.ts';
+import { appendThreadDetails, removeAllArchivedBlocks, removeArchivedBlockByIndex, removeThreadDetailsById, replaceThreadDetails } from './doc-writer.ts';
 import type { AgentFactory, ThreadAgent } from './agent.ts';
-import { sdkAgentFactory } from './agent.ts';
-import type { Block, Thread, ThreadKind, FinishResult } from './types.ts';
+import { codexAgentFactory, sdkAgentFactory } from './agent.ts';
+import type { Block, Thread, ThreadKind, FinishResult, ApplyResult, ApplyProgress, ApplyTask } from './types.ts';
 
 const MAX_BODY_BYTES = 256 * 1024;
 const EVENT_BUFFER_CAP = 200;
@@ -96,9 +96,20 @@ export async function createServer(opts: ServerOptions): Promise<ServerHandle> {
     eventBuffer: [],
     nextEventId: 0,
     nextThreadSeq: 0,
+    applying: false,
+    applyCounter: 0,
+    applyTimeout: null,
+    applyStatus: null,
+    applyProgress: null,
+    applyTasks: [],
+    applyAwaitingMonitoring: false,
+    removeThreadsOnApply: false,
+    docWatcher: null,
+    docReloadTimer: null,
     shutdownOnFinish: opts.shutdownOnFinish !== false,
   };
   state.archivedThreads = parseArchivedThreads(state.docMd);
+  installDocWatcher(state);
 
   const server = httpCreateServer((req, res) =>
     handle(state, req, res).catch((err) => {
@@ -117,6 +128,8 @@ export async function createServer(opts: ServerOptions): Promise<ServerHandle> {
     close: () =>
       new Promise<void>((resolve) => {
         for (const c of state.sseClients) c.end();
+        if (state.docWatcher) state.docWatcher.close();
+        if (state.docReloadTimer) clearTimeout(state.docReloadTimer);
         server.close(() => resolve());
       }),
   };
@@ -142,6 +155,69 @@ interface ServerState {
   nextThreadSeq: number;
   shutdownOnFinish: boolean;
   port?: number;
+  // Apply-mode state. applying=true means /api/apply has run and the main
+  // agent has not yet called /api/apply/done or /api/apply/failed.
+  applying: boolean;
+  applyCounter: number;
+  applyTimeout: NodeJS.Timeout | null;
+  applyStatus: string | null;
+  applyProgress: ApplyProgress | null;
+  applyTasks: ApplyTask[];
+  applyAwaitingMonitoring: boolean;
+  // Armed by /api/apply when the browser user chose "Apply & remove all". When
+  // set, /api/apply/done strips every archived <details> block from the doc
+  // server-side (deterministically — never delegated to the main agent) before
+  // emitting doc.reloaded. Reset on every apply terminal path.
+  removeThreadsOnApply: boolean;
+  docWatcher: FSWatcher | null;
+  docReloadTimer: NodeJS.Timeout | null;
+}
+
+async function archiveAllOpenThreads(state: ServerState): Promise<FinishResult['conclusions']> {
+  const conclusions: FinishResult['conclusions'] = [];
+  for (const [threadId, thread] of state.liveThreads) {
+    if (thread.status === 'closed') {
+      conclusions.push({
+        threadId,
+        anchor: thread.anchor.quote ?? 'entire block',
+        conclusion: thread.conclusion ?? '',
+        closedBy: thread.closedBy ?? 'user',
+      });
+      continue;
+    }
+    let full: string;
+    if (thread.kind === 'note') {
+      full = thread.messages[thread.messages.length - 1]?.text ?? '';
+    } else {
+      const agent = state.agents.get(threadId);
+      if (!agent) continue;
+      full = '';
+      for await (const chunk of agent.proposeConclusion()) {
+        if (chunk.type === 'done') { full = chunk.text; break; }
+      }
+    }
+    thread.conclusion = full;
+    thread.status = 'closed';
+    thread.closedAt = new Date().toISOString();
+    thread.closedBy = 'auto';
+
+    appendThreadDetails(state.docPath, {
+      kind: thread.kind,
+      blockId: thread.anchor.blockId,
+      quote: thread.anchor.quote,
+      transcript: thread.messages,
+      conclusion: full,
+      date: new Date().toISOString().slice(0, 10),
+      threadId,
+    });
+    state.docMd = readFileSync(state.docPath, 'utf8');
+
+    conclusions.push({
+      threadId, anchor: thread.anchor.quote ?? 'entire block',
+      conclusion: full, closedBy: 'auto',
+    });
+  }
+  return conclusions;
 }
 
 async function readJson(req: IncomingMessage): Promise<unknown> {
@@ -155,6 +231,162 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
     chunks.push(chunk as Buffer);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function guardApplying(state: ServerState, res: ServerResponse): boolean {
+  if (!state.applying) return false;
+  res.statusCode = 409;
+  res.setHeader('content-type', 'application/json');
+  res.end(JSON.stringify({ error: 'applying' }));
+  return true;
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function numberFromUnknown(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return value;
+}
+
+function buildApplyProgress(body: unknown, previous: ApplyProgress | null): ApplyProgress {
+  const source = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const rawStatus = typeof source.status === 'string' ? source.status : source.message;
+  const status = typeof rawStatus === 'string' && rawStatus.trim()
+    ? rawStatus.trim()
+    : previous?.status ?? 'Applying changes in main session...';
+  const current = numberFromUnknown(source.current);
+  const total = numberFromUnknown(source.total);
+  const rawPercent = numberFromUnknown(source.percent);
+  const percent = rawPercent !== undefined
+    ? clampPercent(rawPercent)
+    : source.percent === null
+      ? null
+      : current !== undefined && total !== undefined && total > 0
+        ? clampPercent((current / total) * 100)
+        : previous?.percent ?? null;
+  return {
+    status,
+    percent,
+    ...(current !== undefined ? { current } : {}),
+    ...(total !== undefined ? { total } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function applyTaskLabel(status: string): string {
+  return status.replace(/\s+/g, ' ').trim() || 'Applying changes';
+}
+
+function addOrUpdateApplyTask(state: ServerState, status: string): void {
+  const label = applyTaskLabel(status);
+  const now = new Date().toISOString();
+  const last = state.applyTasks[state.applyTasks.length - 1];
+  if (last?.label === label) {
+    last.state = 'active';
+    last.updatedAt = now;
+    return;
+  }
+  for (const task of state.applyTasks) {
+    if (task.state === 'active') {
+      task.state = 'done';
+      task.updatedAt = now;
+    }
+  }
+  state.applyTasks.push({
+    id: `apply-${state.applyCounter}-task-${state.applyTasks.length + 1}`,
+    label,
+    state: 'active',
+    updatedAt: now,
+  });
+}
+
+function completeApplyTasks(state: ServerState): void {
+  const now = new Date().toISOString();
+  for (const task of state.applyTasks) {
+    if (task.state === 'active') {
+      task.state = 'done';
+      task.updatedAt = now;
+    }
+  }
+}
+
+function markApplyTaskError(state: ServerState, message: string): void {
+  const now = new Date().toISOString();
+  const active = [...state.applyTasks].reverse().find((task) => task.state === 'active');
+  if (active) {
+    active.state = 'error';
+    active.updatedAt = now;
+    return;
+  }
+  state.applyTasks.push({
+    id: `apply-${state.applyCounter}-task-${state.applyTasks.length + 1}`,
+    label: applyTaskLabel(message),
+    state: 'error',
+    updatedAt: now,
+  });
+}
+
+function setApplyProgress(state: ServerState, progress: ApplyProgress | null): void {
+  state.applyProgress = progress;
+  state.applyStatus = progress?.status ?? null;
+  if (progress) addOrUpdateApplyTask(state, progress.status);
+  else state.applyTasks = [];
+}
+
+function resetApplyState(state: ServerState): void {
+  state.applying = false;
+  state.applyAwaitingMonitoring = false;
+  setApplyProgress(state, null);
+  state.removeThreadsOnApply = false;
+}
+
+function renderCurrentDoc(state: ServerState) {
+  const rendered = renderDoc(state.docMd);
+  return {
+    html: rendered.html,
+    blockIds: rendered.blockIds,
+    title: computeDocTitle(rendered.blocks, state.docPath),
+    archivedThreads: state.archivedThreads,
+  };
+}
+
+function refreshDocFromDisk(state: ServerState, emit: boolean): boolean {
+  let next: string;
+  try {
+    next = readFileSync(state.docPath, 'utf8');
+  } catch {
+    return false;
+  }
+  if (next === state.docMd) return false;
+  state.docMd = next;
+  state.archivedThreads = parseArchivedThreads(state.docMd);
+  if (emit) pushEvent(state, 'doc.updated', renderCurrentDoc(state));
+  return true;
+}
+
+function scheduleDocReload(state: ServerState): void {
+  if (state.docReloadTimer) clearTimeout(state.docReloadTimer);
+  state.docReloadTimer = setTimeout(() => {
+    state.docReloadTimer = null;
+    refreshDocFromDisk(state, true);
+  }, 75);
+  state.docReloadTimer.unref();
+}
+
+function installDocWatcher(state: ServerState): void {
+  try {
+    const docDir = dirname(state.docPath);
+    const docName = basename(state.docPath);
+    state.docWatcher = watch(docDir, { persistent: false }, (_event, filename) => {
+      if (filename && filename.toString() !== docName) return;
+      scheduleDocReload(state);
+    });
+    state.docWatcher.unref();
+  } catch {
+    state.docWatcher = null;
+  }
 }
 
 async function handle(state: ServerState, req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -175,25 +407,32 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
   }
 
   if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
-    const rendered = renderDoc(state.docMd);
+    refreshDocFromDisk(state, false);
+    const rendered = renderCurrentDoc(state);
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({
       html: rendered.html,
       blockIds: rendered.blockIds,
-      title: computeDocTitle(rendered.blocks, state.docPath),
+      title: rendered.title,
       threads: [...state.liveThreads.values()],
       archivedThreads: state.archivedThreads,
+      applying: state.applying,
+      applyStatus: state.applyStatus,
+      applyProgress: state.applyProgress,
+      applyTasks: state.applyTasks,
     }));
     return;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/doc/current') {
-    const rendered = renderDoc(state.docMd);
+    refreshDocFromDisk(state, false);
+    const rendered = renderCurrentDoc(state);
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({
       html: rendered.html,
       blockIds: rendered.blockIds,
-      title: computeDocTitle(rendered.blocks, state.docPath),
+      title: rendered.title,
+      archivedThreads: state.archivedThreads,
     }));
     return;
   }
@@ -223,6 +462,7 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
   }
 
   if (req.method === 'POST' && url.pathname === '/api/threads') {
+    if (guardApplying(state, res)) return;
     const body = await readJson(req) as {
       anchor: { blockId: string; quote?: string; occurrence?: number };
       message: string;
@@ -264,6 +504,7 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
 
   const msgMatch = url.pathname.match(/^\/api\/threads\/([^/]+)\/messages$/);
   if (req.method === 'POST' && msgMatch) {
+    if (guardApplying(state, res)) return;
     const threadId = msgMatch[1]!;
     const agent = state.agents.get(threadId);
     if (!agent) { res.statusCode = 404; res.end('thread not found'); return; }
@@ -292,6 +533,7 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
 
   const closeMatch = url.pathname.match(/^\/api\/threads\/([^/]+)\/close$/);
   if (req.method === 'POST' && closeMatch) {
+    if (guardApplying(state, res)) return;
     const threadId = closeMatch[1]!;
     const thread = state.liveThreads.get(threadId);
     if (!thread) { res.statusCode = 404; res.end('thread not found'); return; }
@@ -332,22 +574,42 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
     return;
   }
 
-  // DELETE /api/threads/:id — discard a live thread or note without archiving.
+  // DELETE /api/threads/:id — discard a live thread/note, or remove a closed
+  // in-session thread's archived details block from the doc.
   // Stops any running agent so subsequent SDK events don't reach a detached
-  // client. Closed (already-archived) threads return 409 — edit the conclusion
-  // or leave the archive as-is; we don't support un-archiving.
+  // client.
   const deleteMatch = url.pathname.match(/^\/api\/threads\/([^/]+)$/);
   if (req.method === 'DELETE' && deleteMatch) {
+    if (guardApplying(state, res)) return;
     const threadId = deleteMatch[1]!;
 
-    // Live thread (open note or open discussion) — discard in-memory state,
-    // stop the agent, emit thread.deleted.
+    // Live thread: open items are discarded from memory; closed items also
+    // have their just-written <details data-thread-id="..."> removed.
     const live = state.liveThreads.get(threadId);
     if (live) {
       if (live.status === 'closed') {
-        res.statusCode = 409;
+        try {
+          removeThreadDetailsById(state.docPath, threadId);
+        } catch (err) {
+          res.statusCode = 500;
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+          return;
+        }
+        const agent = state.agents.get(threadId);
+        if (agent?.close) await agent.close().catch(() => {});
+        state.agents.delete(threadId);
+        state.liveThreads.delete(threadId);
+        state.docMd = readFileSync(state.docPath, 'utf8');
+        const rendered = renderDoc(state.docMd);
+        pushEvent(state, 'thread.deleted', { threadId });
+        pushEvent(state, 'doc.updated', {
+          html: rendered.html,
+          blockIds: rendered.blockIds,
+          title: computeDocTitle(rendered.blocks, state.docPath),
+        });
         res.setHeader('content-type', 'application/json');
-        res.end(JSON.stringify({ ok: false, error: 'thread already closed; edit conclusion instead' }));
+        res.end(JSON.stringify({ ok: true }));
         return;
       }
       const agent = state.agents.get(threadId);
@@ -414,6 +676,7 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
   // note threads (use the agent turn API for those) and closed notes.
   const noteEditMatch = url.pathname.match(/^\/api\/threads\/([^/]+)\/note$/);
   if (req.method === 'PATCH' && noteEditMatch) {
+    if (guardApplying(state, res)) return;
     const threadId = noteEditMatch[1]!;
     const thread = state.liveThreads.get(threadId);
     if (!thread) { res.statusCode = 404; res.end('thread not found'); return; }
@@ -445,6 +708,7 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
   // threads loaded from disk are not in liveThreads and return 404.
   const editConclusionMatch = url.pathname.match(/^\/api\/threads\/([^/]+)\/conclusion$/);
   if (req.method === 'PUT' && editConclusionMatch) {
+    if (guardApplying(state, res)) return;
     const threadId = editConclusionMatch[1]!;
     const thread = state.liveThreads.get(threadId);
     if (!thread) { res.statusCode = 404; res.end('thread not found'); return; }
@@ -488,7 +752,7 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
 
   // POST /api/threads/:id/convert { to: 'note' | 'thread' }
   //   thread → note: stop the agent, collapse the transcript to a single user
-  //     message. The collapsed text defaults to the last Claude reply (that's
+  //     message. The collapsed text defaults to the last assistant reply (that's
   //     usually the outcome the user wants to keep) and falls back to the most
   //     recent user message, then the empty string.
   //   note → thread: spawn an agent seeded with the note text and stream a
@@ -496,6 +760,7 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
   // Either direction is only allowed while the thread is open.
   const convertMatch = url.pathname.match(/^\/api\/threads\/([^/]+)\/convert$/);
   if (req.method === 'POST' && convertMatch) {
+    if (guardApplying(state, res)) return;
     const threadId = convertMatch[1]!;
     const thread = state.liveThreads.get(threadId);
     if (!thread) { res.statusCode = 404; res.end('thread not found'); return; }
@@ -550,52 +815,235 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
     return;
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/finish') {
-    const conclusions: FinishResult['conclusions'] = [];
-    for (const [threadId, thread] of state.liveThreads) {
-      if (thread.status === 'closed') {
-        conclusions.push({
-          threadId,
-          anchor: thread.anchor.quote ?? 'entire block',
-          conclusion: thread.conclusion ?? '',
-          closedBy: thread.closedBy ?? 'user',
-        });
-        continue;
-      }
-      let full: string;
-      if (thread.kind === 'note') {
-        // Notes have no agent — the user message IS the conclusion.
-        full = thread.messages[thread.messages.length - 1]?.text ?? '';
-      } else {
-        const agent = state.agents.get(threadId);
-        if (!agent) continue;
-        full = '';
-        for await (const chunk of agent.proposeConclusion()) {
-          if (chunk.type === 'done') { full = chunk.text; break; }
-        }
-      }
-      thread.conclusion = full;
-      thread.status = 'closed';
-      thread.closedAt = new Date().toISOString();
-      thread.closedBy = 'auto';
-
-      appendThreadDetails(state.docPath, {
-        kind: thread.kind,
-        blockId: thread.anchor.blockId,
-        quote: thread.anchor.quote,
-        transcript: thread.messages,
-        conclusion: full,
-        date: new Date().toISOString().slice(0, 10),
-        threadId,
-      });
-      state.docMd = readFileSync(state.docPath, 'utf8');
-
-      conclusions.push({
-        threadId, anchor: thread.anchor.quote ?? 'entire block',
-        conclusion: full, closedBy: 'auto',
-      });
+  if (req.method === 'POST' && url.pathname === '/api/apply') {
+    // Body is optional ({ removeThreads?: boolean }); tolerate an empty/invalid
+    // body so callers that POST nothing keep the legacy "keep threads" default.
+    const applyBody = await readJson(req).catch(() => ({})) as { removeThreads?: unknown };
+    const removeThreads = applyBody?.removeThreads === true;
+    if (state.applying) {
+      res.statusCode = 409;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'already-applying' }));
+      return;
     }
+    if (state.liveThreads.size === 0) {
+      res.statusCode = 400;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'nothing-to-apply' }));
+      return;
+    }
+
+    state.applying = true;
+    state.applyAwaitingMonitoring = false;
+    state.applyTasks = [];
+    state.removeThreadsOnApply = removeThreads;
+    state.applyCounter += 1;
+    const applyIndex = state.applyCounter;
+    setApplyProgress(state, {
+      status: 'Closing threads and notes...',
+      percent: null,
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Wrap the prelude (archive + signal write + server.applying broadcast +
+    // timeout arming) in try/catch. If anything between applying=true and the
+    // timeout being armed throws, we must flip applying back to false and
+    // broadcast server.apply-failed so the client recovers; otherwise the
+    // session would be stuck in applying mode with no timeout to self-clear.
+    try {
+      const conclusions = await archiveAllOpenThreads(state);
+      setApplyProgress(state, {
+        status: 'Waiting for main session to apply changes...',
+        percent: null,
+        updatedAt: new Date().toISOString(),
+      });
+
+      const result: ApplyResult = {
+        mode: 'apply',
+        applyIndex,
+        docPath: state.docPath,
+        conclusions,
+        threadCount: state.liveThreads.size,
+        archivedThreadCount: state.archivedThreads.length,
+        finishedAt: new Date().toISOString(),
+      };
+      writeFileSync(join(state.sessionDir, `apply-${applyIndex}.json`), JSON.stringify(result, null, 2));
+      pushEvent(state, 'server.applying', { result, progress: state.applyProgress, tasks: state.applyTasks });
+
+      // Arm the 5-minute self-fail timeout.
+      state.applyTimeout = setTimeout(() => {
+        if (!state.applying) return;
+        markApplyTaskError(state, 'Apply timed out');
+        resetApplyState(state);
+        state.applyTimeout = null;
+        // Mirror the F4 unlink in /api/apply/failed: launch.sh's do_wait globs
+        // apply-*.json on every poll, so a stale signal file from a timed-out
+        // apply would re-enter the loop on the main agent indefinitely.
+        try {
+          const signalPath = join(state.sessionDir, `apply-${applyIndex}.json`);
+          if (existsSync(signalPath)) unlinkSync(signalPath);
+        } catch { /* ignore */ }
+        pushEvent(state, 'server.apply-failed', { error: 'timed out' });
+      }, 5 * 60 * 1000);
+      state.applyTimeout.unref();
+    } catch (err) {
+      if (state.applyTimeout) {
+        clearTimeout(state.applyTimeout);
+        state.applyTimeout = null;
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      markApplyTaskError(state, message);
+      resetApplyState(state);
+      pushEvent(state, 'server.apply-failed', { error: message });
+      res.statusCode = 500;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'apply-failed', message }));
+      return;
+    }
+
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ applyIndex }));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/apply/progress') {
+    if (!state.applying) {
+      res.statusCode = 409;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'not-applying' }));
+      return;
+    }
+    const body = await readJson(req).catch(() => ({}));
+    const progress = buildApplyProgress(body, state.applyProgress);
+    setApplyProgress(state, progress);
+    pushEvent(state, 'server.apply-progress', { progress, tasks: state.applyTasks });
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ ok: true, progress, tasks: state.applyTasks }));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/apply/done') {
+    if (!state.applying) {
+      res.statusCode = 409;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'not-applying' }));
+      return;
+    }
+    if (state.applyTimeout) {
+      clearTimeout(state.applyTimeout);
+      state.applyTimeout = null;
+    }
+    setApplyProgress(state, {
+      status: 'Refreshing updated document...',
+      percent: null,
+      updatedAt: new Date().toISOString(),
+    });
+    state.docMd = readFileSync(state.docPath, 'utf8');
+    // Deterministic note/thread wipe. The browser user opted into this at apply
+    // time; we strip every archived <details> block here, server-side, rather
+    // than relying on the main agent (which may skip follow-up edits). Runs
+    // after the agent's edits and re-read, before re-parse/render below, so the
+    // doc.reloaded payload reflects the clean doc.
+    if (state.removeThreadsOnApply) {
+      removeAllArchivedBlocks(state.docPath);
+      state.docMd = readFileSync(state.docPath, 'utf8');
+    }
+    state.removeThreadsOnApply = false;
+    state.archivedThreads = parseArchivedThreads(state.docMd);
+    const rendered = renderDoc(state.docMd);
+
+    // Cleanup must complete before doc.reloaded. The browser refreshes the
+    // document in place from this payload, so stale live threads must already
+    // be gone and a concurrent POST /api/apply must stay blocked until the
+    // main session starts monitoring again.
+    for (const agent of state.agents.values()) {
+      if (agent.close) await agent.close().catch(() => {});
+    }
+    state.liveThreads.clear();
+    state.agents.clear();
+
+    // Cleanup: delete the apply-N.json signal file we wrote in /api/apply.
+    try {
+      const signalPath = join(state.sessionDir, `apply-${state.applyCounter}.json`);
+      if (existsSync(signalPath)) unlinkSync(signalPath);
+    } catch { /* ignore */ }
+
+    state.applyAwaitingMonitoring = true;
+    setApplyProgress(state, {
+      status: 'Waiting for main session monitoring...',
+      percent: null,
+      updatedAt: new Date().toISOString(),
+    });
+
+    pushEvent(state, 'doc.reloaded', {
+      html: rendered.html,
+      blockIds: rendered.blockIds,
+      title: computeDocTitle(rendered.blocks, state.docPath),
+      archivedThreads: state.archivedThreads,
+      applying: state.applying,
+      applyProgress: state.applyProgress,
+      applyTasks: state.applyTasks,
+    });
+
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/apply/monitoring') {
+    if (!state.applyAwaitingMonitoring) {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true, ignored: true }));
+      return;
+    }
+    completeApplyTasks(state);
+    const tasks = state.applyTasks.map((task) => ({ ...task }));
+    state.applying = false;
+    state.applyAwaitingMonitoring = false;
+    state.applyProgress = null;
+    state.applyStatus = null;
+    state.applyTasks = [];
+    state.removeThreadsOnApply = false;
+    pushEvent(state, 'server.apply-complete', { tasks });
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ ok: true, tasks }));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/apply/failed') {
+    const body = await readJson(req) as { error?: string };
+    if (!state.applying) {
+      res.statusCode = 409;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'not-applying' }));
+      return;
+    }
+    const error = typeof body.error === 'string' ? body.error : 'Apply failed.';
+    if (state.applyTimeout) {
+      clearTimeout(state.applyTimeout);
+      state.applyTimeout = null;
+    }
+    markApplyTaskError(state, error);
+    resetApplyState(state);
+    // F4: unlink the apply-N.json signal file. launch.sh's do_wait globs
+    // apply-*.json on every poll; without this unlink, the same failed signal
+    // file is picked up again on the next iteration and the main agent
+    // re-enters the apply path indefinitely on a single failure.
+    try {
+      const signalPath = join(state.sessionDir, `apply-${state.applyCounter}.json`);
+      if (existsSync(signalPath)) unlinkSync(signalPath);
+    } catch { /* ignore */ }
+    pushEvent(state, 'server.apply-failed', { error });
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/finish') {
+    if (guardApplying(state, res)) return;
+    const conclusions = await archiveAllOpenThreads(state);
     const result: FinishResult = {
+      mode: 'finish',
       docPath: state.docPath,
       conclusions,
       threadCount: state.liveThreads.size,
@@ -628,8 +1076,128 @@ async function handle(state: ServerState, req: IncomingMessage, res: ServerRespo
     }
   }
 
+  // Repo-relative file serving — let markdown like `![](./docs/diagram.svg)`
+  // or `![](/assets/foo.png)` resolve against the git repo that contains the
+  // doc (falling back to the doc's directory if it isn't in a repo). The
+  // server is loopback-only and the user authored the doc, so any path they
+  // chose to link to is fair game; the only thing this guards against is
+  // accidental traversal *out* of the repo via `..` or symlink escapes.
+  if (req.method === 'GET') {
+    const asset = tryServeRepoFile(state, url.pathname);
+    if (asset) {
+      res.setHeader('content-type', asset.contentType);
+      res.end(asset.body);
+      return;
+    }
+  }
+
   res.statusCode = 404;
   res.end('not found');
+}
+
+const FILE_TYPES: Record<string, string> = {
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.ico': 'image/x-icon',
+  '.bmp': 'image/bmp',
+  '.pdf': 'application/pdf',
+  '.html': 'text/html; charset=utf-8',
+  '.htm': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+};
+
+// Cache the resolved serve root per docPath so we don't walk the filesystem
+// on every request.
+const serveRootCache = new Map<string, string>();
+
+// Markers that indicate a project root. `.git` covers most repos; the rest
+// catch checkouts that aren't git working trees (worktrees that lost their
+// gitdir, sparse local notes dirs anchored by agent instructions, language-specific
+// project roots, etc).
+const PROJECT_MARKERS = [
+  '.git',
+  'package.json',
+  'pyproject.toml',
+  'Cargo.toml',
+  'go.mod',
+  'pixi.toml',
+  'AGENTS.md',
+  'CLAUDE.md',
+];
+
+function resolveServeRoot(docPath: string): string {
+  const cached = serveRootCache.get(docPath);
+  if (cached !== undefined) return cached;
+  const docDir = realpathSync(dirname(docPath));
+  let dir = docDir;
+  while (true) {
+    if (PROJECT_MARKERS.some((m) => existsSync(join(dir, m)))) {
+      serveRootCache.set(docPath, dir);
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  serveRootCache.set(docPath, docDir);
+  return docDir;
+}
+
+function tryServeRepoFile(
+  state: ServerState,
+  pathname: string,
+): { body: Buffer; contentType: string } | null {
+  if (pathname === '/' || pathname === '/events' || pathname.startsWith('/api/')) return null;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return null;
+  }
+  const rel = decoded.replace(/^\/+/, '');
+  if (!rel) return null;
+  let serveRoot: string;
+  try {
+    serveRoot = resolveServeRoot(state.docPath);
+  } catch {
+    return null;
+  }
+  const target = resolve(serveRoot, rel);
+  let realTarget: string;
+  try {
+    realTarget = realpathSync(target);
+  } catch {
+    return null;
+  }
+  // Containment guard: realTarget must be strictly inside serveRoot. This
+  // catches both `..` segments in `rel` and symlinks pointing outside.
+  if (!realTarget.startsWith(serveRoot + sep)) return null;
+  try {
+    if (!statSync(realTarget).isFile()) return null;
+  } catch {
+    return null;
+  }
+  const dotIdx = realTarget.lastIndexOf('.');
+  const ext = dotIdx >= 0 ? realTarget.slice(dotIdx).toLowerCase() : '';
+  const contentType = FILE_TYPES[ext] ?? 'application/octet-stream';
+  return { body: readFileSync(realTarget), contentType };
 }
 
 function buildPreamble(state: ServerState, anchor: { blockId: string; quote?: string }): string {
@@ -676,6 +1244,8 @@ async function streamReply(
   for await (const chunk of agent.send(userText)) {
     if (chunk.type === 'delta') {
       broadcast(state, 'thread.message.delta', { threadId, delta: chunk.text });
+    } else if (chunk.type === 'status') {
+      broadcast(state, 'thread.message.status', { threadId, status: chunk.status });
     } else {
       thread.messages.push({ role: 'assistant', text: chunk.text, ts: new Date().toISOString() });
       pushEvent(state, 'thread.message.done', { threadId, message: { role: 'assistant', text: chunk.text } });
@@ -726,17 +1296,26 @@ function isMainModule(metaUrl: string): boolean {
   }
 }
 
+type AgentMode = 'claude' | 'codex';
+
+export function resolveAgentMode(requestedAgent: string | undefined): AgentMode {
+  return requestedAgent === 'codex' ? 'codex' : 'claude';
+}
+
 if (isMainModule(import.meta.url)) {
   const doc = process.env.IND_DOC!;
   const mainJsonl = process.env.IND_MAIN_JSONL!;
   const sessionDir = process.env.IND_SESSION_DIR!;
   const staticDir = process.env.IND_STATIC_DIR;
+  const agentMode = resolveAgentMode(process.env.IND_AGENT);
   const { port, close } = await createServer({
     docPath: doc,
     mainJsonlPath: mainJsonl,
     sessionDir,
     staticDir,
-    agentFactory: sdkAgentFactory(),
+    agentFactory: agentMode === 'codex'
+      ? codexAgentFactory({ cwd: process.env.IND_AGENT_CWD || process.cwd() })
+      : sdkAgentFactory(),
   });
   const url = `http://127.0.0.1:${port}/`;
   console.log(url);

@@ -16,7 +16,7 @@ export function readJsonl(path: string): JsonlEntry[] {
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as JsonlEntry);
+    .flatMap((line) => normalizeJsonlEntry(JSON.parse(line) as unknown));
 }
 
 const ELIDE_LIMIT = 4 * 1024;
@@ -86,6 +86,74 @@ function renderEntry(entry: JsonlEntry, _i: number, elideBytes: number): string 
     default:
       return '';
   }
+}
+
+function normalizeJsonlEntry(raw: unknown): JsonlEntry[] {
+  if (!isRecord(raw)) return [];
+
+  if (isLegacyTranscriptEntry(raw)) {
+    return [raw];
+  }
+
+  if (raw['type'] !== 'response_item') return [];
+  const payload = raw['payload'];
+  if (!isRecord(payload)) return [];
+
+  if (payload['type'] === 'message') {
+    const role = payload['role'];
+    if (role !== 'user' && role !== 'assistant') return [];
+    const text = extractContentText(payload['content']);
+    return text ? [{ type: role, text }] : [];
+  }
+
+  if (payload['type'] === 'function_call') {
+    const name = typeof payload['name'] === 'string' ? payload['name'] : 'unknown';
+    const args = typeof payload['arguments'] === 'string'
+      ? payload['arguments']
+      : JSON.stringify(payload['arguments'] ?? {});
+    return [{ type: 'tool_use', name, args }];
+  }
+
+  if (payload['type'] === 'function_call_output') {
+    const output = typeof payload['output'] === 'string'
+      ? payload['output']
+      : JSON.stringify(payload['output'] ?? '');
+    return [{ type: 'tool_result', kind: 'codex', text: output }];
+  }
+
+  return [];
+}
+
+function isLegacyTranscriptEntry(raw: Record<string, unknown>): raw is JsonlEntry {
+  const type = raw['type'];
+  return (
+    (type === 'user' || type === 'assistant' || type === 'tool_use' || type === 'tool_result') &&
+    ['text', 'name', 'args', 'kind'].some((key) => raw[key] !== undefined)
+  );
+}
+
+function extractContentText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  const parts: string[] = [];
+  for (const item of content) {
+    if (typeof item === 'string') {
+      parts.push(item);
+      continue;
+    }
+    if (!isRecord(item)) continue;
+    const text = item['text'];
+    if (typeof text === 'string') {
+      parts.push(text);
+    } else if (item['type'] === 'input_image') {
+      parts.push('[image]');
+    }
+  }
+  return parts.join('\n');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function truncate(s: string, n: number): string {

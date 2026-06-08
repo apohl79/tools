@@ -165,8 +165,9 @@ function parseLegacyArchive(
       if (kind === 'thread') {
         if (m.startsWith('**User:**')) {
           messages.push({ role: 'user', text: decodeHtml(m.slice('**User:**'.length).trim()), ts });
-        } else if (m.startsWith('**Claude:**')) {
-          messages.push({ role: 'assistant', text: decodeHtml(m.slice('**Claude:**'.length).trim()), ts });
+        } else if (m.startsWith('**Claude:**') || m.startsWith('**Assistant:**')) {
+          const label = m.startsWith('**Claude:**') ? '**Claude:**' : '**Assistant:**';
+          messages.push({ role: 'assistant', text: decodeHtml(m.slice(label.length).trim()), ts });
         } else if (m.startsWith('**Conclusion:**')) {
           conclusionText = m.slice('**Conclusion:**'.length).trim();
         }

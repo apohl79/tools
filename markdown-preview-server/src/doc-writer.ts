@@ -41,6 +41,37 @@ export function removeArchivedBlockByIndex(docPath: string, archiveIndex: number
   renameSync(tmp, docPath);
 }
 
+/**
+ * Remove an archived `<details data-thread-id="…">` block written during this
+ * browser session. Used when the user deletes a closed thread from its
+ * conclusion editor.
+ */
+export function removeThreadDetailsById(docPath: string, threadId: string): void {
+  const source = readFileSync(docPath, 'utf8');
+  const updated = removeThreadDetails(source, threadId);
+  const tmp = `${docPath}.tmp`;
+  writeFileSync(tmp, updated);
+  renameSync(tmp, docPath);
+}
+
+/**
+ * Remove every archived `<details>` thread/note block from the doc. Used by
+ * /api/apply/done when the user chose "Apply & remove all". Removes blocks one
+ * at a time (always index 1, since indices shift after each removal) on the
+ * in-memory string so the file is written exactly once, atomically. The count
+ * from `findArchivedBlocks` strictly decreases each pass, so the loop
+ * terminates. A doc with no archived blocks is rewritten unchanged.
+ */
+export function removeAllArchivedBlocks(docPath: string): void {
+  let source = readFileSync(docPath, 'utf8');
+  while (findArchivedBlocks(source).length > 0) {
+    source = removeArchivedBlock(source, 1);
+  }
+  const tmp = `${docPath}.tmp`;
+  writeFileSync(tmp, source);
+  renameSync(tmp, docPath);
+}
+
 export function removeArchivedBlock(source: string, archiveIndex: number): string {
   // Mirror rewriteDoc: parseDoc and findArchivedBlocks normalize `</details>\n`
   // → `</details>\n\n` before lexing, so the block.markdown tokens we look up
@@ -53,6 +84,14 @@ export function removeArchivedBlock(source: string, archiveIndex: number): strin
   if (normalized[end] === '\n') end += 1;
   if (normalized[end] === '\n') end += 1;
   return normalized.slice(0, range.start) + normalized.slice(end);
+}
+
+export function removeThreadDetails(source: string, threadId: string): string {
+  const { start, end: rangeEnd } = findDetailsBlock(source, threadId);
+  let end = rangeEnd;
+  if (source[end] === '\n') end += 1;
+  if (source[end] === '\n') end += 1;
+  return source.slice(0, start) + source.slice(end);
 }
 
 function findArchivedBlockRange(source: string, archiveIndex: number): { start: number; end: number } | null {
@@ -205,7 +244,7 @@ function formatDetails(input: AppendThreadInput): string {
 
   lines.push(`<details${idAttr}><summary>💬 Thread on ${label} — ${date}</summary>`);
   for (const m of input.transcript) {
-    const roleLabel = m.role === 'user' ? 'User' : 'Claude';
+    const roleLabel = m.role === 'user' ? 'User' : 'Assistant';
     lines.push(
       `<div class="archived-msg" data-role="${m.role}" data-raw="${encodeAttr(m.text)}">` +
       `<strong>${roleLabel}:</strong> ${renderBody(m.text)}</div>`,
@@ -241,7 +280,7 @@ function renderBody(text: string): string {
   );
   const collapsed = preProtected.replace(/\n\s*\n/g, '\n').trimEnd();
   // If the reply is just one paragraph, unwrap `<p>…</p>` so short text
-  // flows inline next to the `<strong>Claude:</strong>` prefix instead of
+  // flows inline next to the `<strong>Assistant:</strong>` prefix instead of
   // dropping to a new line. Any sign of another block tag inside the
   // captured content (second `<p>`, heading, list, pre, blockquote, table)
   // keeps the block structure.

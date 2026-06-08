@@ -2,11 +2,12 @@
 import DOMPurify from 'dompurify';
 import { Marked } from 'marked';
 import hljs from 'highlight.js/lib/common';
-import type { Thread } from '../types.ts';
+import type { ApplyProgress, ApplyTask, Thread } from '../types.ts';
+import { modalChoice, modalConfirm, modalStatus, type ModalStatusHandle } from './modal.ts';
 
 // Dedicated marked instance for rendering thread messages. GFM on so tables +
 // fenced code work. `breaks: true` so assistant single-newlines survive as
-// <br> inside paragraphs (matches how Claude's replies flow).
+// <br> inside paragraphs (matches how assistant replies flow).
 const msgMarked = new Marked({
   gfm: true,
   breaks: true,
@@ -27,6 +28,7 @@ function renderMarkdown(text: string): string {
   const raw = msgMarked.parse(text) as string;
   return DOMPurify.sanitize(raw, {
     ADD_TAGS: ['details', 'summary'] as string[],
+    ADD_ATTR: ['checked', 'disabled', 'type'] as string[],
   });
 }
 
@@ -36,6 +38,10 @@ interface Bootstrap {
   title: string;
   threads: Thread[];
   archivedThreads: Thread[];
+  applying?: boolean;
+  applyStatus?: string | null;
+  applyProgress?: ApplyProgress | null;
+  applyTasks?: ApplyTask[];
 }
 
 interface Prefs {
@@ -48,7 +54,12 @@ const state = {
   archived: new Map<string, Thread>(),
   activeThreadId: null as string | null,
   prefs: { theme: 'auto', width: 'comfortable' } as Required<Prefs>,
+  applying: false,
+  applyProgress: null as ApplyProgress | null,
+  applyTasks: [] as ApplyTask[],
 };
+
+let applyOverlay: ModalStatusHandle | null = null;
 
 init().catch((err) => console.error(err));
 
@@ -58,6 +69,8 @@ async function init(): Promise<void> {
   document.getElementById('width-toggle')!.addEventListener('click', toggleWidth);
   document.getElementById('finish-top')!.addEventListener('click', finish);
   document.getElementById('finish-bottom')!.addEventListener('click', finish);
+  document.getElementById('apply-top')!.addEventListener('click', onApplyClick);
+  document.getElementById('apply-bottom')!.addEventListener('click', onApplyClick);
 
   const boot = (await (await fetch('/api/bootstrap')).json()) as Bootstrap;
   applyTitle(boot.title);
@@ -68,8 +81,21 @@ async function init(): Promise<void> {
   for (const t of boot.archivedThreads) state.archived.set(t.id, t);
   renderExistingThreads();
 
+  // Re-open the Apply overlay if a sibling tab kicked off Apply before this
+  // page loaded — the server records `applying` in /api/bootstrap so reloading
+  // mid-Apply restores the blocking modal instead of dropping into a stale UI.
+  if (boot.applying) {
+    state.applying = true;
+    state.applyProgress = boot.applyProgress ?? null;
+    state.applyTasks = boot.applyTasks ?? [];
+    showApplyOverlay(boot.applyProgress ?? null, boot.applyStatus ?? 'Applying changes in main session...', state.applyTasks);
+    setApplyAndFinishDisabled(true);
+  }
+  recomputeApplyEnabled();
+
   const es = new EventSource('/events');
   es.addEventListener('thread.message.delta', (e) => onDelta(JSON.parse((e as MessageEvent).data)));
+  es.addEventListener('thread.message.status', (e) => onStatus(JSON.parse((e as MessageEvent).data)));
   es.addEventListener('thread.message.done', (e) => onDone(JSON.parse((e as MessageEvent).data)));
   es.addEventListener('thread.message.error', (e) => onMessageError(JSON.parse((e as MessageEvent).data)));
   es.addEventListener('thread.conclusion.proposed', (e) => onConclusion(JSON.parse((e as MessageEvent).data)));
@@ -78,6 +104,175 @@ async function init(): Promise<void> {
   es.addEventListener('thread.updated', (e) => onUpdated(JSON.parse((e as MessageEvent).data)));
   es.addEventListener('doc.updated', (e) => onDocUpdated(JSON.parse((e as MessageEvent).data)));
   es.addEventListener('server.finished', (e) => onFinished(JSON.parse((e as MessageEvent).data)));
+  es.addEventListener('server.applying', (e) => {
+    const payload = JSON.parse((e as MessageEvent).data) as { progress?: ApplyProgress | null; tasks?: ApplyTask[] };
+    state.applying = true;
+    state.applyProgress = payload.progress ?? null;
+    state.applyTasks = payload.tasks ?? state.applyTasks;
+    showApplyOverlay(state.applyProgress, state.applyProgress?.status ?? 'Applying changes in main session...', state.applyTasks);
+    setApplyAndFinishDisabled(true);
+    recomputeApplyEnabled();
+  });
+  es.addEventListener('server.apply-progress', (e) => {
+    const payload = JSON.parse((e as MessageEvent).data) as { progress: ApplyProgress; tasks?: ApplyTask[] };
+    state.applying = true;
+    state.applyProgress = payload.progress;
+    state.applyTasks = payload.tasks ?? state.applyTasks;
+    showApplyOverlay(payload.progress, payload.progress.status, state.applyTasks);
+    setApplyAndFinishDisabled(true);
+    recomputeApplyEnabled();
+  });
+  es.addEventListener('doc.reloaded', (e) => {
+    const payload = JSON.parse((e as MessageEvent).data) as {
+      html: string;
+      blockIds: string[];
+      title?: string;
+      archivedThreads?: Thread[];
+      applying?: boolean;
+      applyProgress?: ApplyProgress | null;
+      applyTasks?: ApplyTask[];
+    };
+    state.threads.clear();
+    state.activeThreadId = null;
+    state.archived.clear();
+    onDocUpdated(payload);
+    state.applying = payload.applying ?? true;
+    state.applyProgress = payload.applyProgress ?? state.applyProgress;
+    state.applyTasks = payload.applyTasks ?? state.applyTasks;
+    showApplyOverlay(state.applyProgress, state.applyProgress?.status ?? 'Waiting for main session monitoring...', state.applyTasks);
+    setApplyAndFinishDisabled(true);
+    recomputeApplyEnabled();
+  });
+  es.addEventListener('server.apply-complete', (e) => {
+    const payload = JSON.parse((e as MessageEvent).data) as { tasks?: ApplyTask[] };
+    if (payload.tasks && applyOverlay) applyOverlay.setTasks(payload.tasks);
+    state.applying = false;
+    state.applyProgress = null;
+    state.applyTasks = [];
+    if (applyOverlay) {
+      applyOverlay.dismiss();
+      applyOverlay = null;
+    }
+    setApplyAndFinishDisabled(false);
+    recomputeApplyEnabled();
+  });
+  es.addEventListener('server.apply-failed', (e) => {
+    state.applying = false;
+    state.applyProgress = null;
+    state.applyTasks = [];
+    const payload = JSON.parse((e as MessageEvent).data) as { message?: string; error?: string };
+    const msg = payload.message ?? payload.error ?? 'Apply failed';
+    if (applyOverlay) {
+      applyOverlay.setError(msg);
+      applyOverlay = null;
+    }
+    endApplyFlowError();
+  });
+}
+
+function showApplyOverlay(progress: ApplyProgress | null, fallbackStatus: string, tasks: ApplyTask[] = []): void {
+  const status = progress?.status ?? fallbackStatus;
+  if (!applyOverlay) {
+    applyOverlay = modalStatus({
+      title: 'Applying',
+      initialStatus: status,
+      initialProgress: progress,
+      initialTasks: tasks,
+    });
+    return;
+  }
+  if (tasks.length > 0) applyOverlay.setTasks(tasks);
+  else if (progress) applyOverlay.setProgress(progress);
+  else applyOverlay.setStatus(status);
+}
+
+async function onApplyClick(): Promise<void> {
+  // Ask up front whether to wipe the discussion from the doc once changes are
+  // applied. Three outcomes: cancel (abort), keep (legacy behaviour), remove
+  // (server strips every note/thread in /api/apply/done). Escape/backdrop maps
+  // to 'cancel' so a dismissal never silently applies.
+  const choice = await modalChoice({
+    title: 'Apply changes',
+    body:
+      'Closed threads and notes will be applied to your session.\n\n' +
+      'Do you also want to remove all notes and threads from the document afterwards?',
+    options: [
+      { label: 'Cancel', value: 'cancel' },
+      { label: 'Apply & keep', value: 'keep' },
+      { label: 'Apply & remove all', value: 'remove', variant: 'danger' },
+    ],
+    cancelValue: 'cancel',
+  });
+  if (choice === null || choice === 'cancel') return;
+  const removeThreads = choice === 'remove';
+
+  setApplyAndFinishDisabled(true);
+  applyOverlay = modalStatus({
+    title: 'Applying',
+    initialStatus: 'Closing threads and notes...',
+  });
+  try {
+    const r = await fetch('/api/apply', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ removeThreads }),
+    });
+    if (!r.ok) {
+      const err = (await r.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (applyOverlay) applyOverlay.setError(err.message ?? err.error ?? `HTTP ${r.status}`);
+      applyOverlay = null;
+      endApplyFlowError();
+      return;
+    }
+    // From here on, server.applying / doc.reloaded / server.apply-failed
+    // SSE frames drive the overlay state to completion.
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (applyOverlay) applyOverlay.setError(msg);
+    applyOverlay = null;
+    endApplyFlowError();
+  }
+}
+
+function setApplyAndFinishDisabled(disabled: boolean): void {
+  for (const id of ['apply-top', 'apply-bottom', 'finish-top', 'finish-bottom']) {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (btn) btn.disabled = disabled;
+  }
+}
+
+// Re-enable Finish unconditionally, then derive Apply state from live-thread
+// presence via recomputeApplyEnabled(). Used in the three Apply error paths
+// (HTTP non-2xx, fetch reject, server.apply-failed SSE) so an empty session
+// can't keep Apply clickable for spam-clicks against /api/apply.
+function endApplyFlowError(): void {
+  for (const id of ['finish-top', 'finish-bottom']) {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (btn) btn.disabled = false;
+  }
+  recomputeApplyEnabled();
+}
+
+function setApplyEnabled(enabled: boolean): void {
+  for (const id of ['apply-top', 'apply-bottom']) {
+    const btn = document.getElementById(id) as HTMLButtonElement | null;
+    if (!btn) continue;
+    btn.disabled = !enabled;
+    btn.title = enabled ? '' : 'Nothing to apply yet.';
+  }
+}
+
+function recomputeApplyEnabled(): void {
+  if (state.applying) {
+    setApplyEnabled(false);
+    return;
+  }
+  // Mirror the server's /api/apply gate (liveThreads.size === 0): closed
+  // threads remain in liveThreads until apply/finish runs, so they are valid
+  // signal payloads. Disabling Apply once everything is closed traps users.
+  const hasLive = state.threads.size > 0;
+  const hasProposed = document.querySelector('.conclusion-edit') != null;
+  setApplyEnabled(hasLive || hasProposed);
 }
 
 async function loadAndApplyPrefs(): Promise<void> {
@@ -144,8 +339,8 @@ function toggleWidth(): void {
 
 function renderDoc(html: string): void {
   const clean = DOMPurify.sanitize(html, {
-    ADD_TAGS: ['details', 'summary'] as string[],
-    ADD_ATTR: ['data-block-id', 'data-thread-id'] as string[],
+    ADD_TAGS: ['details', 'summary', 'del', 's', 'strike'] as string[],
+    ADD_ATTR: ['data-block-id', 'data-thread-id', 'checked', 'disabled', 'type'] as string[],
   });
   document.getElementById('doc')!.innerHTML = clean;
 }
@@ -383,9 +578,9 @@ function openComposer(blockId: string, quote: string | undefined): void {
   box.className = 'composer thread-card';
   box.innerHTML = `
     ${quote ? `<blockquote class="quote">${escapeHtml(quote)}</blockquote>` : ''}
-    <textarea rows="3" placeholder="Message Claude…  Enter to send, Shift+Enter for newline. Or add a standalone note."></textarea>
+    <textarea rows="3" placeholder="Message assistant…  Enter to send, ⌘/Ctrl+Enter to add note, Shift+Enter for newline."></textarea>
     <div class="composer-actions">
-      <button class="btn btn-primary send">Send to Claude</button>
+      <button class="btn btn-primary send">Send</button>
       <button class="btn note">Add note</button>
       <button class="btn cancel">Cancel</button>
     </div>`;
@@ -398,16 +593,28 @@ function openComposer(blockId: string, quote: string | undefined): void {
     ta.focus({ preventScroll: true });
     ta.scrollIntoView({ block: 'center', behavior: 'smooth' });
   });
-  ta.addEventListener('keydown', (e) => {
-    // Enter submits; Shift+Enter inserts a newline. Cmd/Ctrl+Enter kept for back-compat.
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-      e.preventDefault();
-      (box.querySelector('.send') as HTMLButtonElement).click();
-    }
-  });
   const sendBtn = box.querySelector('.send') as HTMLButtonElement;
   const noteBtn = box.querySelector('.note') as HTMLButtonElement;
   const cancelBtn = box.querySelector('.cancel') as HTMLButtonElement;
+  // While the user holds Cmd (macOS) / Ctrl (Windows/Linux), Enter adds a note
+  // instead of sending. Highlight the "Add note" button so the alternate action
+  // is visible before the key is released.
+  const setNoteArmed = (armed: boolean): void => {
+    const noteArmed = armed && !noteBtn.disabled;
+    noteBtn.classList.toggle('armed', noteArmed);
+    sendBtn.classList.toggle('unarmed', noteArmed);
+  };
+  ta.addEventListener('keydown', (e) => {
+    const addNote = e.metaKey || e.ctrlKey;
+    setNoteArmed(addNote);
+    // Enter submits; Shift+Enter inserts a newline. Cmd/Ctrl+Enter adds a note.
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      (addNote ? noteBtn : sendBtn).click();
+    }
+  });
+  ta.addEventListener('keyup', (e) => setNoteArmed(e.metaKey || e.ctrlKey));
+  ta.addEventListener('blur', () => setNoteArmed(false));
   const submit = async (kind: 'thread' | 'note'): Promise<void> => {
     const message = ta.value.trim(); if (!message) return;
     sendBtn.disabled = true;
@@ -457,7 +664,21 @@ async function createThread(
   state.threads.set(threadId, thread);
   state.activeThreadId = threadId;
   renderThread(thread);
+  if (kind === 'thread') {
+    const card = document.getElementById(`thread-${threadId}`);
+    if (card) showStreamingPlaceholder(card);
+  }
   applyQuoteHighlights();
+  recomputeApplyEnabled();
+}
+
+// Marks the trailing `.streaming` div as a visible assistant bubble so the
+// blinking-cursor caret renders even before any delta has arrived.
+function showStreamingPlaceholder(card: HTMLElement): void {
+  const streamEl = card.querySelector<HTMLElement>('.streaming');
+  if (!streamEl) return;
+  streamEl.classList.add('msg', 'assistant');
+  renderStreamingMessage(streamEl);
 }
 
 // Sizes a textarea to its content up to the CSS max-height. Called on `input`
@@ -508,7 +729,13 @@ function renderThread(thread: Thread): void {
     if (deletableArchive) {
       const delBtn = card.querySelector('.delete-archived-btn') as HTMLButtonElement;
       delBtn.addEventListener('click', async () => {
-        if (!confirm('Delete this archived thread?\n\nThe entire <details> block is removed from the doc. This cannot be undone.')) return;
+        const ok = await modalConfirm({
+          title: 'Delete archived thread?',
+          body: 'The entire <details> block will be removed from the doc.\n\nThis cannot be undone.',
+          primaryLabel: 'Delete',
+          primaryVariant: 'danger',
+        });
+        if (!ok) return;
         delBtn.disabled = true;
         try {
           const r = await fetch(`/api/threads/${thread.id}`, { method: 'DELETE' });
@@ -537,7 +764,10 @@ function renderThread(thread: Thread): void {
     <div class="reply-row">
       <textarea class="reply" rows="1" placeholder="Reply…  Enter to send, Shift+Enter for newline"></textarea>
       <button class="btn btn-primary send">Send</button>
-      <button class="btn btn-ghost close-btn">Close thread</button>
+      <div class="thread-close-actions">
+        <button class="btn btn-ghost summarize-thread-btn">Summarize thread</button>
+        <button class="btn btn-ghost close-with-last-btn">Close with last response</button>
+      </div>
       <button class="btn btn-ghost delete-btn">Delete</button>
     </div>`;
   const messagesEl = card.querySelector<HTMLElement>('.messages')!;
@@ -559,6 +789,9 @@ function renderThread(thread: Thread): void {
     appendMsg(card!, 'user', text);
     const current = state.threads.get(thread.id);
     if (current) current.messages.push({ role: 'user', text, ts: new Date().toISOString() });
+    // Show the empty assistant bubble + blinking cursor immediately so the
+    // user sees the request is in flight before the first stream delta lands.
+    showStreamingPlaceholder(card!);
     try {
       const r = await fetch(`/api/threads/${thread.id}/messages`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -580,7 +813,12 @@ function renderThread(thread: Thread): void {
   replyTa.addEventListener('input', () => autogrowTextarea(replyTa));
   const toNoteBtn = card.querySelector('.to-note-btn') as HTMLButtonElement;
   toNoteBtn.addEventListener('click', async () => {
-    if (!confirm('Convert this thread into a note?\n\nThe full transcript is discarded. The note keeps the last Claude reply (or the last user message if there is none yet).')) return;
+    const ok = await modalConfirm({
+      title: 'Convert thread to note?',
+      body: 'The full transcript is discarded.\n\nThe note keeps the last assistant reply (or the last user message if there is none yet).',
+      primaryLabel: 'Convert',
+    });
+    if (!ok) return;
     toNoteBtn.disabled = true;
     try {
       const r = await fetch(`/api/threads/${thread.id}/convert`, {
@@ -595,7 +833,13 @@ function renderThread(thread: Thread): void {
   });
   const deleteBtn = card.querySelector('.delete-btn') as HTMLButtonElement;
   deleteBtn.addEventListener('click', async () => {
-    if (!confirm('Delete this thread?\n\nThe transcript will be discarded and NOT archived into the doc.')) return;
+    const ok = await modalConfirm({
+      title: 'Delete thread?',
+      body: 'The transcript will be discarded and NOT archived into the doc.',
+      primaryLabel: 'Delete',
+      primaryVariant: 'danger',
+    });
+    if (!ok) return;
     deleteBtn.disabled = true;
     try {
       const r = await fetch(`/api/threads/${thread.id}`, { method: 'DELETE' });
@@ -605,30 +849,36 @@ function renderThread(thread: Thread): void {
       deleteBtn.disabled = false;
     }
   });
-  const closeBtns = card.querySelectorAll<HTMLButtonElement>('.close-btn');
-  for (const btn of closeBtns) {
-    btn.addEventListener('click', async () => {
-      for (const b of closeBtns) {
-        b.disabled = true;
-        if (b.dataset.origLabel === undefined) b.dataset.origLabel = b.textContent ?? 'Close thread';
-        b.innerHTML = '<span class="spinner" aria-hidden="true"></span> Summarising…';
-      }
-      try {
-        await proposeAndClose(thread);
-      } catch (err) {
-        console.error('proposeAndClose failed', err);
-        const msg = err instanceof Error ? err.message : String(err);
-        const errDiv = document.createElement('div');
-        errDiv.className = 'thread-error';
-        errDiv.textContent = `⚠ Failed to close thread: ${msg}`;
-        card!.appendChild(errDiv);
-        for (const b of closeBtns) {
-          b.disabled = false;
-          b.textContent = b.dataset.origLabel ?? 'Close thread';
-        }
-      }
-    });
-  }
+  const summarizeBtn = card.querySelector('.summarize-thread-btn') as HTMLButtonElement;
+  summarizeBtn.addEventListener('click', async () => {
+    setCloseActionsPending(card, summarizeBtn, 'Summarizing…');
+    try {
+      await summarizeThread(thread);
+    } catch (err) {
+      console.error('summarizeThread failed', err);
+      showCardError(card, `Failed to summarize thread: ${err instanceof Error ? err.message : String(err)}`);
+      restoreCloseActions(card, thread);
+    }
+  });
+
+  const closeWithLastBtn = card.querySelector('.close-with-last-btn') as HTMLButtonElement;
+  syncCloseWithLastButton(card, thread);
+  closeWithLastBtn.addEventListener('click', async () => {
+    const current = state.threads.get(thread.id) ?? thread;
+    const lastAssistant = getLastAssistantMessage(current);
+    if (!lastAssistant) {
+      showCardError(card, 'No agent response is available yet.');
+      syncCloseWithLastButton(card, current);
+      return;
+    }
+    setCloseActionsPending(card, closeWithLastBtn, 'Closing…');
+    try {
+      await closeThread(thread.id, lastAssistant.text);
+    } catch (err) {
+      showCardError(card, `Failed to close thread with last response: ${err instanceof Error ? err.message : String(err)}`);
+      restoreCloseActions(card, current);
+    }
+  });
 }
 
 function renderNoteCard(card: HTMLElement, thread: Thread): void {
@@ -638,7 +888,7 @@ function renderNoteCard(card: HTMLElement, thread: Thread): void {
       <div class="thread-label"><span class="thread-icon">📝</span> <strong>Note</strong> <span class="anchor-quote">${thread.anchor.quote ? `“${escapeHtml(thread.anchor.quote)}”` : 'entire block'}</span></div>
       <div class="thread-actions">
         <button class="btn btn-ghost edit-note-btn">Edit</button>
-        <button class="btn btn-ghost to-thread-btn" title="Open a Claude conversation with this note as the first message">↪ Ask Claude</button>
+        <button class="btn btn-ghost to-thread-btn" title="Open an assistant conversation with this note as the first message">↪ Ask assistant</button>
         <button class="btn btn-ghost delete-btn">Delete note</button>
       </div>
     </div>
@@ -648,7 +898,13 @@ function renderNoteCard(card: HTMLElement, thread: Thread): void {
 
   const deleteBtn = card.querySelector('.delete-btn') as HTMLButtonElement;
   deleteBtn.addEventListener('click', async () => {
-    if (!confirm('Delete this note?\n\nThe text will be discarded and NOT archived into the doc.')) return;
+    const ok = await modalConfirm({
+      title: 'Delete note?',
+      body: 'The text will be discarded and NOT archived into the doc.',
+      primaryLabel: 'Delete',
+      primaryVariant: 'danger',
+    });
+    if (!ok) return;
     deleteBtn.disabled = true;
     try {
       const r = await fetch(`/api/threads/${thread.id}`, { method: 'DELETE' });
@@ -669,7 +925,7 @@ function renderNoteCard(card: HTMLElement, thread: Thread): void {
       });
       if (!r.ok) throw new Error(`server responded ${r.status}`);
     } catch (err) {
-      showCardError(card, `Failed to ask Claude: ${err instanceof Error ? err.message : String(err)}`);
+      showCardError(card, `Failed to ask assistant: ${err instanceof Error ? err.message : String(err)}`);
       toThreadBtn.disabled = false;
     }
   });
@@ -724,10 +980,9 @@ function showCardError(card: HTMLElement, message: string): void {
   card.appendChild(errDiv);
 }
 
-// Swap the resolved chip for an inline conclusion editor (textarea + live
-// markdown preview + "Use last Claude reply"). Save PUTs the new conclusion,
-// which rewrites the archived <details> block server-side — the subsequent
-// `thread.updated` event re-renders the chip in place.
+// Swap the resolved chip for an inline conclusion editor. Save PUTs the new
+// conclusion, which rewrites the archived <details> block server-side — the
+// subsequent `thread.updated` event re-renders the chip in place.
 function openConclusionEditor(thread: Thread, card: HTMLElement): void {
   const current = thread.conclusion ?? '';
   card.classList.remove('resolved');
@@ -739,7 +994,7 @@ function openConclusionEditor(thread: Thread, card: HTMLElement): void {
       <div class="conclusion-preview"></div>
       <div class="conclusion-actions">
         <button class="btn btn-primary save-conclusion-btn">Save</button>
-        <button class="btn use-last-reply">Use last Claude reply</button>
+        <button class="btn btn-ghost delete-conclusion-btn">Delete</button>
         <button class="btn cancel-conclusion-btn">Cancel</button>
       </div>
     </div>`;
@@ -750,17 +1005,6 @@ function openConclusionEditor(thread: Thread, card: HTMLElement): void {
   textarea.addEventListener('input', refreshPreview);
   refreshPreview();
   requestAnimationFrame(() => textarea.focus());
-
-  const useLastBtn = section.querySelector('.use-last-reply') as HTMLButtonElement;
-  const hasLast = [...thread.messages].reverse().some((m) => m.role === 'assistant');
-  if (!hasLast) useLastBtn.disabled = true;
-  useLastBtn.addEventListener('click', () => {
-    const lastAssistant = [...thread.messages].reverse().find((m) => m.role === 'assistant');
-    if (!lastAssistant) return;
-    textarea.value = lastAssistant.text;
-    refreshPreview();
-    textarea.focus();
-  });
 
   (section.querySelector('.save-conclusion-btn') as HTMLButtonElement).addEventListener('click', async () => {
     (section.querySelector('.save-conclusion-btn') as HTMLButtonElement).disabled = true;
@@ -773,6 +1017,25 @@ function openConclusionEditor(thread: Thread, card: HTMLElement): void {
     } catch (err) {
       showCardError(card, `Failed to save conclusion: ${err instanceof Error ? err.message : String(err)}`);
       (section.querySelector('.save-conclusion-btn') as HTMLButtonElement).disabled = false;
+    }
+  });
+
+  (section.querySelector('.delete-conclusion-btn') as HTMLButtonElement).addEventListener('click', async () => {
+    const ok = await modalConfirm({
+      title: 'Delete thread?',
+      body: 'The archived thread block will be removed from the doc.\n\nThis cannot be undone.',
+      primaryLabel: 'Delete',
+      primaryVariant: 'danger',
+    });
+    if (!ok) return;
+    const deleteBtn = section.querySelector('.delete-conclusion-btn') as HTMLButtonElement;
+    deleteBtn.disabled = true;
+    try {
+      const r = await fetch(`/api/threads/${thread.id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error(`server responded ${r.status}`);
+    } catch (err) {
+      showCardError(card, `Failed to delete thread: ${err instanceof Error ? err.message : String(err)}`);
+      deleteBtn.disabled = false;
     }
   });
 
@@ -802,7 +1065,33 @@ function onDelta(evt: { threadId: string; delta: string }): void {
   // list markers, etc.), so partial renders degrade gracefully.
   const next = (stream.dataset.raw ?? '') + evt.delta;
   stream.dataset.raw = next;
-  stream.innerHTML = renderMarkdown(next);
+  delete stream.dataset.agentStatus;
+  renderStreamingMessage(stream);
+}
+
+function onStatus(evt: { threadId: string; status: string | null }): void {
+  const card = document.getElementById(`thread-${evt.threadId}`);
+  if (!card) return;
+  const stream = card.querySelector<HTMLElement>('.streaming');
+  if (!stream) return;
+  if (!stream.classList.contains('msg')) {
+    stream.classList.add('msg', 'assistant');
+  }
+  if (evt.status && evt.status.trim()) stream.dataset.agentStatus = evt.status;
+  else delete stream.dataset.agentStatus;
+  renderStreamingMessage(stream);
+}
+
+function renderStreamingMessage(stream: HTMLElement): void {
+  const raw = stream.dataset.raw ?? '';
+  stream.innerHTML = raw ? renderMarkdown(raw) : '';
+  const status = stream.dataset.agentStatus;
+  if (!status) return;
+
+  const statusEl = document.createElement('div');
+  statusEl.className = 'agent-status';
+  statusEl.textContent = status;
+  stream.appendChild(statusEl);
 }
 
 function onDone(evt: { threadId: string; message: { role: 'assistant'; text: string } }): void {
@@ -813,12 +1102,17 @@ function onDone(evt: { threadId: string; message: { role: 'assistant'; text: str
     stream.classList.add('msg', 'assistant');
   }
   // Replace the streaming text with the markdown-rendered final message.
+  delete stream.dataset.raw;
+  delete stream.dataset.agentStatus;
   stream.innerHTML = renderMarkdown(evt.message.text);
   stream.classList.remove('streaming');
   const next = document.createElement('div'); next.className = 'streaming';
   card.querySelector('.messages')!.appendChild(next);
   const thread = state.threads.get(evt.threadId);
-  if (thread) thread.messages.push({ role: 'assistant', text: evt.message.text, ts: new Date().toISOString() });
+  if (thread) {
+    thread.messages.push({ role: 'assistant', text: evt.message.text, ts: new Date().toISOString() });
+    syncCloseWithLastButton(card, thread);
+  }
 }
 
 function onMessageError(evt: { threadId: string; error: string }): void {
@@ -831,13 +1125,59 @@ function onMessageError(evt: { threadId: string; error: string }): void {
   }
   stream.classList.remove('streaming');
   stream.classList.add('error');
+  delete stream.dataset.raw;
+  delete stream.dataset.agentStatus;
   stream.textContent = `⚠ Agent reply failed: ${evt.error}`;
   const next = document.createElement('div'); next.className = 'streaming';
   card.querySelector('.messages')!.appendChild(next);
 }
 
-async function proposeAndClose(thread: Thread): Promise<void> {
+function getLastAssistantMessage(thread: Thread): { text: string } | null {
+  const lastAssistant = [...thread.messages].reverse().find((m) => m.role === 'assistant');
+  return lastAssistant ? { text: lastAssistant.text } : null;
+}
+
+function closeActionButtons(card: HTMLElement): HTMLButtonElement[] {
+  return [...card.querySelectorAll<HTMLButtonElement>('.summarize-thread-btn, .close-with-last-btn')];
+}
+
+function setCloseActionsPending(card: HTMLElement, activeButton: HTMLButtonElement, label: string): void {
+  for (const button of closeActionButtons(card)) {
+    if (button.dataset.origLabel === undefined) button.dataset.origLabel = button.textContent ?? '';
+    button.disabled = true;
+    if (button === activeButton) button.innerHTML = `<span class="spinner" aria-hidden="true"></span> ${label}`;
+  }
+}
+
+function restoreCloseActions(card: HTMLElement, thread: Thread): void {
+  for (const button of closeActionButtons(card)) {
+    button.textContent = button.dataset.origLabel ?? button.textContent ?? '';
+    button.disabled = false;
+  }
+  syncCloseWithLastButton(card, thread);
+}
+
+function syncCloseWithLastButton(card: HTMLElement, thread: Thread): void {
+  if (card.querySelector('.conclusion-edit')) return;
+  const button = card.querySelector<HTMLButtonElement>('.close-with-last-btn');
+  if (!button) return;
+  const hasLastAssistant = getLastAssistantMessage(thread) !== null;
+  button.disabled = !hasLastAssistant;
+  button.title = hasLastAssistant
+    ? 'Close the thread and use the last agent response as the summary'
+    : 'No agent response yet';
+}
+
+async function summarizeThread(thread: Thread): Promise<void> {
   const r = await fetch(`/api/threads/${thread.id}/propose-conclusion`, { method: 'POST' });
+  if (!r.ok) throw new Error(`server responded ${r.status}`);
+}
+
+async function closeThread(threadId: string, conclusion: string): Promise<void> {
+  const r = await fetch(`/api/threads/${threadId}/close`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ conclusion }),
+  });
   if (!r.ok) throw new Error(`server responded ${r.status}`);
 }
 
@@ -846,10 +1186,12 @@ function onConclusion(evt: { threadId: string; conclusion: string }): void {
   if (!card) return;
   const t = state.threads.get(evt.threadId);
   if (t && t.status === 'closed') return;
-  // Spinner / "Summarising…" label did its job — swap close-btns back to
-  // their original text (they stay disabled while the editor is open).
-  for (const b of card.querySelectorAll<HTMLButtonElement>('.close-btn')) {
-    b.textContent = b.dataset.origLabel ?? 'Close thread';
+  // Spinner / "Summarizing…" label did its job — swap close action labels back
+  // to their original text (they stay disabled while the editor is open).
+  for (const b of closeActionButtons(card)) {
+    const fallbackLabel = b.classList.contains('summarize-thread-btn') ? 'Summarize thread' : 'Close with last response';
+    b.textContent = b.dataset.origLabel ?? fallbackLabel;
+    b.disabled = true;
   }
   const existing = card.querySelector<HTMLElement>('.conclusion-edit');
   if (existing) {
@@ -863,60 +1205,42 @@ function onConclusion(evt: { threadId: string; conclusion: string }): void {
   const section = document.createElement('div');
   section.className = 'conclusion-edit';
   section.innerHTML = `
-    <div class="conclusion-label">Claude's proposed conclusion (edit before saving):</div>
+    <div class="conclusion-label">Assistant's proposed summary (edit before saving):</div>
     <textarea rows="5">${escapeHtml(evt.conclusion)}</textarea>
     <div class="conclusion-preview-label">Preview</div>
     <div class="conclusion-preview"></div>
     <div class="conclusion-actions">
-      <button class="btn btn-primary save">Save conclusion</button>
-      <button class="btn use-last-reply">Use last Claude reply</button>
+      <button class="btn btn-primary save">Close with summary</button>
       <button class="btn cancel">Cancel</button>
     </div>`;
   card.appendChild(section);
+  recomputeApplyEnabled();
   const textarea = section.querySelector('textarea') as HTMLTextAreaElement;
   const preview = section.querySelector('.conclusion-preview') as HTMLElement;
   const refreshPreview = (): void => { preview.innerHTML = renderMarkdown(textarea.value); };
   textarea.addEventListener('input', refreshPreview);
   refreshPreview();
-  const useLastBtn = section.querySelector('.use-last-reply') as HTMLButtonElement;
-  useLastBtn.addEventListener('click', () => {
-    const lastAssistant = [...(state.threads.get(evt.threadId)?.messages ?? [])].reverse().find((m) => m.role === 'assistant');
-    if (!lastAssistant) return;
-    textarea.value = lastAssistant.text;
-    refreshPreview();
-    textarea.focus();
-  });
   (section.querySelector('.save') as HTMLButtonElement).addEventListener('click', async () => {
-    await fetch(`/api/threads/${evt.threadId}/close`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ conclusion: textarea.value }),
-    });
+    await closeThread(evt.threadId, textarea.value);
   });
   (section.querySelector('.cancel') as HTMLButtonElement).addEventListener('click', async () => {
     // OK → close thread with empty conclusion; Cancel → keep editor open to revisit.
-    const discard = confirm(
-      'Discard this proposed conclusion and close the thread without one?\n\n' +
-      'OK — close thread without a conclusion (proposal is lost)\n' +
-      'Cancel — revisit the proposed conclusion',
-    );
+    const discard = await modalConfirm({
+      title: 'Discard proposed summary?',
+      body: 'Closing the thread without a summary — the proposal is lost.',
+      primaryLabel: 'Discard',
+      secondaryLabel: 'Keep editing',
+      primaryVariant: 'danger',
+    });
     if (!discard) return;
     section.remove();
+    recomputeApplyEnabled();
     try {
-      const r = await fetch(`/api/threads/${evt.threadId}/close`, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ conclusion: '' }),
-      });
-      if (!r.ok) throw new Error(`server responded ${r.status}`);
+      await closeThread(evt.threadId, '');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const errDiv = document.createElement('div');
-      errDiv.className = 'thread-error';
-      errDiv.textContent = `⚠ Failed to close thread: ${msg}`;
-      card.appendChild(errDiv);
-      // Re-enable close-btns so the user can try again.
-      for (const b of card.querySelectorAll<HTMLButtonElement>('.close-btn')) {
-        b.disabled = false;
-      }
+      showCardError(card, `Failed to close thread: ${err instanceof Error ? err.message : String(err)}`);
+      const current = state.threads.get(evt.threadId);
+      if (current) restoreCloseActions(card, current);
     }
   });
 }
@@ -926,6 +1250,7 @@ function onClosed(evt: { threadId: string; conclusion?: string }): void {
   t.status = 'closed';
   if (evt.conclusion !== undefined) t.conclusion = evt.conclusion;
   renderThread(t);
+  recomputeApplyEnabled();
 }
 
 function onDeleted(evt: { threadId: string }): void {
@@ -935,6 +1260,7 @@ function onDeleted(evt: { threadId: string }): void {
   const card = document.getElementById(`thread-${evt.threadId}`);
   if (card) card.remove();
   applyQuoteHighlights();
+  recomputeApplyEnabled();
 }
 
 // Replaces our local Thread with the server copy and re-renders the card.
@@ -946,6 +1272,7 @@ function onUpdated(evt: { threadId: string; thread: Thread }): void {
   state.threads.set(evt.threadId, evt.thread);
   renderThread(evt.thread);
   applyQuoteHighlights();
+  recomputeApplyEnabled();
 }
 
 function onDocUpdated(evt: { html: string; blockIds: string[]; title?: string; archivedThreads?: Thread[] }): void {
@@ -990,9 +1317,15 @@ async function finish(): Promise<void> {
     const openThreads = open.filter((t) => t.kind !== 'note').length;
     const openNotes = open.filter((t) => t.kind === 'note').length;
     const parts: string[] = [];
-    if (openThreads > 0) parts.push(`${openThreads} open thread(s) will be auto-closed now and appended to the doc with a Claude-generated conclusion`);
+    if (openThreads > 0) parts.push(`${openThreads} open thread(s) will be auto-closed now and appended to the doc with an assistant-generated conclusion`);
     if (openNotes > 0) parts.push(`${openNotes} open note(s) will be appended to the doc as-is`);
-    if (!confirm(`Finishing. ${parts.join('; ')}. Any threads you already closed this session are already in the doc. Continue?`)) return;
+    const ok = await modalConfirm({
+      title: 'Finish?',
+      body: `${parts.join('; ')}.\n\nAny threads you already closed this session are already in the doc.`,
+      primaryLabel: 'Finish',
+      secondaryLabel: 'Cancel',
+    });
+    if (!ok) return;
   }
   await fetch('/api/finish', { method: 'POST' });
 }

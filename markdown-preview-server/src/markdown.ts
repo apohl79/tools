@@ -95,8 +95,8 @@ renderer.code = function (code: string, infostring: string | undefined, _escaped
 marked.use({ renderer, gfm: true, breaks: true });
 
 const SANITIZE_OPTS = {
-  ADD_TAGS: ['details', 'summary'],
-  ADD_ATTR: ['data-block-id', 'data-thread-id'],
+  ADD_TAGS: ['details', 'summary', 'del', 's', 'strike'],
+  ADD_ATTR: ['data-block-id', 'data-thread-id', 'checked', 'disabled', 'type'],
 };
 
 export interface RenderedDoc extends RawParsedDoc {
@@ -106,10 +106,28 @@ export interface RenderedDoc extends RawParsedDoc {
 export function renderDoc(markdown: string): RenderedDoc {
   const parsed = parseDoc(markdown);
   const pieces = parsed.blocks.map((block) => {
-    const clean = DOMPurify.sanitize(block.html, SANITIZE_OPTS);
+    const clean = DOMPurify.sanitize(preserveInlineSemantics(block.html), SANITIZE_OPTS);
     return injectBlockIdViaDom(clean, block.id);
   });
   return { ...parsed, html: pieces.join('\n') };
+}
+
+function preserveInlineSemantics(fragmentHtml: string): string {
+  const dom = new JSDOM(`<div id="root">${fragmentHtml}</div>`);
+  const root = dom.window.document.getElementById('root')!;
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>('[style]'))) {
+    const style = el.getAttribute('style') ?? '';
+    if (!hasLineThrough(style)) continue;
+
+    const del = dom.window.document.createElement('del');
+    while (el.firstChild) del.appendChild(el.firstChild);
+    el.replaceWith(del);
+  }
+  return root.innerHTML;
+}
+
+function hasLineThrough(style: string): boolean {
+  return /(?:^|;)\s*text-decoration(?:-line)?\s*:[^;]*\bline-through\b/i.test(style);
 }
 
 function injectBlockIdViaDom(fragmentHtml: string, blockId: string): string {

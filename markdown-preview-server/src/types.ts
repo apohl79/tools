@@ -37,6 +37,7 @@ export interface Thread {
 }
 
 export interface FinishResult {
+  mode: 'finish';
   docPath: string;
   conclusions: Array<{
     threadId: string;
@@ -47,4 +48,29 @@ export interface FinishResult {
   threadCount: number;        // new this session
   archivedThreadCount: number;
   finishedAt: string;
+}
+
+export interface ApplyResult {
+  mode: 'apply';
+  applyIndex: number;
+  docPath: string;
+  conclusions: FinishResult['conclusions'];
+  threadCount: number;
+  archivedThreadCount: number;
+  finishedAt: string;
+}
+
+export interface ApplyProgress {
+  status: string;
+  percent: number | null;
+  current?: number;
+  total?: number;
+  updatedAt: string;
+}
+
+export interface ApplyTask {
+  id: string;
+  label: string;
+  state: 'active' | 'done' | 'error';
+  updatedAt: string;
 }

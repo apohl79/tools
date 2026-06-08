@@ -107,7 +107,8 @@ body {
   letter-spacing: -0.01em;
 }
 
-#controls {
+#controls,
+#bottom-controls {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -235,7 +236,23 @@ button.primary:hover {
   color: var(--muted);
 }
 
-/* Inline spinner for in-flight actions (Close thread → Summarising…). */
+/* "Add note" button highlight while Cmd/Ctrl is held in the composer, signalling
+   that Enter will add a note instead of sending. */
+.btn.note.armed {
+  color: var(--accent-fg);
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary.send.unarmed {
+  color: var(--fg);
+  background: var(--bg-chip);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* Inline spinner for in-flight thread actions. */
 .spinner {
   display: inline-block;
   width: 12px;
@@ -284,6 +301,20 @@ button.primary:hover {
 #doc p { margin: 0.9em 0; }
 #doc ul, #doc ol { padding-left: 1.4em; }
 #doc li { margin: 0.25em 0; }
+
+#doc li:has(> input[type="checkbox"]:first-child),
+.msg.assistant li:has(> input[type="checkbox"]:first-child) {
+  list-style: none;
+}
+
+#doc li > input[type="checkbox"]:first-child,
+.msg.assistant li > input[type="checkbox"]:first-child {
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0 0.45em 0 -1.15em;
+  vertical-align: -0.08em;
+  accent-color: var(--accent);
+}
 
 #doc a {
   color: var(--accent);
@@ -856,6 +887,33 @@ button.primary:hover {
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
+.agent-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
+.agent-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: currentColor;
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.95; }
+}
+
 /* Blinking caret at the end of the streaming assistant bubble while deltas
    arrive — the classic typewriter/cursor look. */
 .msg.assistant.streaming::after {
@@ -876,6 +934,7 @@ button.primary:hover {
 .reply-row {
   display: flex;
   align-items: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
@@ -883,7 +942,7 @@ button.primary:hover {
 }
 
 .reply-row .reply {
-  flex: 1;
+  flex: 1 1 220px;
   min-height: 36px;
   max-height: 240px;
   padding: 8px 12px;
@@ -899,6 +958,16 @@ button.primary:hover {
   resize: none;
   overflow-y: auto;
   transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.thread-close-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.thread-close-actions .btn {
+  white-space: nowrap;
 }
 
 .reply-row .reply:focus {
@@ -933,8 +1002,19 @@ button.primary:hover {
 .composer-actions,
 .conclusion-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+}
+
+.delete-conclusion-btn {
+  color: var(--danger);
+}
+
+.delete-conclusion-btn:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .composer-error,
@@ -1074,3 +1154,102 @@ blockquote.quote,
   background: color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--fg);
 }
+
+/* ---------- Modal ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-card {
+  background: var(--bg, #fff);
+  color: var(--fg, #111);
+  border-radius: 8px;
+  padding: 20px 22px 16px;
+  max-width: 520px;
+  width: calc(100% - 40px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+  font: inherit;
+}
+.modal-title {
+  margin: 0 0 8px 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.modal-body { margin: 0 0 16px 0; }
+.modal-body p { margin: 0 0 8px 0; line-height: 1.45; }
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.modal-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #ccc);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+}
+.modal-btn-primary { background: var(--accent, #2563eb); color: #fff; border-color: transparent; }
+.modal-btn-primary.modal-btn-danger { background: #dc2626; }
+.modal-btn-secondary { background: transparent; }
+.modal-status-body {
+  margin-top: 12px;
+}
+.modal-task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.modal-task {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-height: 22px;
+}
+.modal-task-marker {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+  color: var(--muted, #6b7280);
+  font-weight: 700;
+}
+.modal-task-check {
+  color: #16a34a;
+}
+.modal-task-error {
+  color: #dc2626;
+}
+.modal-task-label {
+  min-width: 0;
+  line-height: 1.45;
+}
+.modal-task-done .modal-task-label {
+  color: var(--muted, #6b7280);
+}
+.modal-spinner {
+  width: 18px; height: 18px;
+  border: 2px solid var(--border, #ccc);
+  border-top-color: var(--accent, #2563eb);
+  border-radius: 50%;
+  animation: modal-spin 0.9s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 10px;
+}
+.modal-task-spinner {
+  margin: 0;
+}
+@keyframes modal-spin { to { transform: rotate(360deg); } }
