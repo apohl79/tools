@@ -1256,5 +1256,6 @@ blockquote.quote,
 
 /* Port adaptation: markdown preview has no agent session behind it, so the
    upstream Apply workflow can never run — keep the buttons in the DOM (app.ts
-   binds them with non-null assertions) but hide them. */
-.apply-btn { display: none; }
+   binds them with non-null assertions) but hide them. !important because
+   `#controls button` (specificity 1,0,1) otherwise wins with inline-flex. */
+.apply-btn { display: none !important; }
