@@ -3,4 +3,6 @@
 
 # Context Inbox
 
-No open questions.
+## [open] CLAUDE.md documents a 'claude/' directory for Claude code tools and plugin/skills, but no such directory exists (only .claude/). Is CLAUDE.md stale or is claude/ created elsewhere?
+
+Context: Found during context bootstrap on 2026-06-08

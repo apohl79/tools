@@ -1,14 +1,24 @@
 {
   "components": [
     {
-      "created_at": "2026-06-08T20:41:18+00:00",
+      "created_at": "2026-06-08T20:49:29+00:00",
       "name": "claude-tooling",
       "paths": [
-        "claude"
+        ".claude"
       ],
-      "responsibility": "Claude Code tools, plugins and skills",
+      "responsibility": "Claude Code session config: hooks, statusline, notify scripts, local settings, plans, worktree helpers",
       "source": "repo-docs",
-      "updated_at": "2026-06-08T20:41:18+00:00"
+      "updated_at": "2026-06-08T20:49:29+00:00"
+    },
+    {
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "name": "cmux-config",
+      "paths": [
+        ".config/cmux"
+      ],
+      "responsibility": "Configuration for cmux and Ghostty terminal (cmux.json, config.ghostty); reload after edits via 'cmux reload-config'",
+      "source": "repo-docs",
+      "updated_at": "2026-06-08T20:49:28+00:00"
     },
     {
       "created_at": "2026-06-08T20:41:17+00:00",
@@ -19,6 +29,44 @@
       "responsibility": "Doom Emacs configuration; terminal-only daemon (emacsclient -t), reload edits into running daemon instead of restarting",
       "source": "repo-docs",
       "updated_at": "2026-06-08T20:41:17+00:00"
+    },
+    {
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "name": "hammerspoon-config",
+      "paths": [
+        ".hammerspoon"
+      ],
+      "responsibility": "Hammerspoon macOS automation config (init.lua, Spoons)",
+      "source": "repo-docs",
+      "updated_at": "2026-06-08T20:49:28+00:00"
+    },
+    {
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "name": "legacy-tools",
+      "paths": [
+        "ccscript",
+        "emacs.d",
+        "oldtools",
+        "sshtools"
+      ],
+      "responsibility": "Older standalone utilities kept for reference: ssh expect scripts (sshtools), C++ scratch runner (ccscript), cvs/git-era helpers (oldtools), legacy emacs files (emacs.d)",
+      "source": "repo-docs",
+      "updated_at": "2026-06-08T20:49:28+00:00"
+    },
+    {
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "interfaces": [
+        "python3 setup.py [-lN] [-c] [-s]"
+      ],
+      "name": "macos-setup",
+      "paths": [
+        "install.sh",
+        "setup.py",
+        "setup.toml"
+      ],
+      "responsibility": "Layered macOS dev-environment provisioning: install.sh bootstrap, setup.py runner, setup.toml package/config definition (layers 0-5: shell, sudo, dev tools, Emacs, shell env, extras)",
+      "source": "repo-docs",
+      "updated_at": "2026-06-08T20:49:28+00:00"
     },
     {
       "created_at": "2026-06-08T20:41:17+00:00",
@@ -38,10 +86,61 @@
       "responsibility": "Local Node server rendering a markdown file in the browser with persisted discussion threads; launched from Emacs via my/markdown-preview",
       "source": "repo-docs",
       "updated_at": "2026-06-08T20:41:17+00:00"
+    },
+    {
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "name": "repo-tests",
+      "paths": [
+        ".doom.d",
+        "tests"
+      ],
+      "responsibility": "Shell tests for the emacs wrapper plus fixtures; Emacs lisp tests live next to sources in .doom.d (test-*.el)",
+      "source": "repo-docs",
+      "updated_at": "2026-06-08T20:49:28+00:00"
     }
   ],
-  "open_questions": [],
-  "patterns": [],
+  "open_questions": [
+    {
+      "context": "Found during context bootstrap on 2026-06-08",
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "question": "CLAUDE.md documents a 'claude/' directory for Claude code tools and plugin/skills, but no such directory exists (only .claude/). Is CLAUDE.md stale or is claude/ created elsewhere?",
+      "status": "open",
+      "updated_at": "2026-06-08T20:49:28+00:00"
+    }
+  ],
+  "patterns": [
+    {
+      "applies_to": [
+        "setup.py",
+        "setup.toml"
+      ],
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "name": "layered-setup",
+      "source": "repo-docs",
+      "summary": "Provisioning is split into ordered layers 0-5 defined in setup.toml; each layer can be run or dry-run checked independently via setup.py -lN / -c",
+      "updated_at": "2026-06-08T20:49:28+00:00"
+    },
+    {
+      "applies_to": [
+        ".doom.d"
+      ],
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "name": "terminal-only-emacs-daemon",
+      "source": "repo-docs",
+      "summary": "Emacs always runs as a long-lived daemon in terminal mode (emacsclient -t); GUI-only solutions never work. After editing .doom.d files, reload them into the running daemon via emacsclient -e load-file instead of restarting (restart loses session state). Batch tests must call /opt/homebrew/bin/emacs directly, never the ~/tools/emacs wrapper",
+      "updated_at": "2026-06-08T20:49:28+00:00"
+    },
+    {
+      "applies_to": [
+        ".my/worktrees"
+      ],
+      "created_at": "2026-06-08T20:49:28+00:00",
+      "name": "worktree-implementation",
+      "source": "repo-docs",
+      "summary": "Source/test/config implementation work happens in git worktrees under ../.my/worktrees/[repo]-[short-title]; specs and plans (docs/superpowers/**, .planning/**) may go directly to main",
+      "updated_at": "2026-06-08T20:49:28+00:00"
+    }
+  ],
   "schema_version": 1,
   "storage_policy": {
     "context_visibility": "versioned",

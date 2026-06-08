@@ -3,4 +3,33 @@
 
 # Architecture Patterns
 
-No architecture patterns recorded yet.
+## layered-setup
+
+Provisioning is split into ordered layers 0-5 defined in setup.toml; each layer can be run or dry-run checked independently via setup.py -lN / -c
+
+Applies to:
+
+- `setup.py`
+- `setup.toml`
+
+Source: repo-docs
+
+## terminal-only-emacs-daemon
+
+Emacs always runs as a long-lived daemon in terminal mode (emacsclient -t); GUI-only solutions never work. After editing .doom.d files, reload them into the running daemon via emacsclient -e load-file instead of restarting (restart loses session state). Batch tests must call /opt/homebrew/bin/emacs directly, never the ~/tools/emacs wrapper
+
+Applies to:
+
+- `.doom.d`
+
+Source: repo-docs
+
+## worktree-implementation
+
+Source/test/config implementation work happens in git worktrees under ../.my/worktrees/[repo]-[short-title]; specs and plans (docs/superpowers/**, .planning/**) may go directly to main
+
+Applies to:
+
+- `.my/worktrees`
+
+Source: repo-docs

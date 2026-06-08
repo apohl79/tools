@@ -23,6 +23,6 @@ Read this directory at the start of feature work, research, planning, or review.
 ## Counts
 
 - Terms: 0
-- Components: 3
-- Patterns: 0
-- Open questions: 0
+- Components: 8
+- Patterns: 3
+- Open questions: 1

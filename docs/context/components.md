@@ -5,11 +5,21 @@
 
 ## claude-tooling
 
-Responsibility: Claude Code tools, plugins and skills
+Responsibility: Claude Code session config: hooks, statusline, notify scripts, local settings, plans, worktree helpers
 
 Paths:
 
-- `claude`
+- `.claude`
+
+Source: repo-docs
+
+## cmux-config
+
+Responsibility: Configuration for cmux and Ghostty terminal (cmux.json, config.ghostty); reload after edits via 'cmux reload-config'
+
+Paths:
+
+- `.config/cmux`
 
 Source: repo-docs
 
@@ -20,6 +30,45 @@ Responsibility: Doom Emacs configuration; terminal-only daemon (emacsclient -t),
 Paths:
 
 - `.doom.d`
+
+Source: repo-docs
+
+## hammerspoon-config
+
+Responsibility: Hammerspoon macOS automation config (init.lua, Spoons)
+
+Paths:
+
+- `.hammerspoon`
+
+Source: repo-docs
+
+## legacy-tools
+
+Responsibility: Older standalone utilities kept for reference: ssh expect scripts (sshtools), C++ scratch runner (ccscript), cvs/git-era helpers (oldtools), legacy emacs files (emacs.d)
+
+Paths:
+
+- `ccscript`
+- `emacs.d`
+- `oldtools`
+- `sshtools`
+
+Source: repo-docs
+
+## macos-setup
+
+Responsibility: Layered macOS dev-environment provisioning: install.sh bootstrap, setup.py runner, setup.toml package/config definition (layers 0-5: shell, sudo, dev tools, Emacs, shell env, extras)
+
+Paths:
+
+- `install.sh`
+- `setup.py`
+- `setup.toml`
+
+Interfaces:
+
+- python3 setup.py [-lN] [-c] [-s]
 
 Source: repo-docs
 
@@ -41,5 +90,16 @@ Interfaces:
 - HTTP /api/bootstrap
 
 Notes: Port of inline-discussion plugin server (~/workspace/code/inline-discussion/plugins/inline-discussion/server). Port adaptations: Markdown Preview branding, optional --main-jsonl (empty transcript synthesized), doom-city-lights theme in web/app.css. Backend src files are kept verbatim from upstream; sync by 3-way merge for adapted files. Last synced from upstream commit 8473aa8.
+
+Source: repo-docs
+
+## repo-tests
+
+Responsibility: Shell tests for the emacs wrapper plus fixtures; Emacs lisp tests live next to sources in .doom.d (test-*.el)
+
+Paths:
+
+- `.doom.d`
+- `tests`
 
 Source: repo-docs

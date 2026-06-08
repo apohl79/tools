@@ -4,3 +4,4 @@ dbgui
 dbnative
 setup.toml.bak
 __pycache__/
+docs/context/.hook-state.json
