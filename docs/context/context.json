@@ -1,0 +1,56 @@
+{
+  "components": [
+    {
+      "created_at": "2026-06-08T20:41:18+00:00",
+      "name": "claude-tooling",
+      "paths": [
+        "claude"
+      ],
+      "responsibility": "Claude Code tools, plugins and skills",
+      "source": "repo-docs",
+      "updated_at": "2026-06-08T20:41:18+00:00"
+    },
+    {
+      "created_at": "2026-06-08T20:41:17+00:00",
+      "name": "doom-config",
+      "paths": [
+        ".doom.d"
+      ],
+      "responsibility": "Doom Emacs configuration; terminal-only daemon (emacsclient -t), reload edits into running daemon instead of restarting",
+      "source": "repo-docs",
+      "updated_at": "2026-06-08T20:41:17+00:00"
+    },
+    {
+      "created_at": "2026-06-08T20:41:17+00:00",
+      "interfaces": [
+        "/api/apply*",
+        "/api/finish",
+        "/api/threads",
+        "/events (SSE)",
+        "bin/launch.sh start --doc <path> --session-dir <dir> [--main-jsonl <path>] [--agent claude|codex]",
+        "HTTP /api/bootstrap"
+      ],
+      "name": "markdown-preview-server",
+      "notes": "Port of inline-discussion plugin server (~/workspace/code/inline-discussion/plugins/inline-discussion/server). Port adaptations: Markdown Preview branding, optional --main-jsonl (empty transcript synthesized), doom-city-lights theme in web/app.css. Backend src files are kept verbatim from upstream; sync by 3-way merge for adapted files. Last synced from upstream commit 8473aa8.",
+      "paths": [
+        "markdown-preview-server"
+      ],
+      "responsibility": "Local Node server rendering a markdown file in the browser with persisted discussion threads; launched from Emacs via my/markdown-preview",
+      "source": "repo-docs",
+      "updated_at": "2026-06-08T20:41:17+00:00"
+    }
+  ],
+  "open_questions": [],
+  "patterns": [],
+  "schema_version": 1,
+  "storage_policy": {
+    "context_visibility": "versioned",
+    "created_at": "2026-06-08T20:34:09+00:00",
+    "decision": "Context is intended to be versioned and shared through Git.",
+    "git_initialized": true,
+    "gitignore_docs_context": false,
+    "source": "user-confirmed",
+    "updated_at": "2026-06-08T20:34:09+00:00"
+  },
+  "terms": []
+}
