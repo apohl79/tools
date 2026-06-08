@@ -1253,3 +1253,8 @@ blockquote.quote,
   margin: 0;
 }
 @keyframes modal-spin { to { transform: rotate(360deg); } }
+
+/* Port adaptation: markdown preview has no agent session behind it, so the
+   upstream Apply workflow can never run — keep the buttons in the DOM (app.ts
+   binds them with non-null assertions) but hide them. */
+.apply-btn { display: none; }
