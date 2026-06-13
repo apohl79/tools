@@ -2,7 +2,7 @@
 
 ## User Input
 
-If you need user input and a user-input tool is available, use that tool. If no such tool is available, ask one concise plain-text question.
+If you need user input and a user-input tool (eg: request_user_input) is available, use that tool. If no such tool is available, ask one concise plain-text question.
 
 ## Tone
 
