@@ -84,9 +84,23 @@ Treat any open task at handoff as a failure to follow instructions unless one of
 
 ## IMPLEMENTATION
 
-Always use worktrees when implementing a task. Before changing the main repository ASK the user if this is allowed or a worktree is needed. Create worktrees in `../.my/worktrees/[repo]-[short-title]-[JIRA-if-exists]`.
+### DIRECTIONAL CHECK-IN BEFORE IMPLEMENTATION
 
-**Exception — specs and plans:** Design specs (e.g. `docs/superpowers/specs/*.md`) and implementation plans (e.g. `docs/superpowers/plans/*.md`, `.planning/**`) MAY be written and committed directly to `main` without a worktree and without asking. The worktree requirement only applies to source code, tests, and configuration changes that constitute the actual implementation.
+Before touching code, tests, or configuration, do a quick directional check-in:
+
+- Briefly analyze the likely implementation options and name the intended direction.
+- Ask concise clarifying questions if the request is ambiguous, risky, or could reasonably be implemented in materially different ways.
+- Get at least one user-facing directional confirmation or provide a short "I am going to..." check-in before editing files, so the implementation does not run ahead of the user's intent.
+
+Use worktrees for implementation tasks unless a higher-priority instruction or explicit user request says to edit the current checkout. Before changing the main repository, ask whether editing main is allowed or whether a worktree is needed.
+
+Create worktrees in `../.my/worktrees/[repo]-[short-title]-[JIRA-if-exists]`.
+
+Exception: specs and plans may be written and committed directly to main without a worktree and without asking. The worktree requirement applies to source code, tests, and configuration changes that constitute implementation.
+
+### LANGUAGE SKILLS
+
+MANDATORY: Before touching code or tests you must detect the language of the codebase and load the available language skills (eg. typescript -> typescipt-services:prodcution-code etc). This is non-negotiable!
 
 ## MCP Servers
 

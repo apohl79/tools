@@ -24,6 +24,9 @@ cursor-color = 5EC4FF
 selection-background = 718CA1
 selection-foreground = 1A2128
 
+# Copy selected text straight to the system clipboard on mouse select.
+copy-on-select = clipboard
+
 # ANSI palette
 # 0 black / base0
 palette = 0=#10151C

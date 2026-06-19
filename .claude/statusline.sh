@@ -11,6 +11,8 @@ ENABLE_GIT=${ENABLE_GIT:-1}
 ENABLE_MODEL=${ENABLE_MODEL:-1}
 # Context window usage percentage (cyan)
 ENABLE_CONTEXT=${ENABLE_CONTEXT:-1}
+# Actual token usage / context window size next to the percentage (cyan)
+ENABLE_CONTEXT_TOKENS=${ENABLE_CONTEXT_TOKENS:-1}
 # Session cost in USD (yellow)
 ENABLE_COST=${ENABLE_COST:-1}
 # Wall-clock session duration (white)
@@ -27,13 +29,45 @@ ENABLE_VERSION=${ENABLE_VERSION:-0}
 ENABLE_VIM_MODE=${ENABLE_VIM_MODE:-0}
 # Agent name when running with --agent (italic cyan)
 ENABLE_AGENT=${ENABLE_AGENT:-0}
+# Codex session name (lavender; no-op unless harness=codex)
+ENABLE_SESSION_NAME=${ENABLE_SESSION_NAME:-1}
+# Codex task progress indicator (orange; no-op unless harness=codex)
+ENABLE_TASK_INDICATOR=${ENABLE_TASK_INDICATOR:-1}
 # Model display: "id" (default) or "display_name"
 MODEL_DISPLAY=${MODEL_DISPLAY:-id}
 # Cost source: "claude" (client-side), "proxy" (server-side), or "both"
 COST_SOURCE=${COST_SOURCE:-claude}
 
 input=$(cat)
+
+echo "$input" > /tmp/statusline-debug.json
+
 cwd=$(echo "$input" | jq -r '.workspace.current_dir')
+harness=$(echo "$input" | jq -r '.harness // empty')
+
+# Context window data from Claude Code stdin: "pct|used_tokens|window_size"
+ctx_from_stdin() {
+    echo "$input" | jq -r '
+        (.context_window.context_window_size // 0) as $size |
+        (if (.context_window.current_usage | type) == "object" then
+            (.context_window.current_usage |
+             (.input_tokens // 0) + (.cache_creation_input_tokens // 0)
+             + (.cache_read_input_tokens // 0) + (.output_tokens // 0))
+         elif (.context_window.current_usage | type) == "number" then
+            .context_window.current_usage
+         elif .context_window.used_percentage != null and $size > 0 then
+            (.context_window.used_percentage * $size / 100 | round)
+         else 0 end) as $used |
+        (if .context_window.used_percentage != null then
+            .context_window.used_percentage
+         elif .context_window.remaining_percentage != null then
+            (100 - .context_window.remaining_percentage)
+         elif $size > 0 and $used > 0 then
+            ($used / $size * 100 | round)
+         else 0 end) as $pct |
+        "\($pct)|\($used)|\($size)"
+    '
+}
 
 # Get model and context from proxy API (direct HTTP, no CLI binary needed)
 proxy_info=""
@@ -42,7 +76,7 @@ proxy_cost=""
 
 # Check proxy health first (sets proxy_reachable/proxy_error before session fetch)
 proxy_reachable=""
-if [ -n "$ANTHROPIC_BASE_URL" ]; then
+if [ -n "$ANTHROPIC_BASE_URL" ] && [ "$harness" != "codex" ]; then
     if curl -sf --max-time 1 "$ANTHROPIC_BASE_URL/health" >/dev/null 2>&1; then
         proxy_reachable=true
     else
@@ -80,29 +114,19 @@ if [ -n "$proxy_info" ] && echo "$proxy_info" | jq -e '.session' >/dev/null 2>&1
         else
             model=$(echo "$input" | jq -r '(.model.id // "unknown") | sub("^claude-"; "")')
         fi
-        context_info=$(echo "$input" | jq -r '
-          if .context_window.used_percentage != null then
-            "\(.context_window.used_percentage)%"
-          elif .context_window.remaining_percentage != null then
-            "\(100 - .context_window.remaining_percentage)%"
-          else
-            "0%"
-          end
-        ')
+        IFS='|' read -r ctx_pct ctx_used ctx_size <<< "$(ctx_from_stdin)"
     else
         model=$(echo "$proxy_model" | sed 's/^claude-//')
-        # Context remaining: use the model_usage entry with the highest lastInputSnapshot
-        context_info=$(echo "$proxy_info" | jq -r '
+        # Context fill: use the model_usage entry with the highest lastInputSnapshot
+        IFS='|' read -r ctx_pct ctx_used ctx_size <<< "$(echo "$proxy_info" | jq -r '
             .session |
-            ([.modelUsage[].lastInputSnapshot // 0] | max // 0) as $fill_tokens |
-            if .contextWindowSize > 0 and $fill_tokens > 0 then
-                (($fill_tokens / .contextWindowSize * 100)
-                 | round | [., 100] | min | [., 0] | max) as $fill |
-                "\($fill)%"
-            else
-                "0%"
-            end
-        ')
+            ([.modelUsage[].lastInputSnapshot // 0] | max // 0) as $used |
+            (.contextWindowSize // 0) as $size |
+            (if $size > 0 and $used > 0 then
+                ($used / $size * 100 | round | [., 100] | min | [., 0] | max)
+             else 0 end) as $pct |
+            "\($pct)|\($used)|\($size)"
+        ')"
     fi
 
     # Cost from the computed field
@@ -114,15 +138,7 @@ else
     else
         model=$(echo "$input" | jq -r '(.model.id // "unknown") | sub("^claude-"; "")')
     fi
-    context_info=$(echo "$input" | jq -r '
-      if .context_window.used_percentage != null then
-        "\(.context_window.used_percentage)%"
-      elif .context_window.remaining_percentage != null then
-        "\(100 - .context_window.remaining_percentage)%"
-      else
-        "0%"
-      end
-    ')
+    IFS='|' read -r ctx_pct ctx_used ctx_size <<< "$(ctx_from_stdin)"
 fi
 
 # Helpers
@@ -198,6 +214,12 @@ if [ "$ENABLE_AGENT" = "1" ]; then
     [ -n "$agent" ] && parts+=("\033[3;36m${agent}\033[0m")
 fi
 
+# --- Codex session name (lavender) ---
+if [ "$ENABLE_SESSION_NAME" = "1" ] && [ "$harness" = "codex" ]; then
+    session_name=$(echo "$input" | jq -r '(.session_name // empty) | tostring | gsub("[\r\n\t]+"; " ")')
+    [ -n "$session_name" ] && parts+=("\033[38;5;141m${session_name}\033[0m")
+fi
+
 # --- Model (magenta) + proxy/direct indicator ---
 if [ "$ENABLE_MODEL" = "1" ] && [ -n "$model" ] && [ "$model" != "unknown" ]; then
     route=""
@@ -213,8 +235,27 @@ if [ "$ENABLE_VIM_MODE" = "1" ]; then
 fi
 
 # --- Context usage (cyan) ---
-if [ "$ENABLE_CONTEXT" = "1" ] && [ -n "$context_info" ]; then
+if [ "$ENABLE_CONTEXT" = "1" ] && [ -n "$ctx_pct" ]; then
+    context_info="${ctx_pct}%"
+    if [ "$ENABLE_CONTEXT_TOKENS" = "1" ] && [ "${ctx_size:-0}" -gt 0 ] 2>/dev/null; then
+        context_info+=" $(fmt_tokens "${ctx_used:-0}")/$(fmt_tokens "$ctx_size")"
+    fi
     parts+=("\033[36m${context_info}\033[0m")
+fi
+
+# --- Codex task indicator (orange) ---
+if [ "$ENABLE_TASK_INDICATOR" = "1" ] && [ "$harness" = "codex" ]; then
+    task_text=$(echo "$input" | jq -r '
+        if (.task_indicator | type) == "object" then
+            (.task_indicator.text //
+             (if (.task_indicator.completed != null and .task_indicator.total != null)
+              then "Tasks \(.task_indicator.completed)/\(.task_indicator.total)"
+              else empty end))
+        else empty end
+        | tostring
+        | gsub("[\r\n\t]+"; " ")
+    ')
+    [ -n "$task_text" ] && parts+=("\033[38;5;208m${task_text}\033[0m")
 fi
 
 # --- Token counts (dim) ---

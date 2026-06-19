@@ -116,6 +116,10 @@ Create worktrees in `../.my/worktrees/[repo]-[short-title]-[JIRA-if-exists]`.
 
 Exception: specs and plans may be written and committed directly to main without a worktree and without asking. The worktree requirement applies to source code, tests, and configuration changes that constitute implementation.
 
+### Language Skills
+
+MANDATORY: Before touching code or tests you must detect the language of the codebase and load the available language skills (eg. typescript -> typescipt-services:prodcution-code etc). This is non-negotiable!
+
 ## MCP Servers
 
 Use the `mcpc` CLI as the default tool for MCP server work.
