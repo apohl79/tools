@@ -16,13 +16,13 @@ Read this directory at the start of feature work, research, planning, or review.
 ## Storage Policy
 
 - Visibility: versioned
-- Gitignore docs/context: False
+- Git exclude docs/context: False
 - Decision: Context is intended to be versioned and shared through Git.
 - Source: user-confirmed
 
 ## Counts
 
 - Terms: 0
-- Components: 8
+- Components: 9
 - Patterns: 3
 - Open questions: 1

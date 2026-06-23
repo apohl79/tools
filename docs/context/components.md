@@ -103,3 +103,21 @@ Paths:
 - `tests`
 
 Source: repo-docs
+
+## shell-config
+
+Responsibility: Zsh shell startup config and prompt settings; ~/.zshrc symlinks to the tracked .zshrc in this repo.
+
+Paths:
+
+- `.p10k.zsh`
+- `.zshrc`
+
+Interfaces:
+
+- /Users/andreas.pohl/.zshrc
+- Oh My Zsh
+
+Notes: Oh My Zsh update settings must be defined before source $ZSH/oh-my-zsh.sh.
+
+Source: repo-docs

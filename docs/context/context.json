@@ -97,6 +97,22 @@
       "responsibility": "Shell tests for the emacs wrapper plus fixtures; Emacs lisp tests live next to sources in .doom.d (test-*.el)",
       "source": "repo-docs",
       "updated_at": "2026-06-08T20:49:28+00:00"
+    },
+    {
+      "created_at": "2026-06-23T07:31:01+00:00",
+      "interfaces": [
+        "/Users/andreas.pohl/.zshrc",
+        "Oh My Zsh"
+      ],
+      "name": "shell-config",
+      "notes": "Oh My Zsh update settings must be defined before source $ZSH/oh-my-zsh.sh.",
+      "paths": [
+        ".p10k.zsh",
+        ".zshrc"
+      ],
+      "responsibility": "Zsh shell startup config and prompt settings; ~/.zshrc symlinks to the tracked .zshrc in this repo.",
+      "source": "repo-docs",
+      "updated_at": "2026-06-23T07:31:01+00:00"
     }
   ],
   "open_questions": [
@@ -146,8 +162,8 @@
     "context_visibility": "versioned",
     "created_at": "2026-06-08T20:34:09+00:00",
     "decision": "Context is intended to be versioned and shared through Git.",
+    "git_exclude_docs_context": false,
     "git_initialized": true,
-    "gitignore_docs_context": false,
     "source": "user-confirmed",
     "updated_at": "2026-06-08T20:34:09+00:00"
   },
