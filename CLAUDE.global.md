@@ -84,6 +84,30 @@ Treat any open task at handoff as a failure to follow instructions unless one of
 
 ## IMPLEMENTATION
 
+### REPOSITORY EVIDENCE GATE BEFORE IMPLEMENTATION
+
+Before changing code, tests, configuration, or public contracts for any feature/change request, you must first complete a repository evidence pass.
+
+Mandatory before editing:
+
+- Read the relevant project instructions, manifests, existing tests, and source files for the affected area.
+- Search for existing implementations, types, APIs, configuration, tests, and documentation related to the requested behavior.
+- Trace the relevant call path end to end before deciding where a change belongs.
+- Determine whether the requested behavior already exists.
+- State the existing behavior, the concrete gap, and the intended edit scope before touching files.
+- Do not implement a production change when no concrete gap is found. Report that no implementation change is needed and cite the evidence.
+- If only test coverage is missing, limit the change to a regression test unless the user explicitly asks for more.
+- Do not introduce new public concepts, abstractions, dependencies, fields, or contracts unless repository evidence shows they belong there or the user explicitly confirms the boundary change.
+- If the request can reasonably mean multiple things, ask one concise clarifying question before editing.
+- Every edit must map directly to the identified gap. Avoid opportunistic refactors or speculative changes.
+
+The pre-edit check-in must include:
+
+- `Existing behavior:` what the repo already does, with file references.
+- `Gap:` what is missing or incorrect, with file references.
+- `Plan:` the minimal change needed.
+- `Scope:` files expected to change.
+
 ### DIRECTIONAL CHECK-IN BEFORE IMPLEMENTATION
 
 Before touching code, tests, or configuration, do a quick directional check-in:
