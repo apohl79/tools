@@ -3,6 +3,19 @@
 
 # Architecture Patterns
 
+## codex-unmanaged-hook-trust
+
+Codex user/project hooks are discovered from hooks.json or TOML config, but unmanaged hooks run only after their current hash is recorded as trusted under hooks.state in ~/.codex/config.toml.
+
+Applies to:
+
+- `.codex/hooks`
+- `setup.toml`
+
+Notes: Use /hooks in Codex or config writes to trust new/modified hooks; managed plugin hooks have separate plugin-derived keys.
+
+Source: repo-docs
+
 ## layered-setup
 
 Provisioning is split into ordered layers 0-5 defined in setup.toml; each layer can be run or dry-run checked independently via setup.py -lN / -c

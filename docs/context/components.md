@@ -23,6 +23,26 @@ Paths:
 
 Source: repo-docs
 
+## codex-cmux-tab-title-hook
+
+Responsibility: Codex lifecycle hook that renames the active cmux tab from Codex session context on SessionStart and UserPromptSubmit
+
+Paths:
+
+- `.codex/hooks`
+- `setup.toml`
+- `tests/codex-cmux-tab-title-test.sh`
+
+Interfaces:
+
+- cmux rename-tab --surface <id> <title>
+- ~/.codex/hooks.json
+- ~/.codex/hooks/cmux-tab-title.sh
+
+Notes: setup layer6 symlinks hooks.json and cmux-tab-title.sh into CODEX_HOME; the hook is a no-op unless CMUX_SURFACE_ID is set.
+
+Source: repo-docs
+
 ## doom-config
 
 Responsibility: Doom Emacs configuration; terminal-only daemon (emacsclient -t), reload edits into running daemon instead of restarting
