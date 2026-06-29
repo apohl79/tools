@@ -87,22 +87,22 @@
       "updated_at": "2026-06-08T20:49:28+00:00"
     },
     {
-      "created_at": "2026-06-29T16:37:33+00:00",
+      "created_at": "2026-06-29T19:09:33+00:00",
       "interfaces": [
         "inline-discussion start --doc <path> --session-dir <dir>",
-        "inline-discussion wait --session-dir <dir>",
-        "my/markdown-preview-command"
+        "my/markdown-preview",
+        "my/markdown-preview-command",
+        "my/markdown-preview-stop"
       ],
-      "name": "markdown-preview-entrypoints",
-      "notes": "mdpv resolves inline-discussion via PATH and follows symlinks before executing it; my/markdown-preview resolves my/markdown-preview-command via Emacs exec-path and file-truename. The keybindings stay under my/markdown-preview.",
+      "name": "markdown-preview-emacs-integration",
+      "notes": "Keybindings stay under my/markdown-preview. The Emacs integration resolves my/markdown-preview-command via exec-path and file-truename before calling inline-discussion.",
       "paths": [
         ".doom.d/+functions.el",
-        ".doom.d/config.el",
-        "mdpv"
+        ".doom.d/config.el"
       ],
-      "responsibility": "CLI and Emacs entry points that preview markdown by launching the PATH-provided inline-discussion server.",
+      "responsibility": "Doom Emacs markdown-mode integration that previews markdown by launching the PATH-provided inline-discussion server.",
       "source": "repo-docs",
-      "updated_at": "2026-06-29T16:38:37+00:00"
+      "updated_at": "2026-06-29T19:09:33+00:00"
     },
     {
       "created_at": "2026-06-08T20:49:28+00:00",

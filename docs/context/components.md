@@ -92,23 +92,23 @@ Interfaces:
 
 Source: repo-docs
 
-## markdown-preview-entrypoints
+## markdown-preview-emacs-integration
 
-Responsibility: CLI and Emacs entry points that preview markdown by launching the PATH-provided inline-discussion server.
+Responsibility: Doom Emacs markdown-mode integration that previews markdown by launching the PATH-provided inline-discussion server.
 
 Paths:
 
 - `.doom.d/+functions.el`
 - `.doom.d/config.el`
-- `mdpv`
 
 Interfaces:
 
 - inline-discussion start --doc <path> --session-dir <dir>
-- inline-discussion wait --session-dir <dir>
+- my/markdown-preview
 - my/markdown-preview-command
+- my/markdown-preview-stop
 
-Notes: mdpv resolves inline-discussion via PATH and follows symlinks before executing it; my/markdown-preview resolves my/markdown-preview-command via Emacs exec-path and file-truename. The keybindings stay under my/markdown-preview.
+Notes: Keybindings stay under my/markdown-preview. The Emacs integration resolves my/markdown-preview-command via exec-path and file-truename before calling inline-discussion.
 
 Source: repo-docs
 
