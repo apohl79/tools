@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Renames the cmux tab to the Codex session name when CMUX_SURFACE_ID is set.
-# Hook input: Codex lifecycle JSON on stdin with session_id, prompt, and transcript_path.
+# Hook input: Codex lifecycle JSON on stdin with session_id, prompt, transcript_path, and cwd.
 
 set -euo pipefail
 
@@ -9,6 +9,9 @@ set -euo pipefail
 input=$(cat)
 
 session_id=$(printf '%s' "$input" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("session_id",""))' 2>/dev/null || true)
+cwd=$(printf '%s' "$input" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("cwd",""))' 2>/dev/null || true)
+[ -n "$cwd" ] || cwd="$PWD"
+project_name=$(basename "$cwd")
 prompt_excerpt=$(INPUT_JSON="$input" python3 <<'PY' 2>/dev/null || true
 import json
 import os
@@ -119,6 +122,8 @@ if [ -n "$title" ]; then
     new_title="$title"
 elif [ -n "$prompt_excerpt" ]; then
     new_title="$prompt_excerpt"
+elif [ -n "$project_name" ]; then
+    new_title="$project_name"
 else
     exit 0
 fi

@@ -112,7 +112,8 @@ assert_capture 'missing session id falls back to transcript basename' \
   $'^cmux\trename-tab\t--surface\tsurface-3\t--title\ttmp\\.[[:alnum:]]+$' \
   bash -c "$(declare -f run_transcript_path_fallback_case); run_transcript_path_fallback_case"
 
-assert_empty_capture 'missing session data is a no-op' \
+assert_capture 'missing session data falls back to project name' \
+  $'^cmux\trename-tab\t--surface\tsurface-4\t--title\ttools$' \
   bash -c "$(declare -f run_no_session_data_case); run_no_session_data_case"
 
 assert_empty_capture 'no cmux surface is a no-op' \

@@ -176,7 +176,8 @@ assert_capture 'session start falls back to last transcript prompt excerpt' \
   $'^cmux\trename-tab\t--surface\tsurface-6\tlast transcript prompt is select$' \
   bash -c "$(declare -f run_transcript_prompt_fallback_case); run_transcript_prompt_fallback_case"
 
-assert_empty_capture 'missing session name without prompt is a no-op' \
+assert_capture 'missing session name without prompt falls back to project name' \
+  $'^cmux\trename-tab\t--surface\tsurface-7\ttools$' \
   bash -c "$(declare -f run_missing_name_without_prompt_case); run_missing_name_without_prompt_case"
 
 assert_empty_capture 'no cmux surface is a no-op' \
