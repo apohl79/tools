@@ -39,7 +39,7 @@ Interfaces:
 - ~/.codex/hooks.json
 - ~/.codex/hooks/cmux-tab-title.sh
 
-Notes: setup layer6 symlinks hooks.json and cmux-tab-title.sh into CODEX_HOME; the hook is a no-op unless CMUX_SURFACE_ID is set.
+Notes: setup layer6 symlinks hooks.json and cmux-tab-title.sh into CODEX_HOME; the hook is a no-op unless CMUX_SURFACE_ID is set. Codex stores prompt-derived titles in threads.title; treat a title matching first_user_message as unnamed and fall back to the latest session_index.jsonl thread_name for the actual explicit session name.
 
 Source: repo-docs
 
