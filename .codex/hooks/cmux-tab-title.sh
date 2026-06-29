@@ -15,31 +15,47 @@ cwd=$(printf '%s\n' "$fields" | sed -n '2p')
 
 base=$(basename "$cwd")
 codex_home="${CODEX_HOME:-$HOME/.codex}"
+state_db="$codex_home/state_5.sqlite"
 session_index="$codex_home/session_index.jsonl"
 
 title=""
-if [ -n "$session_id" ] && [ -f "$session_index" ]; then
-    title=$(SESSION_ID="$session_id" SESSION_INDEX="$session_index" python3 <<'PY' 2>/dev/null || true
+if [ -n "$session_id" ]; then
+    title=$(SESSION_ID="$session_id" STATE_DB="$state_db" SESSION_INDEX="$session_index" python3 <<'PY' 2>/dev/null || true
 import json
 import os
+import sqlite3
 
 session_id = os.environ.get("SESSION_ID", "")
+state_db = os.environ.get("STATE_DB", "")
 session_index = os.environ.get("SESSION_INDEX", "")
 title = ""
 
-try:
-    with open(session_index, encoding="utf-8") as index:
-        for line in index:
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("id") == session_id:
-                candidate = (entry.get("thread_name") or "").strip()
-                if candidate:
-                    title = candidate
-except OSError:
-    pass
+if state_db and os.path.isfile(state_db):
+    try:
+        with sqlite3.connect(f"file:{state_db}?mode=ro", uri=True, timeout=1.0) as conn:
+            row = conn.execute(
+                "select title from threads where id = ?",
+                (session_id,),
+            ).fetchone()
+            if row:
+                title = (row[0] or "").strip()
+    except (OSError, sqlite3.Error):
+        pass
+
+if not title and session_index and os.path.isfile(session_index):
+    try:
+        with open(session_index, encoding="utf-8") as index:
+            for line in index:
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("id") == session_id:
+                    candidate = (entry.get("thread_name") or "").strip()
+                    if candidate:
+                        title = candidate
+    except OSError:
+        pass
 
 print(title)
 PY
@@ -54,4 +70,4 @@ else
     new_title="$base"
 fi
 
-cmux rename-tab --surface "$CMUX_SURFACE_ID" --title "$new_title" >/dev/null 2>&1 || true
+cmux rename-tab --surface "$CMUX_SURFACE_ID" "$new_title" >/dev/null 2>&1 || true

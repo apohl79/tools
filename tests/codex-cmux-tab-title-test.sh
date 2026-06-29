@@ -86,9 +86,29 @@ JSONL
     CMUX_SURFACE_ID=surface-2 "$HOOK"
 }
 
+run_sqlite_session_case() {
+  cat >"$CODEX_HOME/session_index.jsonl" <<'JSONL'
+{"id":"session-3","thread_name":"Stale JSONL name","updated_at":"2026-05-31T10:00:00Z"}
+JSONL
+  python3 <<'PY'
+import os
+import sqlite3
+
+db_path = os.path.join(os.environ["CODEX_HOME"], "state_5.sqlite")
+with sqlite3.connect(db_path) as conn:
+    conn.execute("create table threads (id text primary key, title text not null)")
+    conn.execute(
+        "insert into threads (id, title) values (?, ?)",
+        ("session-3", "SQLite session name"),
+    )
+PY
+  printf '%s' '{"hook_event_name":"SessionStart","session_id":"session-3","cwd":"/Users/andreas/tools","transcript_path":null,"model":"gpt-5.5","permission_mode":"default","source":"startup"}' |
+    CMUX_SURFACE_ID=surface-3 "$HOOK"
+}
+
 run_missing_name_case() {
   printf '%s' '{"hook_event_name":"SessionStart","session_id":"missing","cwd":"/Users/andreas/tools","transcript_path":null,"model":"gpt-5.5","permission_mode":"default","source":"startup"}' |
-    CMUX_SURFACE_ID=surface-3 "$HOOK"
+    CMUX_SURFACE_ID=surface-4 "$HOOK"
 }
 
 run_no_surface_case() {
@@ -97,15 +117,19 @@ run_no_surface_case() {
 }
 
 assert_capture 'named session title' \
-  $'^cmux\trename-tab\t--surface\tsurface-1\t--title\ttools: Implement cmux tabs$' \
+  $'^cmux\trename-tab\t--surface\tsurface-1\ttools: Implement cmux tabs$' \
   bash -c "$(declare -f run_named_session_case); run_named_session_case"
 
 assert_capture 'latest duplicate session name wins' \
-  $'^cmux\trename-tab\t--surface\tsurface-2\t--title\ttools: New name$' \
+  $'^cmux\trename-tab\t--surface\tsurface-2\ttools: New name$' \
   bash -c "$(declare -f run_duplicate_session_case); run_duplicate_session_case"
 
+assert_capture 'sqlite session title wins over stale jsonl' \
+  $'^cmux\trename-tab\t--surface\tsurface-3\ttools: SQLite session name$' \
+  bash -c "$(declare -f run_sqlite_session_case); run_sqlite_session_case"
+
 assert_capture 'missing session name falls back to cwd basename' \
-  $'^cmux\trename-tab\t--surface\tsurface-3\t--title\ttools$' \
+  $'^cmux\trename-tab\t--surface\tsurface-4\ttools$' \
   bash -c "$(declare -f run_missing_name_case); run_missing_name_case"
 
 assert_empty_capture 'no cmux surface is a no-op' \
