@@ -92,24 +92,23 @@ Interfaces:
 
 Source: repo-docs
 
-## markdown-preview-server
+## markdown-preview-entrypoints
 
-Responsibility: Local Node server rendering a markdown file in the browser with persisted discussion threads; launched from Emacs via my/markdown-preview
+Responsibility: CLI and Emacs entry points that preview markdown by launching the PATH-provided inline-discussion server.
 
 Paths:
 
-- `markdown-preview-server`
+- `.doom.d/+functions.el`
+- `.doom.d/config.el`
+- `mdpv`
 
 Interfaces:
 
-- /api/apply*
-- /api/finish
-- /api/threads
-- /events (SSE)
-- bin/launch.sh start --doc <path> --session-dir <dir> [--main-jsonl <path>] [--agent claude|codex]
-- HTTP /api/bootstrap
+- inline-discussion start --doc <path> --session-dir <dir>
+- inline-discussion wait --session-dir <dir>
+- my/markdown-preview-command
 
-Notes: Port of inline-discussion plugin server (~/workspace/code/inline-discussion/plugins/inline-discussion/server). Port adaptations: Markdown Preview branding, optional --main-jsonl (empty transcript synthesized), doom-city-lights theme in web/app.css. Backend src files are kept verbatim from upstream; sync by 3-way merge for adapted files. Last synced from upstream commit 8473aa8.
+Notes: mdpv resolves inline-discussion via PATH and follows symlinks before executing it; my/markdown-preview resolves my/markdown-preview-command via Emacs exec-path and file-truename. The keybindings stay under my/markdown-preview.
 
 Source: repo-docs
 
