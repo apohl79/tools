@@ -574,9 +574,8 @@ This is an interactive copy of the original org-msg function."
     (org-export-to-file 'html tmp-file nil nil nil nil nil)
     (browse-url (concat "file://" tmp-file))))
 
-(defvar my/markdown-preview-server-dir
-  (expand-file-name "~/tools/markdown-preview-server")
-  "Root directory of the markdown-preview-server checkout.")
+(defvar my/markdown-preview-command "inline-discussion"
+  "Command used to launch the inline-discussion markdown preview server.")
 
 (defvar-local my/markdown-preview-session-dir nil
   "Per-buffer session directory of a running preview server.")
@@ -609,7 +608,7 @@ This is an interactive copy of the original org-msg function."
 (defun my/markdown-preview ()
   "Render the current markdown file with the inline-discussion preview server.
 
-Launches `markdown-preview-server' for the buffer's file and opens the
+Launches `my/markdown-preview-command' for the buffer's file and opens the
 served URL in the default browser. If a server is already running for
 this buffer, reuses its URL. The server is stopped when the buffer is
 killed."
@@ -639,20 +638,20 @@ killed."
         (browse-url url)
         (message "Markdown preview: %s" url))
     (let* ((file (file-truename buffer-file-name))
-           (script (expand-file-name "bin/launch.sh" my/markdown-preview-server-dir))
+           (command (let ((found (executable-find my/markdown-preview-command)))
+                      (unless found
+                        (user-error "%s not found in exec-path" my/markdown-preview-command))
+                      (file-truename found)))
            (session-dir (make-temp-file "markdown-preview-" t))
            (out-buf (generate-new-buffer " *markdown-preview-launch*")))
-      (unless (file-executable-p script)
-        (kill-buffer out-buf)
-        (user-error "launch.sh not found at %s" script))
-      (let ((exit (call-process script nil out-buf nil
+      (let ((exit (call-process command nil out-buf nil
                                 "start"
                                 "--doc" file
                                 "--session-dir" session-dir)))
         (if (/= 0 exit)
             (let ((log (with-current-buffer out-buf (buffer-string))))
               (kill-buffer out-buf)
-              (user-error "markdown-preview-server failed (%d): %s" exit log))
+              (user-error "inline-discussion failed (%d): %s" exit log))
           (kill-buffer out-buf)
           (let ((url-file (expand-file-name "url.txt" session-dir)))
             (unless (file-readable-p url-file)
