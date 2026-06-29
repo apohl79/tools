@@ -127,8 +127,24 @@ PY
 }
 
 run_missing_name_case() {
-  printf '%s' '{"hook_event_name":"SessionStart","session_id":"missing","cwd":"/Users/andreas/tools","transcript_path":null,"model":"gpt-5.5","permission_mode":"default","source":"startup"}' |
+  printf '%s' '{"hook_event_name":"UserPromptSubmit","session_id":"missing","cwd":"/Users/andreas/tools","transcript_path":null,"model":"gpt-5.5","permission_mode":"default","turn_id":"turn-1","prompt":"abcdefghijklmnopqrstuvwxyz1234567890"}' |
     CMUX_SURFACE_ID=surface-5 "$HOOK"
+}
+
+run_transcript_prompt_fallback_case() {
+  local transcript; transcript="$(mktemp)"
+  cat >"$transcript" <<'JSONL'
+{"type":"event_msg","payload":{"type":"user_message","message":"first prompt should not win"}}
+{"type":"event_msg","payload":{"type":"user_message","message":"## My request for Codex:\nlast transcript prompt is selected here"}}
+JSONL
+  printf '{"hook_event_name":"SessionStart","session_id":"missing-transcript","cwd":"/Users/andreas/tools","transcript_path":"%s","model":"gpt-5.5","permission_mode":"default","source":"resume"}' "$transcript" |
+    CMUX_SURFACE_ID=surface-6 "$HOOK"
+  rm -f "$transcript"
+}
+
+run_missing_name_without_prompt_case() {
+  printf '%s' '{"hook_event_name":"SessionStart","session_id":"missing-without-prompt","cwd":"/Users/andreas/tools","transcript_path":null,"model":"gpt-5.5","permission_mode":"default","source":"startup"}' |
+    CMUX_SURFACE_ID=surface-7 "$HOOK"
 }
 
 run_no_surface_case() {
@@ -152,9 +168,16 @@ assert_capture 'sqlite prompt title falls back to session index name' \
   $'^cmux\trename-tab\t--surface\tsurface-4\tActual session name$' \
   bash -c "$(declare -f run_sqlite_prompt_title_fallback_case); run_sqlite_prompt_title_fallback_case"
 
-assert_capture 'missing session name falls back to session id' \
-  $'^cmux\trename-tab\t--surface\tsurface-5\tmissing$' \
+assert_capture 'missing session name falls back to prompt excerpt' \
+  $'^cmux\trename-tab\t--surface\tsurface-5\tabcdefghijklmnopqrstuvwxyz123456$' \
   bash -c "$(declare -f run_missing_name_case); run_missing_name_case"
+
+assert_capture 'session start falls back to last transcript prompt excerpt' \
+  $'^cmux\trename-tab\t--surface\tsurface-6\tlast transcript prompt is select$' \
+  bash -c "$(declare -f run_transcript_prompt_fallback_case); run_transcript_prompt_fallback_case"
+
+assert_empty_capture 'missing session name without prompt is a no-op' \
+  bash -c "$(declare -f run_missing_name_without_prompt_case); run_missing_name_without_prompt_case"
 
 assert_empty_capture 'no cmux surface is a no-op' \
   bash -c "$(declare -f run_no_surface_case); run_no_surface_case"

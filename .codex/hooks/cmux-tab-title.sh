@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Renames the cmux tab to the Codex session name when CMUX_SURFACE_ID is set.
-# Hook input: Codex lifecycle JSON on stdin with session_id.
+# Hook input: Codex lifecycle JSON on stdin with session_id, prompt, and transcript_path.
 
 set -euo pipefail
 
@@ -9,6 +9,53 @@ set -euo pipefail
 input=$(cat)
 
 session_id=$(printf '%s' "$input" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("session_id",""))' 2>/dev/null || true)
+prompt_excerpt=$(INPUT_JSON="$input" python3 <<'PY' 2>/dev/null || true
+import json
+import os
+
+USER_MESSAGE_BEGIN = "## My request for Codex:"
+MAX_TITLE_CHARS = 32
+
+
+def clean_prompt(value):
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    if USER_MESSAGE_BEGIN in text:
+        text = text.split(USER_MESSAGE_BEGIN, 1)[1].strip()
+    text = " ".join(text.split())
+    return text[:MAX_TITLE_CHARS].strip()
+
+
+def last_prompt_from_transcript(path):
+    if not path or not os.path.isfile(path):
+        return ""
+    last_prompt = ""
+    try:
+        with open(path, encoding="utf-8") as transcript:
+            for line in transcript:
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if item.get("type") != "event_msg":
+                    continue
+                payload = item.get("payload") or {}
+                if payload.get("type") == "user_message":
+                    last_prompt = payload.get("message") or ""
+    except OSError:
+        return ""
+    return last_prompt
+
+
+payload = json.loads(os.environ.get("INPUT_JSON", "{}"))
+excerpt = clean_prompt(payload.get("prompt"))
+if not excerpt:
+    excerpt = clean_prompt(last_prompt_from_transcript(payload.get("transcript_path")))
+
+print(excerpt)
+PY
+)
 
 codex_home="${CODEX_HOME:-$HOME/.codex}"
 state_db="$codex_home/state_5.sqlite"
@@ -70,8 +117,8 @@ title=$(printf '%s' "$title" | tr '\r\n\t' '   ' | sed -E 's/[[:space:]]+/ /g; s
 
 if [ -n "$title" ]; then
     new_title="$title"
-elif [ -n "$session_id" ]; then
-    new_title="$session_id"
+elif [ -n "$prompt_excerpt" ]; then
+    new_title="$prompt_excerpt"
 else
     exit 0
 fi
