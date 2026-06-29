@@ -3,6 +3,26 @@
 
 # Components
 
+## claude-cmux-tab-title-hook
+
+Responsibility: Claude Code lifecycle hook that renames the active cmux tab from Claude session context on SessionStart and UserPromptSubmit
+
+Paths:
+
+- `.claude/hooks`
+- `setup.toml`
+- `tests/claude-cmux-tab-title-test.sh`
+
+Interfaces:
+
+- cmux rename-tab --surface <id> --title <title>
+- ~/.claude/hooks/cmux-tab-title.sh
+- ~/.claude/settings.json hooks SessionStart/UserPromptSubmit
+
+Notes: setup layer6 symlinks cmux-tab-title.sh into CLAUDE_HOME; the hook is a no-op unless CMUX_SURFACE_ID is set. Claude titles come from the latest custom-title entry in the session transcript, with session_id then transcript basename as session-derived fallbacks. Tab titles must not include cwd/project prefixes.
+
+Source: repo-docs
+
 ## claude-tooling
 
 Responsibility: Claude Code session config: hooks, statusline, notify scripts, local settings, plans, worktree helpers
@@ -39,7 +59,7 @@ Interfaces:
 - ~/.codex/hooks.json
 - ~/.codex/hooks/cmux-tab-title.sh
 
-Notes: setup layer6 symlinks hooks.json and cmux-tab-title.sh into CODEX_HOME; the hook is a no-op unless CMUX_SURFACE_ID is set. Codex stores prompt-derived titles in threads.title; treat a title matching first_user_message as unnamed and fall back to the latest session_index.jsonl thread_name for the actual explicit session name.
+Notes: setup layer6 symlinks hooks.json and cmux-tab-title.sh into CODEX_HOME; the hook is a no-op unless CMUX_SURFACE_ID is set. Codex stores prompt-derived titles in threads.title; treat a title matching first_user_message as unnamed and fall back to the latest session_index.jsonl thread_name for the actual explicit session name. Tab titles must be session-derived only: use the explicit session title when present, otherwise the session_id; do not include cwd/project prefixes.
 
 Source: repo-docs
 
