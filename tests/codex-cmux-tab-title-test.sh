@@ -106,9 +106,29 @@ PY
     CMUX_SURFACE_ID=surface-3 "$HOOK"
 }
 
+run_sqlite_prompt_title_fallback_case() {
+  cat >"$CODEX_HOME/session_index.jsonl" <<'JSONL'
+{"id":"session-4","thread_name":"Actual session name","updated_at":"2026-05-31T10:00:00Z"}
+JSONL
+  python3 <<'PY'
+import os
+import sqlite3
+
+db_path = os.path.join(os.environ["CODEX_HOME"], "state_5.sqlite")
+with sqlite3.connect(db_path) as conn:
+    conn.execute("create table threads (id text primary key, title text not null, first_user_message text)")
+    conn.execute(
+        "insert into threads (id, title, first_user_message) values (?, ?, ?)",
+        ("session-4", "Investigate cmux hook", "Investigate cmux hook"),
+    )
+PY
+  printf '%s' '{"hook_event_name":"UserPromptSubmit","session_id":"session-4","cwd":"/Users/andreas/tools","transcript_path":null,"model":"gpt-5.5","permission_mode":"default","turn_id":"turn-1","prompt":"hi"}' |
+    CMUX_SURFACE_ID=surface-4 "$HOOK"
+}
+
 run_missing_name_case() {
   printf '%s' '{"hook_event_name":"SessionStart","session_id":"missing","cwd":"/Users/andreas/tools","transcript_path":null,"model":"gpt-5.5","permission_mode":"default","source":"startup"}' |
-    CMUX_SURFACE_ID=surface-4 "$HOOK"
+    CMUX_SURFACE_ID=surface-5 "$HOOK"
 }
 
 run_no_surface_case() {
@@ -128,8 +148,12 @@ assert_capture 'sqlite session title wins over stale jsonl' \
   $'^cmux\trename-tab\t--surface\tsurface-3\ttools: SQLite session name$' \
   bash -c "$(declare -f run_sqlite_session_case); run_sqlite_session_case"
 
+assert_capture 'sqlite prompt title falls back to session index name' \
+  $'^cmux\trename-tab\t--surface\tsurface-4\ttools: Actual session name$' \
+  bash -c "$(declare -f run_sqlite_prompt_title_fallback_case); run_sqlite_prompt_title_fallback_case"
+
 assert_capture 'missing session name falls back to cwd basename' \
-  $'^cmux\trename-tab\t--surface\tsurface-4\ttools$' \
+  $'^cmux\trename-tab\t--surface\tsurface-5\ttools$' \
   bash -c "$(declare -f run_missing_name_case); run_missing_name_case"
 
 assert_empty_capture 'no cmux surface is a no-op' \

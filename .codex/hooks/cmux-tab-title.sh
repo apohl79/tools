@@ -33,12 +33,20 @@ title = ""
 if state_db and os.path.isfile(state_db):
     try:
         with sqlite3.connect(f"file:{state_db}?mode=ro", uri=True, timeout=1.0) as conn:
+            columns = {
+                row[1]
+                for row in conn.execute("pragma table_info(threads)").fetchall()
+            }
+            first_user_expr = "first_user_message" if "first_user_message" in columns else "NULL"
             row = conn.execute(
-                "select title from threads where id = ?",
+                f"select title, {first_user_expr} from threads where id = ?",
                 (session_id,),
             ).fetchone()
             if row:
-                title = (row[0] or "").strip()
+                sqlite_title = (row[0] or "").strip()
+                first_user_message = (row[1] or "").strip()
+                if sqlite_title and sqlite_title != first_user_message:
+                    title = sqlite_title
     except (OSError, sqlite3.Error):
         pass
 
