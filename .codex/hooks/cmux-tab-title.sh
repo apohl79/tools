@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Renames the cmux tab to "<cwd-basename>: <codex-session-name>" when CMUX_SURFACE_ID is set.
-# Hook input: Codex lifecycle JSON on stdin with session_id and cwd.
+# Renames the cmux tab to the Codex session name when CMUX_SURFACE_ID is set.
+# Hook input: Codex lifecycle JSON on stdin with session_id.
 
 set -euo pipefail
 
@@ -8,12 +8,8 @@ set -euo pipefail
 
 input=$(cat)
 
-fields=$(printf '%s' "$input" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("session_id","")); print(d.get("cwd",""))' 2>/dev/null || true)
-session_id=$(printf '%s\n' "$fields" | sed -n '1p')
-cwd=$(printf '%s\n' "$fields" | sed -n '2p')
-[ -n "$cwd" ] || cwd="$PWD"
+session_id=$(printf '%s' "$input" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("session_id",""))' 2>/dev/null || true)
 
-base=$(basename "$cwd")
 codex_home="${CODEX_HOME:-$HOME/.codex}"
 state_db="$codex_home/state_5.sqlite"
 session_index="$codex_home/session_index.jsonl"
@@ -73,9 +69,11 @@ fi
 title=$(printf '%s' "$title" | tr '\r\n\t' '   ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
 
 if [ -n "$title" ]; then
-    new_title="$base: $title"
+    new_title="$title"
+elif [ -n "$session_id" ]; then
+    new_title="$session_id"
 else
-    new_title="$base"
+    exit 0
 fi
 
 cmux rename-tab --surface "$CMUX_SURFACE_ID" "$new_title" >/dev/null 2>&1 || true

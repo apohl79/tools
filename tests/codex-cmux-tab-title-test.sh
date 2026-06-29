@@ -137,23 +137,23 @@ run_no_surface_case() {
 }
 
 assert_capture 'named session title' \
-  $'^cmux\trename-tab\t--surface\tsurface-1\ttools: Implement cmux tabs$' \
+  $'^cmux\trename-tab\t--surface\tsurface-1\tImplement cmux tabs$' \
   bash -c "$(declare -f run_named_session_case); run_named_session_case"
 
 assert_capture 'latest duplicate session name wins' \
-  $'^cmux\trename-tab\t--surface\tsurface-2\ttools: New name$' \
+  $'^cmux\trename-tab\t--surface\tsurface-2\tNew name$' \
   bash -c "$(declare -f run_duplicate_session_case); run_duplicate_session_case"
 
 assert_capture 'sqlite session title wins over stale jsonl' \
-  $'^cmux\trename-tab\t--surface\tsurface-3\ttools: SQLite session name$' \
+  $'^cmux\trename-tab\t--surface\tsurface-3\tSQLite session name$' \
   bash -c "$(declare -f run_sqlite_session_case); run_sqlite_session_case"
 
 assert_capture 'sqlite prompt title falls back to session index name' \
-  $'^cmux\trename-tab\t--surface\tsurface-4\ttools: Actual session name$' \
+  $'^cmux\trename-tab\t--surface\tsurface-4\tActual session name$' \
   bash -c "$(declare -f run_sqlite_prompt_title_fallback_case); run_sqlite_prompt_title_fallback_case"
 
-assert_capture 'missing session name falls back to cwd basename' \
-  $'^cmux\trename-tab\t--surface\tsurface-5\ttools$' \
+assert_capture 'missing session name falls back to session id' \
+  $'^cmux\trename-tab\t--surface\tsurface-5\tmissing$' \
   bash -c "$(declare -f run_missing_name_case); run_missing_name_case"
 
 assert_empty_capture 'no cmux surface is a no-op' \
