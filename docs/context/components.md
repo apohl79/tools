@@ -19,7 +19,7 @@ Interfaces:
 - ~/.claude/hooks/cmux-tab-title.sh
 - ~/.claude/settings.json hooks SessionStart/UserPromptSubmit
 
-Notes: setup layer6 symlinks cmux-tab-title.sh into CLAUDE_HOME; the hook is a no-op unless CMUX_SURFACE_ID is set. Claude titles come from the latest custom-title entry in the session transcript, with session_id then transcript basename as session-derived fallbacks, and cwd basename as the final project-name fallback. Tab titles must not include cwd/project prefixes.
+Notes: setup layer6 symlinks cmux-tab-title.sh into CLAUDE_HOME; the hook is a no-op unless CMUX_SURFACE_ID is set. Claude titles come from the latest custom-title entry in the session transcript, then cwd basename as the final project-name fallback. Tab titles must not include cwd/project prefixes, session IDs, transcript basenames, or other ID-like fallbacks.
 
 Source: repo-docs
 
