@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Renames the cmux tab to the Claude session title when CMUX_SURFACE_ID is set.
 # Reads the latest custom-title entry from the session transcript (set by /rename).
-# Hook input: JSON on stdin with transcript_path, session_id, and cwd.
+# Hook input: JSON on stdin with transcript_path and cwd.
 
 set -euo pipefail
 
@@ -9,10 +9,9 @@ set -euo pipefail
 
 input=$(cat)
 
-fields=$(printf '%s' "$input" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("transcript_path","") or ""); print(d.get("session_id","") or ""); print(d.get("cwd","") or "")' 2>/dev/null || true)
+fields=$(printf '%s' "$input" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("transcript_path","") or ""); print(d.get("cwd","") or "")' 2>/dev/null || true)
 transcript_path=$(printf '%s\n' "$fields" | sed -n '1p')
-session_id=$(printf '%s\n' "$fields" | sed -n '2p')
-cwd=$(printf '%s\n' "$fields" | sed -n '3p')
+cwd=$(printf '%s\n' "$fields" | sed -n '2p')
 [ -n "$cwd" ] || cwd="$PWD"
 project_name=$(basename "$cwd")
 
@@ -25,10 +24,6 @@ fi
 
 if [ -n "$title" ]; then
     new_title="$title"
-elif [ -n "$session_id" ]; then
-    new_title="$session_id"
-elif [ -n "$transcript_path" ]; then
-    new_title=$(basename "$transcript_path")
 elif [ -n "$project_name" ]; then
     new_title="$project_name"
 else

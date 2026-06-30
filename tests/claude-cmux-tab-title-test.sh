@@ -104,12 +104,12 @@ assert_capture 'custom session title has no project prefix' \
   $'^cmux\trename-tab\t--surface\tsurface-1\t--title\tClaude rename$' \
   bash -c "$(declare -f run_custom_title_case); run_custom_title_case"
 
-assert_capture 'missing custom title falls back to session id' \
-  $'^cmux\trename-tab\t--surface\tsurface-2\t--title\tclaude-session-2$' \
+assert_capture 'missing custom title with session id falls back to project name' \
+  $'^cmux\trename-tab\t--surface\tsurface-2\t--title\ttools$' \
   bash -c "$(declare -f run_session_id_fallback_case); run_session_id_fallback_case"
 
-assert_capture 'missing session id falls back to transcript basename' \
-  $'^cmux\trename-tab\t--surface\tsurface-3\t--title\ttmp\\.[[:alnum:]]+$' \
+assert_capture 'missing custom title with transcript falls back to project name' \
+  $'^cmux\trename-tab\t--surface\tsurface-3\t--title\ttools$' \
   bash -c "$(declare -f run_transcript_path_fallback_case); run_transcript_path_fallback_case"
 
 assert_capture 'missing session data falls back to project name' \
